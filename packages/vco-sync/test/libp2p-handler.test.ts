@@ -10,6 +10,7 @@ import {
   SyncRangeProofProtocol,
   handleSyncSessionChannelsWithPowBackpressure,
 } from "../src/index.js";
+import type { SyncPowBackpressureContext } from "../src/libp2p-handler.js";
 
 class MockStream {
   peer?: MockStream;
@@ -157,11 +158,13 @@ describe("handleSyncSessionChannelsWithPowBackpressure", () => {
     } as unknown as Libp2pNode;
 
     let requiredDifficultySeen = 0;
+    let capturedContext: SyncPowBackpressureContext | undefined;
     await handleSyncSessionChannelsWithPowBackpressure(
       node,
       async (protocol, _connection, context) => {
         await protocol.receiveRangeProofs();
         requiredDifficultySeen = context.getRequiredPowDifficulty();
+        capturedContext = context;
       },
       { session: createSession() },
     );
@@ -187,5 +190,58 @@ describe("handleSyncSessionChannelsWithPowBackpressure", () => {
     await handlePromise;
 
     expect(requiredDifficultySeen).toBe(17);
+    expect(capturedContext?.getActivePowChallenge()?.minDifficulty).toBe(17);
   });
+
+  it("notifies about active challenge when updated", async () => {
+    const [initiatorStream, responderStream] = createStreamPair();
+
+    let registeredHandler:
+      | ((data: { stream: any; connection: Connection }) => Promise<void>)
+      | undefined;
+    let updates: (number | undefined)[] = [];
+    const node = {
+      handle: async (_protocol: string, handler: any) => {
+        registeredHandler = handler;
+      },
+    } as unknown as Libp2pNode;
+
+    const runPromise = handleSyncSessionChannelsWithPowBackpressure(
+      node,
+      async (protocol, _connection) => {
+        await protocol.receiveRangeProofs();
+      },
+      {
+        session: createSession(),
+        onPowChallengeUpdate: (challenge) => {
+          updates.push(challenge?.minDifficulty);
+        },
+      },
+    );
+
+    const peerChannel = new Libp2pSessionChannel(initiatorStream as any, { session: createSession() });
+    const peerProtocol = new SyncRangeProofProtocol(peerChannel);
+    const handlePromise = registeredHandler?.({
+      stream: responderStream as any,
+      connection: {} as Connection,
+    });
+
+    await peerProtocol.sendPowChallenge({
+      minDifficulty: 19,
+      ttlSeconds: 10,
+      reason: "pressure",
+    });
+    await peerProtocol.sendRangeProofs([
+      {
+        range: { start: 0x00, end: 0xff },
+        merkleRoot: new Uint8Array([1]),
+      },
+    ]);
+    await handlePromise;
+
+    await peerChannel.close();
+    await runPromise;
+    expect(updates).toEqual([19]);
+  });
+
 });

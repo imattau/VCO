@@ -6,11 +6,14 @@ import {
 } from "@vco/vco-transport";
 import { PowChallengePolicy } from "./pow-policy.js";
 import { SyncRangeProofProtocol } from "./protocol.js";
+import { handleEnvelopeStream, type EnvelopeReceiverOptions } from "./envelope-receiver.js";
+import { type VCOCore } from "@vco/vco-core";
 import type { PowChallenge } from "./wire.js";
 
 export interface SyncPowBackpressureContext {
   issuedChallenge?: PowChallenge;
   getRequiredPowDifficulty: () => number;
+  getActivePowChallenge: () => PowChallenge | undefined;
 }
 
 type TransportConnection = Parameters<SyncChannelHandler>[1];
@@ -26,6 +29,14 @@ export interface SyncPowBackpressureOptions extends SyncChannelHandlerOptions {
   outboundMinDifficultyProvider?: () => number;
   outboundChallengeTtlSeconds?: number;
   outboundReasonProvider?: () => string | undefined;
+  onPowChallengeUpdate?: (challenge?: PowChallenge) => void;
+  envelopeReceiverOptions?: SyncEnvelopeReceiverOptions;
+}
+
+export interface SyncEnvelopeReceiverOptions
+  extends Omit<EnvelopeReceiverOptions, "powPolicy"> {
+  core: VCOCore;
+  powPolicy?: PowChallengePolicy;
 }
 
 export async function handleSyncSessionChannelsWithPowBackpressure(
@@ -38,6 +49,8 @@ export async function handleSyncSessionChannelsWithPowBackpressure(
     outboundMinDifficultyProvider,
     outboundChallengeTtlSeconds,
     outboundReasonProvider,
+    onPowChallengeUpdate,
+    envelopeReceiverOptions,
     ...channelOptions
   } = options;
 
@@ -54,6 +67,9 @@ export async function handleSyncSessionChannelsWithPowBackpressure(
       const protocol = new SyncRangeProofProtocol(channel, {
         onPowChallenge: (challenge) => {
           inbound.applyInboundChallenge(challenge);
+          if (onPowChallengeUpdate) {
+            onPowChallengeUpdate(inbound.getActiveChallenge());
+          }
         },
       });
 
@@ -65,7 +81,17 @@ export async function handleSyncSessionChannelsWithPowBackpressure(
       await handler(protocol, connection, {
         issuedChallenge,
         getRequiredPowDifficulty: () => inbound.getRequiredDifficulty(),
+        getActivePowChallenge: () => inbound.getActiveChallenge(),
       });
+
+      if (envelopeReceiverOptions) {
+        const receiverOpts = envelopeReceiverOptions;
+        const { core: receiverCore, powPolicy: receiverPowPolicy, ...receiverConfig } = receiverOpts;
+        await handleEnvelopeStream(channel, receiverCore, {
+          ...receiverConfig,
+          powPolicy: receiverPowPolicy ?? inbound,
+        });
+      }
     },
     channelOptions,
   );
