@@ -25,6 +25,11 @@ import {
 } from "../../vco-transport/src/index.js";
 import { admitInboundEnvelope } from "../src/index.js";
 import { SyncRangeProofProtocol } from "../src/index.js";
+import {
+  encodeSyncWireMessage,
+  encodePowChallenge,
+  decodeSyncControlKind,
+} from "../src/index.js";
 
 // ---------------------------------------------------------------------------
 // Helpers shared across tests
@@ -444,5 +449,32 @@ describe("VCO protocol end-to-end", () => {
       },
     };
     expect(() => validateEnvelope(mutated)).toThrow(/version/i);
+  });
+
+  // 13. SyncControl oneof exclusivity ------------------------------------------
+  it("decodeSyncControlKind throws when both syncMessage and powChallenge are set", () => {
+    // Construct a SyncControl with both fields by concatenating two valid
+    // SyncControl protobuf messages. In protobuf binary format, concatenation
+    // merges fields, so the decoder sees both oneof alternatives simultaneously.
+    const syncMessageBytes = encodeSyncWireMessage([
+      {
+        startHash: new Uint8Array([0x00]),
+        endHash: new Uint8Array([0xff]),
+        fingerprint: new Uint8Array(32),
+      },
+    ]);
+
+    const powChallengeBytes = encodePowChallenge({
+      minDifficulty: 4,
+      ttlSeconds: 60,
+      reason: "test",
+    });
+
+    // Concatenate: protobuf merges fields from both messages into one
+    const bothFields = new Uint8Array(syncMessageBytes.length + powChallengeBytes.length);
+    bothFields.set(syncMessageBytes, 0);
+    bothFields.set(powChallengeBytes, syncMessageBytes.length);
+
+    expect(() => decodeSyncControlKind(bothFields)).toThrow("exactly one");
   });
 });
