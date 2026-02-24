@@ -1,20 +1,56 @@
-### Recommended Libraries for VCO v3
+### Recommended Libraries for VCO v3.2
 
-| Component | Recommended Library | Why it accelerates development |
+VCO is strict about established libraries:
+1. Standard library
+2. Official platform library
+3. Mature ecosystem package
+
+Do not ship custom crypto primitives, custom protobuf parsers, or custom transport handshakes when maintained libraries exist.
+
+| Component | Preferred Library | Role |
 | --- | --- | --- |
-| **Cryptography** | `@noble/hashes` & `@noble/ciphers` | High-security, audit-friendly, and zero-dependency. Handles **BLAKE3**, **Ed25519**, and **ChaChaPoly** natively in TS. |
-| **Noise Handshake** | `@chainsafe/libp2p-noise` | The most maintained Noise implementation in the JS ecosystem. Handles the complex state machine for the **IK handshake** out of the box. |
-| **Sync Logic** | `hoytech/negentropy` | Provides the reference logic for **Range-Based Set Reconciliation**. While primarily C++, the logic is the industry standard for what you're building. |
-| **Data Structs** | `merkle-ts` | A clean TypeScript implementation of Merkle Trees, which is the foundation for the `RECON_REQ` range proofs in your spec. |
-| **Serialization** | `protobufjs` or `buf` | Instead of manual `Uint8Array` slicing, use **Protocol Buffers**. It handles the **Big-Endian** constraints and versioning automatically. |
-| **Multiformats** | `multiformats` | Essential for making your `Payload Hash` and `Creator ID` future-proof. It provides the prefixes for self-describing CID and Multihash. |
-| **Networking** | `libp2p` | If you don't want to write your own QUIC/UDP stack, `libp2p` provides the peer discovery, NAT traversal, and connection multiplexing for you. |
+| Serialization (required) | `protobufjs` + `protobufjs-cli` (or `buf`) | Canonical envelope/sync codecs from `proto/vco/v3/vco.proto`. |
+| Multiformats | `multiformats` | Multikey/Multihash/varint handling. |
+| Crypto adapters | `@noble/curves`, `@noble/hashes` | Ed25519 + BLAKE3 baseline implementations. |
+| P2P transport | `libp2p` + `@chainsafe/libp2p-quic` + `@chainsafe/libp2p-noise` + `@chainsafe/libp2p-yamux` | Established networking stack for transport adapters. |
+| Sync baseline | `@nostr-dev-kit/sync` (`Negentropy`) | Range-based reconciliation baseline. |
+| Merkle helpers | `merkle-ts` | Standardized tree/fingerprint support. |
+| ZKP app verifier | `snarkjs`, `@semaphore-protocol/*` (circuit dependent) | App-level proof verification plugged into `IZKPVerifier`. |
+| Node worker pool for PoW solve | `piscina` | Off-main-thread nonce solving for servers/relays. |
+| Browser background PoW | native `Web Worker` API (or `workerize`) | Avoid UI/event-loop blocking during nonce search. |
 
 ---
 
-### Implementation Pro-Tip: The "Shortcut" Path
+### Required Wire Baseline
 
-1. **Skip the custom binary parser:** Use `protobufjs` to define the VCO v3 header. This replaces about 100 lines of manual buffer code with a single `.proto` file.
-2. **Use libp2p's Noise pipe:** Instead of implementing the **TOL** layer from scratch, initialize a `libp2p` node with the `@chainsafe/libp2p-noise` module. It wraps every connection in the Noise protocol automatically.
-3. **Focus on the Sync:** Spend your time on the **VCO-Sync** logic. This is the "brain" of your protocol that makes it superior to simple gossip networks.
+- Envelope/sync encode-decode MUST use generated Protobuf code.
+- `creator_id` MUST be Multikey.
+- `payload_hash` MUST be Multihash.
+- `EnvelopeSigningMaterial` and `EnvelopeHeaderHashMaterial` MUST drive deterministic derivation.
+- `EnvelopeHeaderHashMaterial.nonce` MUST be included in header-hash computation.
+- Sync control frames MUST use `SyncControl` oneof wrappers from the shared schema.
+- Manual `Uint8Array` byte slicing for canonical wire parsing is non-compliant.
 
+---
+
+### PoW v3.2 Implementation Guidance
+
+- Use `verifyPoW(headerHash, difficulty)` by leading-zero-bit count (`Math.clz32` fast-path).
+- Keep nonce search off the main thread (`piscina`/workers).
+- Reuse buffers during nonce iteration to reduce GC pressure.
+- Treat PoW difficulty as receiver policy (backpressure), not global consensus.
+- Use schema-backed `PowChallenge` control messages instead of ad-hoc JSON challenge payloads.
+
+---
+
+### ZKP-Agnostic Pattern (Unchanged)
+
+Core library:
+- carries `zkp_extension`,
+- routes verifier calls by `circuit_id`,
+- enforces nullifier replay checks.
+
+Application:
+- generates proofs,
+- registers circuit-specific verifiers,
+- chooses proof backend libraries.

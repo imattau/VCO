@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "baseUrl": ".",
+    "paths": {
+      "@vco/vco-crypto": [
+        "packages/vco-crypto/src/index.ts"
+      ],
+      "@vco/vco-core": [
+        "packages/vco-core/src/index.ts"
+      ],
+      "@vco/vco-sync": [
+        "packages/vco-sync/src/index.ts"
+      ],
+      "@vco/vco-transport": [
+        "packages/vco-transport/src/index.ts"
+      ]
+    },
+    "strict": true,
+    "declaration": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  }
+}

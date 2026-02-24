@@ -1,0 +1,33 @@
+{
+  "name": "@vco/vco-transport",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist .tsbuildinfo"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-noise": "^16.1.5",
+    "@chainsafe/libp2p-quic": "^1.1.8",
+    "@chainsafe/libp2p-yamux": "^7.0.4",
+    "@libp2p/interface": "^2.11.0",
+    "@vco/vco-core": "0.1.0",
+    "it-pushable": "^3.2.3",
+    "libp2p": "^2.10.0",
+    "multiformats": "^13.4.2",
+    "uint8arraylist": "^2.4.8"
+  }
+}

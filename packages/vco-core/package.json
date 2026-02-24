@@ -1,0 +1,28 @@
+{
+  "name": "@vco/vco-core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "proto:gen": "node ../../scripts/generate-proto.mjs",
+    "build": "npm run proto:gen && tsc -p tsconfig.build.json && mkdir -p dist/generated && cp src/generated/vco.pb.js src/generated/vco.pb.d.ts dist/generated/",
+    "typecheck": "npm run proto:gen && tsc -p tsconfig.build.json --noEmit",
+    "test": "npm run proto:gen && vitest run",
+    "clean": "rm -rf dist .tsbuildinfo src/generated/vco.pb.js src/generated/vco.pb.d.ts"
+  },
+  "dependencies": {
+    "@vco/vco-crypto": "0.1.0",
+    "multiformats": "^13.4.2",
+    "protobufjs": "^7.5.4"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "references": [
+    { "path": "../vco-core/tsconfig.build.json" },
+    { "path": "../vco-transport/tsconfig.build.json" }
+  ],
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

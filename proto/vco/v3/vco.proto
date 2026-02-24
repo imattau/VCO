@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package vco.v3;
+
+// ZKP authentication extension metadata and proof bytes.
+message ZKPExtension {
+  uint32 circuit_id = 1;     // uint16 circuit/multicodec identifier
+  uint32 proof_length = 2;   // uint16 mirror of proof byte length
+  bytes proof = 3;           // zk-SNARK/STARK proof bytes
+  uint32 inputs_length = 4;  // uint16 mirror of public inputs byte length
+  bytes public_inputs = 5;   // public inputs used for verification
+  bytes nullifier = 6;       // 32-byte replay-prevention nullifier
+}
+
+// The core data container
+message Envelope {
+  bytes header_hash = 1;   // BLAKE3 of canonical header material (fields 2-7 + nonce)
+  uint32 version = 2;      // Set to 3
+  uint32 flags = 3;        // Bitmask for Ephemeral, Obfuscated, PoW, ZKP auth
+  uint32 payload_type = 4; // Multicodec identifier
+  bytes creator_id = 5;    // Ed25519 Public Key (Multikey)
+  bytes payload_hash = 6;  // Multihash of the payload
+  bytes signature = 7;     // Ed25519 signature
+  bytes payload = 8;       // The actual data
+  ZKPExtension zkp_extension = 9; // Present when FLAGS bit 4 (ZKP_AUTH) is set
+  uint32 nonce = 10;       // PoW nonce; 32-bit unsigned integer
+}
+
+// Deterministic signing material (not transmitted directly).
+message EnvelopeSigningMaterial {
+  uint32 version = 1;
+  uint32 flags = 2;
+  uint32 payload_type = 3;
+  bytes creator_id = 4;
+  bytes payload_hash = 5;
+}
+
+// Deterministic header-hash material (not transmitted directly).
+message EnvelopeHeaderHashMaterial {
+  uint32 version = 1;
+  uint32 flags = 2;
+  uint32 payload_type = 3;
+  bytes creator_id = 4;
+  bytes payload_hash = 5;
+  bytes signature = 6;
+  uint32 nonce = 7;
+}
+
+// Canonical payload fragmentation record for envelopes.
+message PayloadFragment {
+  bytes parent_header_hash = 1;
+  uint32 fragment_index = 2;
+  uint32 fragment_count = 3;
+  uint32 total_payload_size = 4;
+  bytes payload_chunk = 5;
+  bytes payload_hash = 6;
+}
+
+message PayloadFragmentSet {
+  repeated PayloadFragment fragments = 1;
+}
+
+// Receiver-specified PoW backpressure requirement for sync peers.
+message PowChallenge {
+  uint32 min_difficulty = 1; // required leading-zero-bit threshold
+  uint32 ttl_seconds = 2;    // validity window for this challenge
+  string reason = 3;         // optional diagnostic context
+}
+
+// Multiplexed sync control envelope for range proofs and policy signals.
+message SyncControl {
+  oneof message {
+    SyncMessage sync_message = 1;
+    PowChallenge pow_challenge = 2;
+  }
+}
+
+// Used for VCO-Sync (Range-Based Set Reconciliation)
+message SyncMessage {
+  message Range {
+    bytes start_hash = 1;
+    bytes end_hash = 2;
+    bytes fingerprint = 3; // Merkle Root or XOR sum of this range
+  }
+
+  repeated Range ranges = 1;
+}

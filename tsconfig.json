@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/vco-crypto" },
+    { "path": "./packages/vco-core" },
+    { "path": "./packages/vco-sync" },
+    { "path": "./packages/vco-transport" }
+  ]
+}

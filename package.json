@@ -1,0 +1,26 @@
+{
+  "name": "vco",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verifiable Content Object protocol workspace",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "proto:gen": "node scripts/generate-proto.mjs",
+    "multicodec:gen": "node scripts/generate-multicodec-registry.mjs",
+    "build": "npm run proto:gen && npm run --workspaces build",
+    "typecheck": "npm run --workspaces typecheck",
+    "test": "npm run --workspaces test",
+    "clean": "npm run --workspaces clean"
+  },
+  "devDependencies": {
+    "protobufjs": "^7.5.4",
+    "protobufjs-cli": "^1.1.3",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "multiformats": "^13.4.2"
+  }
+}
