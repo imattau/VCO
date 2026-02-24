@@ -68,7 +68,7 @@ function toUint8Array(value: Uint8Array | number[] | null | undefined): Uint8Arr
     return new Uint8Array();
   }
 
-  return value instanceof Uint8Array ? value : Uint8Array.from(value);
+  return value.constructor === Uint8Array ? value as Uint8Array : Uint8Array.from(value);
 }
 
 function toProtoEnvelope(envelope: VcoEnvelope): ProtoEnvelope {
