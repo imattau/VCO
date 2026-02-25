@@ -121,7 +121,7 @@ For detailed guidelines, please refer to **[AGENTS.md](./AGENTS.md)**.
 ## Contributors
 
 - **Gemini** (AI Agent) - Automated installer, relay enhancements, and protocol refinements.
-- **Matt Thomson** - Lead architect and developer.
+- **lostcause** - Lead architect and developer.
 
 ---
 
