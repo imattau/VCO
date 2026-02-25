@@ -7,12 +7,14 @@ import { VCOCore, type IZKPVerifier } from "@vco/vco-core";
 import type { RelayConfig } from "./config.js";
 import { LevelDBRelayStore, type IRelayStore } from "./store.js";
 import { handleSyncSession } from "./sync-handler.js";
+import http from "node:http";
 
 export class RelayServer {
   private readonly config: RelayConfig;
   private node?: Libp2pNode;
   private store?: IRelayStore;
   private readonly core: VCOCore;
+  private httpServer?: http.Server;
 
   constructor(config: RelayConfig) {
     this.config = config;
@@ -43,11 +45,32 @@ export class RelayServer {
 
     await node.start();
     this.node = node;
+
+    if (this.config.httpPort) {
+      this.httpServer = http.createServer((req, res) => {
+        if (req.url === "/health") {
+          res.writeHead(200, { "Content-Type": "text/plain" });
+          res.end("OK");
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+      this.httpServer.listen(this.config.httpPort, this.config.httpHost);
+      console.log(`HTTP Health Check started on ${this.config.httpHost}:${this.config.httpPort}`);
+    }
   }
 
   async stop(): Promise<void> {
     await this.node?.stop();
     await this.store?.close();
+    await new Promise<void>((resolve) => {
+      if (this.httpServer) {
+        this.httpServer.close(() => resolve());
+      } else {
+        resolve();
+      }
+    });
   }
 
   get peerId() { return this.node?.peerId; }

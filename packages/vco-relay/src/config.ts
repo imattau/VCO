@@ -8,6 +8,8 @@ export interface RelayPowConfig {
 
 export interface RelayConfig {
   listenAddrs: string[];
+  httpHost: string;
+  httpPort?: number;
   dataDir: string;
   maxConnections: number;
   pow: RelayPowConfig;
@@ -16,6 +18,8 @@ export interface RelayConfig {
 
 const DEFAULTS: RelayConfig = {
   listenAddrs: ["/ip4/0.0.0.0/udp/4001/quic-v1"],
+  httpHost: "127.0.0.1",
+  httpPort: 4000,
   dataDir: "./relay-data",
   maxConnections: 256,
   pow: { defaultDifficulty: 0, maxDifficulty: 20, windowSeconds: 3600 },
@@ -31,6 +35,8 @@ function assertPositiveInt(value: number, name: string): void {
 function parseEnvOverrides(env: Record<string, string | undefined>, config: RelayConfig): RelayConfig {
   const out = structuredClone(config);
   if (env.VCO_LISTEN_ADDRS) out.listenAddrs = env.VCO_LISTEN_ADDRS.split(",").map((s) => s.trim());
+  if (env.VCO_HTTP_HOST) out.httpHost = env.VCO_HTTP_HOST;
+  if (env.VCO_HTTP_PORT) out.httpPort = Number(env.VCO_HTTP_PORT);
   if (env.VCO_DATA_DIR) out.dataDir = env.VCO_DATA_DIR;
   if (env.VCO_MAX_CONNECTIONS) {
     const v = Number(env.VCO_MAX_CONNECTIONS);
