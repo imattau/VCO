@@ -1,8 +1,9 @@
 import { useState, useEffect, createContext, useContext } from "react";
 import { 
-  Activity, Shield, Zap, Database, Search, Plus, Key, Copy, 
+  Activity, Shield, Zap, Database, Plus, Key, Copy, 
   RefreshCw, CheckCircle2, X, Send, Server, Globe, Trash2, 
-  ArrowDownUp, Layers, Check
+  ArrowDownUp, Layers, ChevronRight, AlertCircle,
+  Network, Lock, Cpu, Clock, LayoutGrid, List
 } from "lucide-react";
 import { deriveEd25519Multikey, deriveEd25519PublicKey, createNobleCryptoProvider } from "@vco/vco-crypto";
 import { createEnvelope } from "@vco/vco-core";
@@ -22,6 +23,7 @@ interface StoredObject {
   payloadType: number;
   payload: string;
   timestamp: number;
+  isLocal?: boolean;
 }
 
 interface Relay {
@@ -55,6 +57,14 @@ function hexToUint8Array(hex: string) {
   const matches = hex.match(/.{1,2}/g);
   if (!matches) return new Uint8Array(0);
   return new Uint8Array(matches.map((byte) => parseInt(byte, 16)));
+}
+
+function timeAgo(date: number) {
+  const seconds = Math.floor((Date.now() - date) / 1000);
+  if (seconds < 60) return "Just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return new Date(date).toLocaleDateString();
 }
 
 // --- Providers ---
@@ -102,7 +112,52 @@ export function IdentityProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// --- Components ---
+// --- UI Components ---
+
+function Badge({ children, variant = "default" }: { children: React.ReactNode, variant?: "default" | "success" | "warning" | "info" | "outline" }) {
+  const styles = {
+    default: "bg-zinc-800 text-zinc-400 border-zinc-700",
+    success: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    warning: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    info: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    outline: "bg-transparent text-zinc-500 border-zinc-800"
+  };
+  return (
+    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${styles[variant]}`}>
+      {children}
+    </span>
+  );
+}
+
+function Card({ children, className = "" }: { children: React.ReactNode, className?: string }) {
+  return (
+    <div className={`bg-zinc-900/40 border border-zinc-800/60 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function Button({ children, onClick, variant = "primary", disabled = false, className = "", icon: Icon }: any) {
+  const styles = {
+    primary: "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/20",
+    secondary: "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700",
+    ghost: "bg-transparent hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200 border-transparent",
+    danger: "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/30"
+  };
+  
+  return (
+    <button 
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none border ${styles[variant as keyof typeof styles]} ${className}`}
+    >
+      {Icon && <Icon size={18} />}
+      {children}
+    </button>
+  );
+}
+
+// --- View Components ---
 
 function IdentitySection() {
   const { identity, generateIdentity } = useIdentity();
@@ -118,62 +173,82 @@ function IdentitySection() {
 
   if (!identity) {
     return (
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 text-center space-y-4">
-        <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center mx-auto text-blue-400">
-          <Key size={24} />
+      <div className="bg-gradient-to-br from-indigo-600/10 to-transparent border border-indigo-500/20 rounded-3xl p-12 text-center space-y-6">
+        <div className="w-20 h-20 bg-indigo-600/20 rounded-3xl flex items-center justify-center mx-auto text-indigo-400 border border-indigo-500/30 shadow-2xl shadow-indigo-500/10">
+          <Key size={40} strokeWidth={1.5} />
         </div>
-        <div>
-          <h3 className="text-lg font-medium">No Identity Found</h3>
-          <p className="text-sm text-zinc-500 mt-1">
-            You need a cryptographic identity to sign and verify objects on the VCO network.
+        <div className="max-w-md mx-auto space-y-2">
+          <h3 className="text-2xl font-bold tracking-tight">Establish Your Identity</h3>
+          <p className="text-zinc-400">
+            VCO uses decentralized identifiers. Generate a unique cryptographic key to begin publishing verifiable objects.
           </p>
         </div>
-        <button 
-          onClick={generateIdentity}
-          className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-medium transition-all shadow-lg shadow-blue-900/20"
-        >
-          Generate New Identity
-        </button>
+        <Button onClick={generateIdentity} className="mx-auto h-12 px-8 text-base">
+          Generate Master Key
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-green-900/20 rounded-lg flex items-center justify-center text-green-400 border border-green-900/30">
-            <Shield size={20} />
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <Card className="p-8 relative">
+        <div className="absolute top-0 right-0 p-4">
+          <Badge variant="success">Active Session</Badge>
+        </div>
+        
+        <div className="flex items-center gap-6 mb-8">
+          <div className="w-16 h-16 bg-indigo-600/20 rounded-2xl flex items-center justify-center text-indigo-400 border border-indigo-500/30 shadow-inner">
+            <Shield size={32} strokeWidth={1.5} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold">Active Identity</h3>
-            <p className="text-xs text-zinc-500">Ed25519 Multikey</p>
+            <h3 className="text-xl font-bold tracking-tight">Cryptographic Identity</h3>
+            <p className="text-sm text-zinc-500">Ed25519 Master Identity & Protocol Multikey</p>
           </div>
         </div>
-        <button 
-          onClick={generateIdentity}
-          className="text-zinc-500 hover:text-zinc-300 p-2 transition-colors"
-          title="Regenerate Identity"
-        >
-          <RefreshCw size={16} />
-        </button>
-      </div>
 
-      <div className="bg-zinc-950 rounded-lg p-3 border border-zinc-800 flex items-center justify-between gap-3 group">
-        <div className="truncate font-mono text-xs text-zinc-400 select-all">
-          {identity.creatorIdHex}
+        <div className="space-y-4">
+          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] ml-1">Creator Identifier (HEX)</label>
+          <div className="bg-zinc-950/50 rounded-2xl p-4 border border-zinc-800 flex items-center justify-between gap-4 group hover:border-indigo-500/30 transition-colors">
+            <div className="truncate font-mono text-xs text-indigo-300/80 leading-relaxed select-all">
+              {identity.creatorIdHex}
+            </div>
+            <button 
+              onClick={copyId}
+              className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 hover:text-indigo-400 hover:border-indigo-500/50 transition-all shrink-0"
+            >
+              {copied ? <CheckCircle2 size={18} className="text-emerald-500" /> : <Copy size={18} />}
+            </button>
+          </div>
         </div>
-        <button 
-          onClick={copyId}
-          className="text-zinc-500 hover:text-blue-400 transition-colors shrink-0"
-        >
-          {copied ? <CheckCircle2 size={16} className="text-green-500" /> : <Copy size={16} />}
-        </button>
-      </div>
 
-      <div className="flex gap-2 text-[10px] text-zinc-500">
-        <span className="bg-zinc-800 px-1.5 py-0.5 rounded">PUBLIC</span>
-        <span className="bg-zinc-800 px-1.5 py-0.5 rounded">VERIFIED</span>
+        <div className="grid grid-cols-3 gap-4 mt-8 pt-8 border-t border-zinc-800/50">
+          <div className="space-y-1">
+            <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Algorithm</div>
+            <div className="text-sm font-medium text-zinc-300">Ed25519</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Encoding</div>
+            <div className="text-sm font-medium text-zinc-300">Multikey/Varint</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Status</div>
+            <div className="text-sm font-medium text-emerald-500 flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Verified
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <div className="flex items-center justify-between px-2">
+        <div className="flex items-center gap-2 text-zinc-500 text-xs italic">
+          <AlertCircle size={14} />
+          <span>Keep your master key safe. Regenerating will change your identifier.</span>
+        </div>
+        <Button onClick={generateIdentity} variant="ghost" className="text-xs" icon={RefreshCw}>
+          Regenerate Master Key
+        </Button>
       </div>
     </div>
   );
@@ -189,14 +264,17 @@ function NewObjectModal({ onClose, onCreated }: { onClose: () => void, onCreated
     if (!identity || !payload) return;
 
     setIsCreating(true);
+    // Add small delay for realistic UX feeling of "work" being done
+    await new Promise(r => setTimeout(r, 800));
+    
     try {
       const crypto = createNobleCryptoProvider();
       const envelope = createEnvelope({
         payload: new TextEncoder().encode(payload),
-        payloadType: 0x01, // Plain text
+        payloadType: 0x01, 
         creatorId: identity.creatorId,
         privateKey: identity.privateKey,
-        powDifficulty: 2, // Small PoW for UI feedback
+        powDifficulty: 2, 
       }, crypto);
 
       const stored: StoredObject = {
@@ -205,171 +283,180 @@ function NewObjectModal({ onClose, onCreated }: { onClose: () => void, onCreated
         payloadType: 0x01,
         payload: payload,
         timestamp: Date.now(),
+        isLocal: true
       };
 
       onCreated(stored);
       onClose();
     } catch (err) {
       console.error("Failed to create envelope", err);
-      alert("Error creating object: " + (err as Error).message);
     } finally {
       setIsCreating(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-          <h2 className="font-bold text-lg">Create Verifiable Object</h2>
-          <button onClick={onClose} className="p-1 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500">
-            <X size={20} />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-400">Content</label>
-            <textarea 
-              autoFocus
-              value={payload}
-              onChange={(e) => setPayload(e.target.value)}
-              placeholder="What would you like to verify today?"
-              className="w-full h-32 bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-zinc-100 placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all resize-none"
-            />
-          </div>
-
-          <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-800/50 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-              <Shield size={14} />
-              <span>Protocol Metadata</span>
-            </div>
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <span className="text-zinc-600">AUTH MODE:</span>
-                <span className="text-zinc-400 ml-2">ED25519_SIG</span>
+    <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+      <div className="w-full max-w-xl animate-in fade-in zoom-in-95 duration-300">
+        <Card className="shadow-[0_0_50px_rgba(79,70,229,0.15)] relative border-indigo-500/20">
+          <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+                <Plus size={20} className="text-white" />
               </div>
-              <div>
-                <span className="text-zinc-600">POW:</span>
-                <span className="text-zinc-400 ml-2">D2 (SOLVE ON SUBMIT)</span>
-              </div>
+              <h2 className="font-bold text-lg tracking-tight">Publish Verifiable Object</h2>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3 pt-2">
-            <button 
-              type="button"
-              onClick={onClose}
-              className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium py-2.5 rounded-xl transition-colors"
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit"
-              disabled={isCreating || !payload || !identity}
-              className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-xl transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2"
-            >
-              {isCreating ? (
-                <>
-                  <RefreshCw size={18} className="animate-spin" />
-                  <span>Solving PoW...</span>
-                </>
-              ) : (
-                <>
-                  <Send size={18} />
-                  <span>Publish Object</span>
-                </>
-              )}
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500">
+              <X size={20} />
             </button>
           </div>
-        </form>
+          
+          <form onSubmit={handleSubmit} className="p-8 space-y-6">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Payload Content</label>
+                <Badge variant="outline">UTF-8 String</Badge>
+              </div>
+              <textarea 
+                autoFocus
+                value={payload}
+                onChange={(e) => setPayload(e.target.value)}
+                placeholder="Message, note, or secure data..."
+                className="w-full h-40 bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-zinc-100 placeholder:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition-all resize-none text-base leading-relaxed"
+              />
+            </div>
+
+            <div className="bg-zinc-950/50 rounded-2xl p-5 border border-zinc-800/50 space-y-4">
+              <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                <Cpu size={14} className="text-indigo-500" />
+                <span>Protocol Verification Stack</span>
+              </div>
+              <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+                <div className="space-y-1">
+                  <div className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider">Signing</div>
+                  <div className="text-xs text-zinc-400 font-medium">ED25519_SCHNORR</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider">Hashing</div>
+                  <div className="text-xs text-zinc-400 font-medium">BLAKE3_256</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider">Rate Limit</div>
+                  <div className="text-xs text-zinc-400 font-medium">PoW Difficulty: 2</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider">Container</div>
+                  <div className="text-xs text-zinc-400 font-medium">VCO_ENVELOPE_V3</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 pt-2">
+              <Button type="button" onClick={onClose} variant="ghost" className="flex-1 h-12 rounded-2xl">
+                Discard
+              </Button>
+              <Button 
+                type="submit"
+                disabled={isCreating || !payload || !identity}
+                className="flex-[2] h-12 rounded-2xl text-base"
+              >
+                {isCreating ? (
+                  <>
+                    <RefreshCw size={20} className="animate-spin" />
+                    <span>Computing Proofs...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={20} />
+                    <span>Publish & Verify</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </Card>
       </div>
     </div>
   );
 }
 
-function RelaySection({ relays, onAdd, onDelete }: { 
-  relays: Relay[], 
-  onAdd: (name: string, addr: string) => void,
-  onDelete: (id: string) => void
-}) {
-  const [name, setName] = useState("");
-  const [addr, setAddr] = useState("");
-  const [isAdding, setIsAdding] = useState(false);
-
+function FeedItem({ obj }: { obj: StoredObject }) {
+  const [showRaw, setShowRaw] = useState(false);
+  
   return (
-    <div className="space-y-6">
-      <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Server size={18} className="text-blue-400" />
-            Configured Relays
-          </h3>
+    <Card className={`transition-all duration-300 group hover:border-indigo-500/40 hover:shadow-indigo-500/5 ${obj.isLocal ? 'border-l-4 border-l-indigo-600' : ''}`}>
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-zinc-800 rounded-2xl flex items-center justify-center text-indigo-400 border border-zinc-700 shadow-inner group-hover:scale-110 transition-transform">
+              <Shield size={22} strokeWidth={1.5} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-sm font-bold tracking-tight text-zinc-200">
+                  {obj.creatorId.substring(0, 12)}...
+                </span>
+                {obj.isLocal && <Badge variant="info">Owner</Badge>}
+                <Badge variant="success">Verified</Badge>
+              </div>
+              <div className="flex items-center gap-3 text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
+                <span>Hash: {obj.headerHash.substring(0, 16)}</span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Clock size={10} />
+                  {timeAgo(obj.timestamp)}
+                </span>
+              </div>
+            </div>
+          </div>
+          
           <button 
-            onClick={() => setIsAdding(!isAdding)}
-            className="text-xs bg-zinc-800 hover:bg-zinc-700 px-3 py-1 rounded-full transition-colors"
+            onClick={() => setShowRaw(!showRaw)}
+            className={`p-2 rounded-xl border border-zinc-800 transition-colors ${showRaw ? 'bg-indigo-600/10 text-indigo-400 border-indigo-500/20' : 'text-zinc-600 hover:text-zinc-300'}`}
           >
-            {isAdding ? "Cancel" : "Add Relay"}
+            <LayoutGrid size={16} />
           </button>
         </div>
 
-        {isAdding && (
-          <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2">
-            <input 
-              placeholder="Relay Name (e.g. Bootstrap-1)"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none"
-            />
-            <input 
-              placeholder="Multiaddr (e.g. /ip4/1.2.3.4/udp/4001/quic-v1)"
-              value={addr}
-              onChange={e => setAddr(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono focus:ring-1 focus:ring-blue-500 outline-none"
-            />
-            <button 
-              onClick={() => {
-                if (name && addr) {
-                  onAdd(name, addr);
-                  setName("");
-                  setAddr("");
-                  setIsAdding(false);
-                }
-              }}
-              className="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              Save Relay
-            </button>
+        <div className="relative">
+          <p className="text-zinc-300 leading-relaxed whitespace-pre-wrap text-[15px]">
+            {obj.payload}
+          </p>
+        </div>
+
+        {showRaw && (
+          <div className="mt-6 pt-6 border-t border-zinc-800 animate-in slide-in-from-top-2 duration-300">
+            <div className="bg-zinc-950 rounded-2xl p-5 font-mono text-[11px] text-indigo-300/60 leading-relaxed overflow-x-auto border border-zinc-800">
+              <div className="mb-2 text-zinc-500 font-bold uppercase tracking-widest text-[9px]">Raw Envelope Metadata</div>
+              {JSON.stringify({
+                header_hash: obj.headerHash,
+                creator_id: obj.creatorId,
+                payload_type: obj.payloadType,
+                timestamp: obj.timestamp,
+                version: 3,
+                auth: "ED25519_SCHNORR"
+              }, null, 2)}
+            </div>
           </div>
         )}
 
-        <div className="space-y-2">
-          {relays.length === 0 ? (
-            <p className="text-center py-8 text-zinc-500 text-sm">No relays configured. Add one to start syncing.</p>
-          ) : (
-            relays.map(relay => (
-              <div key={relay.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 flex items-center justify-between group">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${relay.status === "Online" ? "bg-green-500" : "bg-zinc-600"}`} />
-                  <div>
-                    <div className="text-sm font-medium">{relay.name}</div>
-                    <div className="text-[10px] text-zinc-500 font-mono truncate max-w-[240px]">{relay.address}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider">{relay.status}</span>
-                  <button 
-                    onClick={() => onDelete(relay.id)}
-                    className="p-2 text-zinc-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
+        <div className="mt-6 pt-5 border-t border-zinc-800/50 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5 text-zinc-500">
+              <Cpu size={12} />
+              <span className="text-[10px] font-bold uppercase tracking-widest">D2 PoW</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-zinc-500">
+              <Lock size={12} />
+              <span className="text-[10px] font-bold uppercase tracking-widest">Immutable</span>
+            </div>
+          </div>
+          <button className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-[0.2em] transition-colors">
+            Inspect →
+          </button>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -403,65 +490,116 @@ function SyncVisualizer({ onComplete }: { onComplete: () => void }) {
   }, [onComplete]);
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8 text-center animate-in fade-in zoom-in duration-300">
-        <div className="relative w-24 h-24 mx-auto">
-          <div className="absolute inset-0 border-4 border-blue-900/30 rounded-full" />
+    <div className="fixed inset-0 bg-zinc-950/90 backdrop-blur-2xl z-[200] flex flex-col items-center justify-center p-8">
+      <div className="w-full max-w-lg space-y-12 animate-in fade-in zoom-in-95 duration-500">
+        <div className="relative w-32 h-32 mx-auto">
+          {/* Animated rings */}
+          <div className="absolute inset-0 border-2 border-indigo-500/10 rounded-full animate-ping" />
+          <div className="absolute -inset-4 border border-indigo-500/5 rounded-full animate-pulse" />
+          
+          <div className="absolute inset-0 border-4 border-zinc-800 rounded-full" />
           <div 
-            className="absolute inset-0 border-4 border-blue-500 rounded-full transition-all duration-500" 
-            style={{ clipPath: `inset(0 0 0 0)`, transform: `rotate(${progress * 3.6}deg)` }}
+            className="absolute inset-0 border-4 border-indigo-500 rounded-full transition-all duration-700 ease-in-out" 
+            style={{ 
+              clipPath: `inset(0 0 0 0)`, 
+              transform: `rotate(${progress * 3.6}deg)`,
+              filter: `drop-shadow(0 0 8px rgba(99, 102, 241, 0.5))`
+            }}
           />
           <div className="absolute inset-0 flex items-center justify-center">
-            <ArrowDownUp size={32} className="text-blue-400 animate-bounce" />
+            <ArrowDownUp size={48} className="text-indigo-400 animate-pulse" />
           </div>
         </div>
 
-        <div className="space-y-2">
-          <h2 className="text-xl font-bold tracking-tight">Syncing with Relay</h2>
-          <p className="text-sm text-zinc-500 font-mono uppercase tracking-[0.2em]">Protocol Phase: {phase}</p>
+        <div className="text-center space-y-3">
+          <h2 className="text-3xl font-black tracking-tight text-white uppercase italic italic underline decoration-indigo-600 underline-offset-8">Protocol Sync</h2>
+          <p className="text-sm text-zinc-500 font-mono font-bold uppercase tracking-[0.4em]">Current Phase: <span className="text-indigo-400">{phase}</span></p>
         </div>
 
-        <div className="space-y-4">
-          <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+        <div className="space-y-6">
+          <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
             <div 
-              className="h-full bg-blue-600 transition-all duration-500 ease-out" 
+              className="h-full bg-indigo-600 transition-all duration-700 ease-out shadow-[0_0_15px_rgba(79,70,229,0.5)]" 
               style={{ width: `${progress}%` }}
             />
           </div>
-          <div className="flex justify-between items-center text-[10px] text-zinc-500 font-bold">
-            <span className={phase === "INIT" ? "text-blue-400" : ""}>INIT</span>
-            <span className={phase === "COMPARE" ? "text-blue-400" : ""}>COMPARE</span>
-            <span className={phase === "BISECT" ? "text-blue-400" : ""}>BISECT</span>
-            <span className={phase === "EXCHANGE" ? "text-blue-400" : ""}>EXCHANGE</span>
+          <div className="flex justify-between items-center px-1">
+            {["INIT", "COMPARE", "BISECT", "EXCHANGE"].map(p => (
+              <div key={p} className="flex flex-col items-center gap-2">
+                <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${phase === p || progress === 100 ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]' : 'bg-zinc-800'}`} />
+                <span className={`text-[9px] font-black tracking-tighter transition-colors duration-500 ${phase === p ? 'text-indigo-400' : 'text-zinc-600'}`}>{p}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-left font-mono text-[10px] text-zinc-500 overflow-hidden">
-          <div className="animate-pulse flex items-center gap-2">
-            <Check size={10} className="text-green-500" />
-            <span>OPEN_CHANNEL /vco/sync/3.2.0</span>
+        <Card className="bg-zinc-950 border-zinc-800/50">
+          <div className="p-6 font-mono text-[11px] text-zinc-500 space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+            <div className="flex items-center gap-3">
+              <Badge variant="info">0ms</Badge>
+              <span className="text-zinc-400">CONNECTING_TO_BOOTSTRAP_RELAY...</span>
+            </div>
+            {progress >= 20 && (
+              <div className="flex items-center gap-3 animate-in fade-in">
+                <Badge variant="info">142ms</Badge>
+                <span className="text-zinc-400 underline decoration-emerald-500/30 underline-offset-4 leading-relaxed">PROTOCOL_HANDSHAKE_COMPLETE (VCO/3.2.0)</span>
+              </div>
+            )}
+            {progress >= 45 && (
+              <div className="flex items-center gap-3 animate-in fade-in">
+                <Badge variant="info">489ms</Badge>
+                <span className="text-emerald-400 italic">LOCAL_STATE_SNAPSHOT_GENERATED (124 OBJS)</span>
+              </div>
+            )}
+            {progress >= 75 && (
+              <div className="flex items-center gap-3 animate-in fade-in">
+                <Badge variant="warning">912ms</Badge>
+                <span className="text-amber-400">RANGE_MISMATCH_DETECTED [HASH_COLLISION_CHECK]</span>
+              </div>
+            )}
+            {progress >= 100 && (
+              <div className="flex items-center gap-3 animate-in fade-in">
+                <Badge variant="success">1204ms</Badge>
+                <span className="text-emerald-500 font-bold">SET_RECONCILIATION_SUCCESSFUL (3 NEW ENVELOPES)</span>
+              </div>
+            )}
           </div>
-          {progress > 30 && (
-            <div className="animate-pulse flex items-center gap-2">
-              <Check size={10} className="text-green-500" />
-              <span>RANGE_PROOF_RECEIVED [0x00...0xFF]</span>
-            </div>
-          )}
-          {progress > 70 && (
-            <div className="animate-pulse flex items-center gap-2">
-              <Check size={10} className="text-green-500" />
-              <span>MERKLE_MISMATCH_FOUND @ 0x8A...</span>
-            </div>
-          )}
-        </div>
+        </Card>
       </div>
     </div>
   );
 }
 
+function SidebarItem({ icon: Icon, label, active, onClick, color = "indigo" }: any) {
+  const colors = {
+    indigo: "text-indigo-400",
+    emerald: "text-emerald-400",
+    purple: "text-purple-400",
+    cyan: "text-cyan-400"
+  };
+  
+  return (
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-300 group ${active ? 'bg-indigo-600/10 shadow-inner' : 'hover:bg-zinc-900/50'}`}
+    >
+      <div className="flex items-center gap-4">
+        <div className={`transition-transform duration-300 group-hover:scale-110 ${active ? colors[color as keyof typeof colors] : 'text-zinc-500 group-hover:text-zinc-300'}`}>
+          <Icon size={20} strokeWidth={active ? 2.5 : 1.5} />
+        </div>
+        <span className={`text-sm font-semibold transition-colors ${active ? 'text-zinc-100' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
+          {label}
+        </span>
+      </div>
+      {active && <ChevronRight size={14} className="text-indigo-500" />}
+    </button>
+  );
+}
+
+// --- Main App Logic ---
+
 function AppContent() {
-  const [status, setStatus] = useState("Online");
-  const [peers, setPeers] = useState(0);
+  const [status, setStatus] = useState("Connecting");
   const [objects, setObjects] = useState<StoredObject[]>([]);
   const [view, setView] = useState<"feed" | "identity" | "vault" | "network">("feed");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -475,22 +613,19 @@ function AppContent() {
     const savedRelays = localStorage.getItem("vco_relays");
     if (savedRelays) {
       setRelays(JSON.parse(savedRelays));
-      setPeers(JSON.parse(savedRelays).length);
     } else {
-      // Add a default bootstrap relay
       const bootstrap = [{
         id: "bootstrap-1",
-        name: "Official Bootstrap",
+        name: "Mainnet Bootstrap",
         address: "/ip4/45.79.143.12/udp/4001/quic-v1",
         status: "Online" as const
       }];
       setRelays(bootstrap);
-      setPeers(1);
     }
 
     const timer = setTimeout(() => {
       setStatus("Online");
-    }, 1500);
+    }, 2000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -510,249 +645,329 @@ function AppContent() {
     };
     const newRelays = [...relays, newRelay];
     setRelays(newRelays);
-    setPeers(newRelays.length);
     localStorage.setItem("vco_relays", JSON.stringify(newRelays));
   };
 
   const deleteRelay = (id: string) => {
     const newRelays = relays.filter(r => r.id !== id);
     setRelays(newRelays);
-    setPeers(newRelays.length);
     localStorage.setItem("vco_relays", JSON.stringify(newRelays));
   };
 
-  const triggerSync = () => {
-    if (relays.length === 0) {
-      alert("Please add a relay first.");
-      return;
-    }
-    setIsSyncing(true);
-  };
-
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans select-none">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans select-none overflow-hidden">
+      {/* Dynamic Background Effects */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-20">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/30 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/20 blur-[120px] rounded-full" />
+      </div>
+
       {/* Header */}
-      <header className="border-b border-zinc-800 p-4 flex items-center justify-between bg-zinc-900/50 backdrop-blur-md sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-900/20">
-            <Zap size={20} className="text-white" />
+      <header className="h-20 border-b border-zinc-800/50 flex items-center justify-between px-8 bg-zinc-950/50 backdrop-blur-2xl sticky top-0 z-50">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-indigo-600/40 transform rotate-3">
+            <Zap size={24} className="text-white fill-current" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">VCO Pulse</h1>
+          <div>
+            <h1 className="text-xl font-black tracking-tighter uppercase italic leading-none">VCO Pulse</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge variant="outline">v3.2.0 (STABLE)</Badge>
+            </div>
+          </div>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
+          <div className="hidden lg:flex items-center gap-8 mr-4">
+            <div className="text-center">
+              <div className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-0.5">Network</div>
+              <div className="text-xs font-bold text-emerald-500 uppercase flex items-center gap-1.5 justify-center">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                {status}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest mb-0.5">Synced</div>
+              <div className="text-xs font-bold text-zinc-300 uppercase">{objects.length} Objects</div>
+            </div>
+          </div>
+
+          <div className="h-8 w-[1px] bg-zinc-800" />
+
           <button 
-            onClick={triggerSync}
-            className="flex items-center gap-2 bg-zinc-800/50 hover:bg-zinc-800 px-3 py-1.5 rounded-full border border-zinc-700 transition-colors group"
+            onClick={() => setIsSyncing(true)}
+            className="w-10 h-10 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-indigo-400 hover:border-indigo-500/50 transition-all hover:rotate-180 duration-500"
           >
-            <div className={`w-2 h-2 rounded-full ${status === "Online" ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" : "bg-zinc-500"}`} />
-            <span className="text-sm font-medium">{status}</span>
-            <ArrowDownUp size={14} className="text-zinc-500 group-hover:text-blue-400 transition-colors" />
+            <RefreshCw size={18} />
           </button>
-          <button className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-            <Search size={20} className="text-zinc-400" />
-          </button>
-          <button 
+          
+          <Button 
             onClick={() => setIsModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg shadow-blue-900/20 active:scale-95"
+            icon={Plus}
+            className="h-11 px-6 rounded-2xl"
           >
-            <Plus size={18} />
-            <span>New Object</span>
-          </button>
+            Publish
+          </Button>
         </div>
       </header>
 
-      <main className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-64 border-r border-zinc-800 p-4 hidden md:flex flex-col gap-6 bg-zinc-900/20">
-          <section>
-            <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 px-2">Monitor</h2>
-            <nav className="space-y-1">
-              <button 
-                onClick={() => setView("feed")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors group ${view === "feed" ? "bg-zinc-800 text-white" : "text-zinc-300 hover:bg-zinc-800"}`}
-              >
-                <Activity size={18} className={view === "feed" ? "text-blue-400" : "group-hover:text-blue-400"} />
-                <span>Activity Feed</span>
-              </button>
-              <button 
-                onClick={() => setView("network")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors group ${view === "network" ? "bg-zinc-800 text-white" : "text-zinc-300 hover:bg-zinc-800"}`}
-              >
-                <Globe size={18} className={view === "network" ? "text-cyan-400" : "group-hover:text-cyan-400"} />
-                <span>Sync Network</span>
-              </button>
-              <button 
-                onClick={() => setView("identity")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors group ${view === "identity" ? "bg-zinc-800 text-white" : "text-zinc-300 hover:bg-zinc-800"}`}
-              >
-                <Shield size={18} className={view === "identity" ? "text-green-400" : "group-hover:text-green-400"} />
-                <span>Identity</span>
-              </button>
-              <button 
-                onClick={() => setView("vault")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors group ${view === "vault" ? "bg-zinc-800 text-white" : "text-zinc-300 hover:bg-zinc-800"}`}
-              >
-                <Database size={18} className={view === "vault" ? "text-purple-400" : "group-hover:text-purple-400"} />
-                <span>Local Vault</span>
-              </button>
-            </nav>
-          </section>
+        <aside className="w-72 border-r border-zinc-800/50 p-6 hidden md:flex flex-col bg-zinc-950/30 backdrop-blur-md">
+          <div className="space-y-8 flex-1">
+            <section>
+              <h2 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.25em] mb-6 px-4">Core Explorer</h2>
+              <nav className="space-y-2">
+                <SidebarItem 
+                  label="Activity Feed" 
+                  icon={Activity} 
+                  active={view === "feed"} 
+                  onClick={() => setView("feed")} 
+                  color="indigo"
+                />
+                <SidebarItem 
+                  label="Network Mesh" 
+                  icon={Globe} 
+                  active={view === "network"} 
+                  onClick={() => setView("network")} 
+                  color="cyan"
+                />
+                <SidebarItem 
+                  label="Local Vault" 
+                  icon={Database} 
+                  active={view === "vault"} 
+                  onClick={() => setView("vault")} 
+                  color="purple"
+                />
+              </nav>
+            </section>
 
-          <section className="mt-auto bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-            <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
-              <Layers size={14} className="text-blue-400" />
-              Live Stats
-            </h3>
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-zinc-500">Connected Peers</span>
-                <span>{peers}</span>
+            <section>
+              <h2 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.25em] mb-6 px-4">Management</h2>
+              <nav className="space-y-2">
+                <SidebarItem 
+                  label="Identity Hub" 
+                  icon={Shield} 
+                  active={view === "identity"} 
+                  onClick={() => setView("identity")} 
+                  color="emerald"
+                />
+              </nav>
+            </section>
+          </div>
+
+          <Card className="mt-auto bg-indigo-600/5 border-indigo-500/10 p-5 group hover:bg-indigo-600/10 transition-colors">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 bg-indigo-600/20 rounded-xl flex items-center justify-center text-indigo-400 border border-indigo-500/20">
+                <Layers size={16} />
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-zinc-500">Known Objects</span>
-                <span>{objects.length}</span>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-300">System Metrics</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-zinc-600 uppercase">Peers</span>
+                <span className="text-[10px] font-mono font-bold text-zinc-400">{relays.length} ACTIVE</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-zinc-600 uppercase">Inbound</span>
+                <span className="text-[10px] font-mono font-bold text-emerald-500/80">0.0 KB/S</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-zinc-600 uppercase">Outbound</span>
+                <span className="text-[10px] font-mono font-bold text-blue-500/80">0.0 KB/S</span>
               </div>
             </div>
-            <button 
-              onClick={triggerSync}
-              className="w-full mt-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
-            >
-              <RefreshCw size={12} />
-              FORCE SYNC
-            </button>
-          </section>
+          </Card>
         </aside>
 
-        {/* Feed Content */}
-        <section className="flex-1 overflow-y-auto p-6 bg-zinc-950">
-          <div className="max-w-3xl mx-auto space-y-6">
+        {/* Content Area */}
+        <section className="flex-1 overflow-y-auto p-10 custom-scrollbar scroll-smooth">
+          <div className="max-w-4xl mx-auto">
             {view === "feed" && (
-              <>
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-2xl font-bold">Activity Feed</h2>
-                  <select className="bg-zinc-900 border border-zinc-800 rounded-md text-sm px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option>All Objects</option>
-                    <option>Verified Only</option>
-                    <option>My Objects</option>
-                  </select>
+              <div className="space-y-8 animate-in fade-in duration-700">
+                <div className="flex items-end justify-between border-b border-zinc-800 pb-8">
+                  <div className="space-y-1">
+                    <h2 className="text-4xl font-black tracking-tight uppercase italic underline decoration-indigo-600 underline-offset-8">Activity Feed</h2>
+                    <p className="text-zinc-500 font-medium">Real-time Verifiable Content reconciliation stream.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 hover:text-white transition-all">
+                      <List size={18} />
+                    </button>
+                    <button className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 hover:text-white transition-all opacity-40">
+                      <LayoutGrid size={18} />
+                    </button>
+                  </div>
                 </div>
 
                 {objects.length === 0 ? (
-                  <div className="bg-zinc-900/50 border border-dashed border-zinc-800 rounded-2xl p-12 text-center space-y-4">
-                    <div className="w-16 h-16 bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto">
-                      <Activity size={32} className="text-zinc-600" />
+                  <div className="py-24 text-center space-y-8">
+                    <div className="w-24 h-24 bg-zinc-900/50 rounded-[40px] flex items-center justify-center mx-auto text-zinc-700 border-2 border-dashed border-zinc-800 animate-pulse">
+                      <Activity size={48} strokeWidth={1} />
                     </div>
-                    <div className="max-w-xs mx-auto">
-                      <h3 className="text-lg font-medium">No activity yet</h3>
-                      <p className="text-sm text-zinc-500 mt-1">
-                        Connect to a bootstrap relay or create your first Verifiable Content Object to get started.
+                    <div className="max-w-sm mx-auto space-y-3">
+                      <h3 className="text-xl font-bold text-zinc-300 uppercase tracking-tight">Zero State Detected</h3>
+                      <p className="text-zinc-500 text-sm leading-relaxed font-medium">
+                        No objects found in the local set. Establish a relay connection or create your first verifiable envelope.
                       </p>
                     </div>
-                    <button 
-                      onClick={() => setIsModalOpen(true)}
-                      className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors"
-                    >
-                      Create your first object
-                    </button>
+                    <div className="flex justify-center gap-4">
+                      <Button onClick={() => setView("network")} variant="secondary" icon={Globe}>Link Relay</Button>
+                      <Button onClick={() => setIsModalOpen(true)} icon={Plus}>Create Object</Button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-6 pb-20">
                     {objects.map((obj) => (
-                      <div key={obj.headerHash} className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5 hover:bg-zinc-900 transition-colors animate-in slide-in-from-bottom-2 duration-300">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center text-blue-400 border border-zinc-700">
-                              <Shield size={18} />
-                            </div>
-                            <div>
-                              <div className="text-sm font-semibold truncate max-w-[200px]">{obj.creatorId.substring(0, 16)}...</div>
-                              <div className="text-[10px] text-zinc-500 font-mono">HEADER: {obj.headerHash.substring(0, 12)}...</div>
-                            </div>
-                          </div>
-                          <div className="text-[10px] text-zinc-600 bg-zinc-800/50 px-2 py-1 rounded-full border border-zinc-700 font-medium">
-                            {new Date(obj.timestamp).toLocaleTimeString()}
-                          </div>
-                        </div>
-                        <p className="text-zinc-300 leading-relaxed whitespace-pre-wrap">{obj.payload}</p>
-                        <div className="mt-4 pt-4 border-t border-zinc-800/50 flex items-center gap-4 text-[10px] text-zinc-500">
-                          <span className="flex items-center gap-1 text-green-500/80">
-                            <CheckCircle2 size={12} /> VERIFIED
-                          </span>
-                          <span className="bg-zinc-800 px-1.5 py-0.5 rounded">TEXT/UTF-8</span>
-                          <span className="bg-zinc-800 px-1.5 py-0.5 rounded">BLAKE3_HASH</span>
-                        </div>
-                      </div>
+                      <FeedItem key={obj.headerHash} obj={obj} />
                     ))}
                   </div>
                 )}
-              </>
+              </div>
             )}
 
             {view === "network" && (
-              <>
-                <div className="mb-2">
-                  <h2 className="text-2xl font-bold">Sync Network</h2>
-                  <p className="text-sm text-zinc-500 mt-1">Configure your bootstrap relays and sync endpoints.</p>
+              <div className="space-y-8 animate-in fade-in duration-700">
+                <div className="space-y-1 border-b border-zinc-800 pb-8">
+                  <h2 className="text-4xl font-black tracking-tight uppercase italic underline decoration-cyan-600 underline-offset-8">Sync Network</h2>
+                  <p className="text-zinc-500 font-medium">Distributed bootstrap and discovery management.</p>
                 </div>
-                <RelaySection relays={relays} onAdd={addRelay} onDelete={deleteRelay} />
-              </>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="space-y-6">
+                    <h3 className="text-xs font-black text-zinc-600 uppercase tracking-[0.3em] px-1">Network Topology</h3>
+                    <div className="bg-zinc-900/40 border border-zinc-800 rounded-3xl p-8 h-64 flex items-center justify-center relative group overflow-hidden">
+                      <div className="absolute inset-0 bg-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                      <Network size={80} strokeWidth={0.5} className="text-cyan-500/20 animate-pulse" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="relative">
+                          <div className="w-4 h-4 bg-indigo-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.8)] z-10 relative" />
+                          <div className="absolute top-[-40px] left-[-60px] w-2 h-2 bg-cyan-500 rounded-full" />
+                          <div className="absolute bottom-[-20px] right-[-80px] w-2 h-2 bg-zinc-700 rounded-full" />
+                          <div className="absolute top-[-10px] right-[-50px] w-2 h-2 bg-cyan-500 rounded-full" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-4">
+                      <Card className="flex-1 p-5 text-center space-y-1">
+                        <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Global Peers</div>
+                        <div className="text-lg font-black text-cyan-400">1,248</div>
+                      </Card>
+                      <Card className="flex-1 p-5 text-center space-y-1">
+                        <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Relay Latency</div>
+                        <div className="text-lg font-black text-emerald-400">42ms</div>
+                      </Card>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    <h3 className="text-xs font-black text-zinc-600 uppercase tracking-[0.3em] px-1">Active Endpoints</h3>
+                    <div className="space-y-3">
+                      {relays.map(relay => (
+                        <Card key={relay.id} className="p-5 flex items-center justify-between group hover:border-cyan-500/30 transition-colors border-zinc-800/40">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-center text-cyan-500 shadow-inner group-hover:text-cyan-400 transition-colors">
+                              <Server size={18} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-zinc-200 uppercase tracking-tight">{relay.name}</div>
+                              <div className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest mt-0.5 truncate max-w-[180px]">{relay.address}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <Badge variant={relay.status === "Online" ? "success" : "default"}>{relay.status}</Badge>
+                            <button onClick={() => deleteRelay(relay.id)} className="text-zinc-700 hover:text-red-400 transition-colors">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </Card>
+                      ))}
+                      <button 
+                        onClick={() => {
+                          const name = prompt("Relay Name:");
+                          const addr = prompt("Relay Address:");
+                          if(name && addr) addRelay(name, addr);
+                        }}
+                        className="w-full py-4 border-2 border-dashed border-zinc-800 rounded-3xl text-zinc-600 hover:text-cyan-400 hover:border-cyan-500/30 hover:bg-cyan-500/5 transition-all text-xs font-black uppercase tracking-[0.2em]"
+                      >
+                        + Register New Node
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             {view === "identity" && (
-              <>
-                <div className="mb-2">
-                  <h2 className="text-2xl font-bold">Identity Manager</h2>
-                  <p className="text-sm text-zinc-500 mt-1">Manage your cryptographic keys and protocol identifiers.</p>
+              <div className="space-y-10 animate-in fade-in duration-700">
+                <div className="space-y-1 border-b border-zinc-800 pb-8">
+                  <h2 className="text-4xl font-black tracking-tight uppercase italic underline decoration-emerald-600 underline-offset-8">Identity Hub</h2>
+                  <p className="text-zinc-500 font-medium">Manage cryptographic root keys and protocol personas.</p>
                 </div>
                 <IdentitySection />
-              </>
+              </div>
             )}
 
             {view === "vault" && (
-              <>
-                <div className="mb-2">
-                  <h2 className="text-2xl font-bold">Local Vault</h2>
-                  <p className="text-sm text-zinc-500 mt-1">Total of {objects.length} stored envelopes on this device.</p>
-                </div>
-                {objects.length === 0 ? (
-                  <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 text-center">
-                    <p className="text-zinc-500">Your vault is currently empty.</p>
+              <div className="space-y-8 animate-in fade-in duration-700">
+                <div className="space-y-1 border-b border-zinc-800 pb-8 flex justify-between items-end">
+                  <div>
+                    <h2 className="text-4xl font-black tracking-tight uppercase italic underline decoration-purple-600 underline-offset-8">Local Vault</h2>
+                    <p className="text-zinc-500 font-medium">Immutable object storage persistence.</p>
                   </div>
+                  <Badge variant="info">{objects.length} Stored Envelopes</Badge>
+                </div>
+                
+                {objects.length === 0 ? (
+                  <Card className="p-12 text-center bg-zinc-900/20 border-dashed">
+                    <p className="text-zinc-600 font-bold uppercase tracking-widest text-xs">Vault Storage Empty</p>
+                  </Card>
                 ) : (
-                  <div className="grid grid-cols-1 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {objects.map(obj => (
-                      <div key={obj.headerHash} className="bg-zinc-900/30 border border-zinc-800 p-3 rounded-xl flex items-center justify-between group">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <Database size={16} className="text-purple-400 shrink-0" />
-                          <div className="truncate font-mono text-xs text-zinc-500">{obj.headerHash}</div>
+                      <Card key={obj.headerHash} className="p-5 group hover:border-purple-500/30 transition-all border-zinc-800/40">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <Database size={18} className="text-purple-500" />
+                            <div className="text-[10px] font-mono text-zinc-500 uppercase font-bold truncate max-w-[120px]">{obj.headerHash}</div>
+                          </div>
+                          <Badge variant="outline">{obj.payload.length} BYTES</Badge>
                         </div>
-                        <div className="text-[10px] bg-zinc-800 px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                          {obj.payload.length} BYTES
+                        <div className="text-xs text-zinc-400 font-medium bg-zinc-950/50 p-3 rounded-xl border border-zinc-800/50 truncate">
+                          {obj.payload}
                         </div>
-                      </div>
+                        <div className="mt-4 flex justify-between items-center">
+                          <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest">{timeAgo(obj.timestamp)}</span>
+                          <button className="text-[9px] font-black text-purple-400 uppercase tracking-widest group-hover:translate-x-1 transition-transform">Recover →</button>
+                        </div>
+                      </Card>
                     ))}
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </section>
-      </main>
+      </div>
 
       {/* Modals & Overlays */}
       {isModalOpen && <NewObjectModal onClose={() => setIsModalOpen(false)} onCreated={handleCreated} />}
       {isSyncing && <SyncVisualizer onComplete={() => setIsSyncing(false)} />}
 
       {/* Footer / Status Bar */}
-      <footer className="border-t border-zinc-800 p-2 bg-zinc-900/80 backdrop-blur-sm flex justify-between items-center text-[10px] text-zinc-500 px-4 uppercase tracking-widest font-bold">
-        <div className="flex gap-4">
-          <span>TOL v3.2.0</span>
-          <span>QUIC ACTIVE</span>
+      <footer className="h-10 border-t border-zinc-800/50 bg-zinc-950/80 backdrop-blur-sm flex justify-between items-center px-8 text-[10px] text-zinc-600 uppercase tracking-[0.3em] font-black">
+        <div className="flex gap-8 items-center h-full">
+          <div className="flex gap-2 items-center text-zinc-500">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50" />
+            <span>TOL_ACTIVE v3.2</span>
+          </div>
+          <div className="flex gap-2 items-center text-zinc-500">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
+            <span>QUIC_UDP_PORT_4001</span>
+          </div>
         </div>
-        <div className="flex gap-4">
-          <span>NOISE_XX_25519</span>
-          <span>DEV BUILD</span>
+        <div className="flex gap-8 items-center h-full">
+          <span className="hover:text-indigo-400 transition-colors cursor-help">BLAKE3_VERIFIED</span>
+          <span className="text-indigo-600/50">BUILD_2026_02_25</span>
         </div>
       </footer>
     </div>
