@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "Verifiable Content Object protocol workspace",
+  "contributors": [
+    {
+      "name": "Gemini",
+      "url": "https://gemini.google.com/",
+      "role": "AI Agent"
+    }
+  ],
   "workspaces": [
     "packages/*"
   ],

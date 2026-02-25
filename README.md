@@ -39,3 +39,7 @@ npm run typecheck
 npm run test
 npm run build
 ```
+
+## Contributors
+
+- **Gemini** (AI Agent) - Automated installer, relay enhancements, and protocol refinements.
