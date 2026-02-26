@@ -1,9 +1,9 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, createContext, useContext, useRef } from "react";
 import {
   Activity, Shield, Zap, Database, Plus, Key, Copy,
-  RefreshCw, CheckCircle2, X, Send, Server, Globe, Trash2,
-  ArrowDownUp, Layers, ChevronRight, AlertCircle,
-  Network, Lock, Clock, LayoutGrid, List
+  RefreshCw, CheckCircle2, X, Send, Server, Globe,
+  ArrowDownUp, Layers, ChevronRight, Eye, EyeOff,
+  Lock, Clock, LayoutGrid, List, Wifi, Search, Radio
 } from "lucide-react";
 import { deriveEd25519Multikey, deriveEd25519PublicKey, createNobleCryptoProvider } from "@vco/vco-crypto";
 import { createEnvelope } from "@vco/vco-core";
@@ -31,8 +31,12 @@ interface Relay {
   name: string;
   address: string;
   status: "Online" | "Offline" | "Unknown";
-  latency?: number;
 }
+
+// --- Constants ---
+const VCO_TYPE_TEXT = 0x01;
+const VCO_TYPE_MEDIA = 0x02;
+const VCO_TYPE_MANIFEST = 0x03;
 
 // --- Contexts ---
 const IdentityContext = createContext<{
@@ -160,16 +164,186 @@ function Button({ children, onClick, variant = "primary", disabled = false, clas
 
 // --- View Components ---
 
-function IdentitySection() {
-  const { identity, generateIdentity } = useIdentity();
-  const [copied, setCopied] = useState(false);
+function ProfileEditorModal({ onClose, onCreated, allObjects }: { onClose: () => void, onCreated: (objs: StoredObject[]) => void, allObjects: StoredObject[] }) {
+  const { identity } = useIdentity();
+  const [displayName, setDisplayName] = useState("");
+  const [bio, setBio] = useState("");
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const copyId = () => {
-    if (identity) {
-      navigator.clipboard.writeText(identity.creatorIdHex);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => setAvatar(event.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!identity) return;
+
+    setIsSaving(true);
+    await new Promise(r => setTimeout(r, 1500));
+
+    try {
+      const crypto = createNobleCryptoProvider();
+      const createdObjects: StoredObject[] = [];
+
+      let avatarHash = null;
+      if (avatar) {
+        // Deduplication: check if avatar already exists
+        const existing = allObjects.find(o => o.payloadType === VCO_TYPE_MEDIA && o.payload === `image/avatar:${avatar}`);
+        if (existing) {
+          avatarHash = existing.headerHash;
+        } else {
+          const avatarEnvelope = createEnvelope({
+            payload: new TextEncoder().encode(avatar),
+            payloadType: VCO_TYPE_MEDIA,
+            creatorId: identity.creatorId,
+            privateKey: identity.privateKey,
+            powDifficulty: 1,
+          }, crypto);
+          avatarHash = uint8ArrayToHex(avatarEnvelope.headerHash);
+          createdObjects.push({
+            headerHash: avatarHash,
+            creatorId: identity.creatorIdHex,
+            payloadType: VCO_TYPE_MEDIA,
+            payload: `image/avatar:${avatar}`,
+            timestamp: Date.now(),
+            isLocal: true
+          });
+        }
+      }
+
+      const bioPayload = JSON.stringify({ name: displayName, bio });
+      const bioEnvelope = createEnvelope({
+        payload: new TextEncoder().encode(bioPayload),
+        payloadType: VCO_TYPE_TEXT,
+        creatorId: identity.creatorId,
+        privateKey: identity.privateKey,
+        powDifficulty: 1,
+      }, crypto);
+      const bioHash = uint8ArrayToHex(bioEnvelope.headerHash);
+      createdObjects.push({
+        headerHash: bioHash,
+        creatorId: identity.creatorIdHex,
+        payloadType: VCO_TYPE_TEXT,
+        payload: bioPayload,
+        timestamp: Date.now(),
+        isLocal: true
+      });
+
+      const manifestData = {
+        v: "3.2",
+        type: "profile",
+        content: bioHash,
+        avatar: avatarHash,
+        meta: { timestamp: Date.now() }
+      };
+      const manifestPayload = JSON.stringify(manifestData);
+      const manifestEnvelope = createEnvelope({
+        payload: new TextEncoder().encode(manifestPayload),
+        payloadType: VCO_TYPE_MANIFEST,
+        creatorId: identity.creatorId,
+        privateKey: identity.privateKey,
+        powDifficulty: 2,
+      }, crypto);
+
+      createdObjects.push({
+        headerHash: uint8ArrayToHex(manifestEnvelope.headerHash),
+        creatorId: identity.creatorIdHex,
+        payloadType: VCO_TYPE_MANIFEST,
+        payload: manifestPayload,
+        timestamp: Date.now(),
+        isLocal: true
+      });
+
+      onCreated(createdObjects);
+      onClose();
+    } catch (err) {
+      console.error("Failed to create profile manifest", err);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-950/90 z-[100] flex items-center justify-center p-4">
+      <div className="w-full max-w-lg animate-slide-up">
+        <Card className="border-slate-700">
+          <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+            <h2 className="text-xl font-bold uppercase tracking-tight text-slate-100">Construct Profile Manifest</h2>
+            <button onClick={onClose} className="text-slate-500 hover:text-slate-300"><X size={20} /></button>
+          </div>
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <div className="flex justify-center">
+              <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                <div className="w-24 h-24 rounded-2xl bg-slate-800 border-2 border-dashed border-slate-700 flex items-center justify-center overflow-hidden">
+                  {avatar ? <img src={avatar} className="w-full h-full object-cover" /> : <Plus size={32} className="text-slate-600" />}
+                </div>
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl">
+                  <span className="text-[10px] font-bold text-white uppercase">Upload</span>
+                </div>
+                <input type="file" ref={fileInputRef} onChange={handleAvatarSelect} className="hidden" accept="image/*" />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Display Name</label>
+                <input value={displayName} onChange={e => setDisplayName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded px-4 py-2 text-sm text-slate-100 focus:ring-1 focus:ring-teal-500 outline-none" placeholder="e.g. Satoshi" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Bio (Distributed Content)</label>
+                <textarea value={bio} onChange={e => setBio(e.target.value)} className="w-full h-24 bg-slate-950 border border-slate-800 rounded px-4 py-2 text-sm text-slate-100 focus:ring-1 focus:ring-teal-500 resize-none outline-none" placeholder="Who are you in the swarm?" />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button type="button" onClick={onClose} variant="ghost" className="flex-1">Cancel</Button>
+              <Button type="submit" disabled={isSaving || !displayName} className="flex-[2]">
+                {isSaving ? "Publishing Manifest..." : "Commit Identity"}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function IdentitySection({ allObjects, onProfileUpdated }: { allObjects: StoredObject[], onProfileUpdated: (objs: StoredObject[]) => void }) {
+  const { identity, generateIdentity } = useIdentity();
+  const [copied, setCopied] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+
+  const profileManifest = [...allObjects].reverse().find(o => o.payloadType === VCO_TYPE_MANIFEST && JSON.parse(o.payload).type === "profile" && o.creatorId === identity?.creatorIdHex);
+  let profileData = { name: "Anonymous Peer", bio: "Identity not yet established in the distributed swarm.", avatar: null };
+  
+  if (profileManifest) {
+    try {
+      const manifest = JSON.parse(profileManifest.payload);
+      const bioObj = allObjects.find(o => o.headerHash === manifest.content);
+      if (bioObj) {
+        const parsedBio = JSON.parse(bioObj.payload);
+        profileData.name = parsedBio.name;
+        profileData.bio = parsedBio.bio;
+      }
+      if (manifest.avatar) {
+        const avatarObj = allObjects.find(o => o.headerHash === manifest.avatar);
+        if (avatarObj) {
+          const [_, ...dataParts] = avatarObj.payload.split(":");
+          profileData.avatar = dataParts.join(":") as any;
+        }
+      }
+    } catch(e) {}
+  }
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   if (!identity) {
@@ -192,89 +366,115 @@ function IdentitySection() {
   }
 
   return (
-    <div className="space-y-4 animate-slide-up">
-      <Card className="p-8 relative">
-        <div className="absolute top-0 right-0 p-4">
-          <Badge variant="success">Active Session</Badge>
-        </div>
-        <div className="flex items-center gap-5 mb-8">
-          <div className="w-12 h-12 bg-teal-500/10 border border-teal-500/20 rounded-lg flex items-center justify-center text-teal-400">
-            <Shield size={24} strokeWidth={1.5} />
-          </div>
-          <div>
-            <h3 className="font-display text-2xl font-bold tracking-tight text-slate-100 uppercase">Cryptographic Identity</h3>
-            <p className="text-sm text-slate-300 uppercase tracking-widest mt-0.5">Ed25519 Master Identity & Protocol Multikey</p>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Creator Identifier (HEX)</label>
-          <div className="bg-slate-950 rounded border border-slate-700/60 p-4 flex items-center justify-between gap-4 group hover:border-teal-500/30 transition-colors">
-            <div className="truncate font-mono text-sm text-teal-300/70 leading-relaxed select-all">
-              {identity.creatorIdHex}
+    <div className="space-y-6 animate-slide-up">
+      <Card className="relative overflow-hidden">
+        <div className="h-24 bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 border-b border-slate-800" />
+        <div className="px-8 pb-8">
+          <div className="relative flex justify-between items-end -mt-12 mb-6">
+            <div className="w-24 h-24 rounded-2xl bg-slate-950 border-4 border-slate-950 shadow-2xl overflow-hidden">
+              {profileData.avatar ? <img src={profileData.avatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-800 flex items-center justify-center text-slate-600"><Shield size={40} /></div>}
             </div>
-            <button
-              onClick={copyId}
-              className="w-8 h-8 rounded border border-slate-700 flex items-center justify-center text-slate-300 hover:text-teal-400 hover:border-teal-500/40 transition-all shrink-0"
-            >
-              {copied ? <CheckCircle2 size={14} className="text-teal-400" /> : <Copy size={14} />}
-            </button>
+            <Button onClick={() => setIsEditing(true)} variant="secondary" className="h-9" icon={Plus}>Edit Profile</Button>
           </div>
-        </div>
-        <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-800">
-          <div className="space-y-1">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Algorithm</div>
-            <div className="text-xs text-slate-100">Ed25519</div>
+          <div className="space-y-1 mb-6">
+            <h3 className="text-2xl font-black text-slate-100 uppercase tracking-tight">{profileData.name}</h3>
+            <p className="text-sm text-slate-400 leading-relaxed max-w-xl">{profileData.bio}</p>
           </div>
-          <div className="space-y-1">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Encoding</div>
-            <div className="text-xs text-slate-100">Multikey/Varint</div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Status</div>
-            <div className="text-xs text-teal-400 flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-teal-400" />
-              Verified
+          
+          <div className="space-y-4 pt-4 border-t border-slate-800/50">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Creator Identifier (MULTIKEY)</label>
+              <div className="bg-slate-950 rounded border border-slate-800 p-3 flex items-center justify-between gap-4 group hover:border-teal-500/20 transition-colors">
+                <div className="truncate font-mono text-xs text-teal-400/70 select-all">
+                  {identity.creatorIdHex}
+                </div>
+                <button onClick={() => copyToClipboard(identity.creatorIdHex, 'cid')} className="text-slate-500 hover:text-teal-400 transition-colors shrink-0">
+                  {copied === 'cid' ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Public Key (ED25519)</label>
+              <div className="bg-slate-950 rounded border border-slate-800 p-3 flex items-center justify-between gap-4 group hover:border-teal-500/20 transition-colors">
+                <div className="truncate font-mono text-xs text-slate-300 select-all">
+                  {uint8ArrayToHex(identity.publicKey)}
+                </div>
+                <button onClick={() => copyToClipboard(uint8ArrayToHex(identity.publicKey), 'pub')} className="text-slate-500 hover:text-teal-400 transition-colors shrink-0">
+                  {copied === 'pub' ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-black text-red-500/70 uppercase tracking-[0.2em]">Private Key (SECRET)</label>
+                <button 
+                  onClick={() => setShowPrivateKey(!showPrivateKey)}
+                  className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-300 uppercase transition-colors"
+                >
+                  {showPrivateKey ? <><EyeOff size={10} /> Hide</> : <><Eye size={10} /> Reveal</>}
+                </button>
+              </div>
+              <div className={`bg-slate-950 rounded border transition-colors p-3 flex items-center justify-between gap-4 group ${showPrivateKey ? 'border-red-500/30 ring-1 ring-red-500/10' : 'border-slate-800 hover:border-slate-700'}`}>
+                <div className="truncate font-mono text-xs select-all">
+                  {showPrivateKey ? (
+                    <span className="text-red-400/90">{uint8ArrayToHex(identity.privateKey)}</span>
+                  ) : (
+                    <span className="text-slate-700 tracking-[0.3em]">••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••</span>
+                  )}
+                </div>
+                <button 
+                  disabled={!showPrivateKey}
+                  onClick={() => copyToClipboard(uint8ArrayToHex(identity.privateKey), 'priv')} 
+                  className={`transition-colors shrink-0 ${!showPrivateKey ? 'text-slate-800 cursor-not-allowed' : 'text-slate-500 hover:text-red-400'}`}
+                >
+                  {copied === 'priv' ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </Card>
+      
       <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2 text-slate-400 text-sm">
-          <AlertCircle size={12} />
-          <span>Keep your master key safe. Regenerating will change your identifier.</span>
+        <div className="flex items-center gap-2 text-slate-500 text-[10px] uppercase font-bold tracking-wider">
+          <Lock size={12} className="text-teal-500" />
+          <span>Keys are stored locally in secure browser storage.</span>
         </div>
-        <Button onClick={generateIdentity} variant="ghost" className="text-xs" icon={RefreshCw}>
-          Regenerate
+        <Button onClick={generateIdentity} variant="ghost" className="text-[10px] h-8" icon={RefreshCw}>
+          Rotate Identity
         </Button>
       </div>
+
+      {isEditing && <ProfileEditorModal allObjects={allObjects} onCreated={onProfileUpdated} onClose={() => setIsEditing(false)} />}
     </div>
   );
 }
 
-// --- Constants ---
-const VCO_TYPE_TEXT = 0x01;
-const VCO_TYPE_MEDIA = 0x02;
-const VCO_TYPE_MANIFEST = 0x03;
-
-function NewPostModal({ onClose, onCreated }: { onClose: () => void, onCreated: (objs: StoredObject[]) => void }) {
+function NewPostModal({ onClose, onCreated, allObjects }: { onClose: () => void, onCreated: (objs: StoredObject[]) => void, allObjects: StoredObject[] }) {
   const { identity } = useIdentity();
   const [payload, setPayload] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [media, setMedia] = useState<{name: string, type: string, data: string}[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const addSimulatedMedia = () => {
-    const types = ["image/jpeg", "image/png", "video/mp4"];
-    const type = types[Math.floor(Math.random() * types.length)];
-    const newMedia = {
-      name: `attachment_${media.length + 1}.${type.split("/")[1]}`,
-      type: type,
-      data: `[SIMULATED_BINARY_DATA_FOR_${type.toUpperCase()}]`
-    };
-    setMedia([...media, newMedia]);
-  };
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
 
-  const removeMedia = (index: number) => {
-    setMedia(media.filter((_, i) => i !== index));
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setMedia(prev => [...prev, {
+          name: file.name,
+          type: file.type,
+          data: event.target?.result as string
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -288,30 +488,34 @@ function NewPostModal({ onClose, onCreated }: { onClose: () => void, onCreated: 
       const crypto = createNobleCryptoProvider();
       const createdObjects: StoredObject[] = [];
 
-      // 1. Create MEDIA VCOs (The "Attachments")
       const mediaHashes: string[] = [];
       for (const item of media) {
-        const mediaEnvelope = createEnvelope({
-          payload: new TextEncoder().encode(item.data),
-          payloadType: VCO_TYPE_MEDIA,
-          creatorId: identity.creatorId,
-          privateKey: identity.privateKey,
-          powDifficulty: 1,
-        }, crypto);
+        const existing = allObjects.find(o => o.payloadType === VCO_TYPE_MEDIA && o.payload === `${item.type}:${item.data}`);
         
-        const hash = uint8ArrayToHex(mediaEnvelope.headerHash);
-        mediaHashes.push(hash);
-        createdObjects.push({
-          headerHash: hash,
-          creatorId: identity.creatorIdHex,
-          payloadType: VCO_TYPE_MEDIA,
-          payload: `${item.type}:${item.data}`,
-          timestamp: Date.now(),
-          isLocal: true
-        });
+        if (existing) {
+          mediaHashes.push(existing.headerHash);
+        } else {
+          const mediaEnvelope = createEnvelope({
+            payload: new TextEncoder().encode(item.data),
+            payloadType: VCO_TYPE_MEDIA,
+            creatorId: identity.creatorId,
+            privateKey: identity.privateKey,
+            powDifficulty: 1,
+          }, crypto);
+          
+          const hash = uint8ArrayToHex(mediaEnvelope.headerHash);
+          mediaHashes.push(hash);
+          createdObjects.push({
+            headerHash: hash,
+            creatorId: identity.creatorIdHex,
+            payloadType: VCO_TYPE_MEDIA,
+            payload: `${item.type}:${item.data}`,
+            timestamp: Date.now(),
+            isLocal: true
+          });
+        }
       }
 
-      // 2. Create the CONTENT VCO (The "Body")
       const contentEnvelope = createEnvelope({
         payload: new TextEncoder().encode(payload),
         payloadType: VCO_TYPE_TEXT,
@@ -330,7 +534,6 @@ function NewPostModal({ onClose, onCreated }: { onClose: () => void, onCreated: 
         isLocal: true
       });
 
-      // 3. Create the MANIFEST VCO (The "Soul")
       const manifestData = {
         v: "3.2",
         type: "post",
@@ -387,7 +590,7 @@ function NewPostModal({ onClose, onCreated }: { onClose: () => void, onCreated: 
           <form onSubmit={handleSubmit} className="p-6 space-y-5">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-widest">Post Content (Markdown)</label>
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-widest">Post Content</label>
                 <Badge variant="outline">Distributed v3.2</Badge>
               </div>
               <textarea
@@ -395,17 +598,24 @@ function NewPostModal({ onClose, onCreated }: { onClose: () => void, onCreated: 
                 value={payload}
                 onChange={(e) => setPayload(e.target.value)}
                 placeholder="What's on the distributed web?"
-                className="w-full h-36 bg-slate-950 border border-slate-700 rounded p-4 text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:border-teal-500 transition-all resize-none text-xs leading-relaxed font-mono"
+                className="w-full h-36 bg-slate-950 border border-slate-700 rounded p-4 text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:border-teal-500 transition-all resize-none text-xs leading-relaxed font-mono outline-none"
               />
             </div>
 
-            {/* Media Attachments UI */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Media Attachments</label>
+                <input 
+                  type="file" 
+                  multiple 
+                  accept="image/*,video/*" 
+                  ref={fileInputRef} 
+                  onChange={handleFileSelect} 
+                  className="hidden" 
+                />
                 <button 
                   type="button"
-                  onClick={addSimulatedMedia}
+                  onClick={() => fileInputRef.current?.click()}
                   className="text-[10px] font-bold text-teal-500 hover:text-teal-400 uppercase tracking-wider transition-colors flex items-center gap-1"
                 >
                   <Plus size={10} /> Add Media
@@ -422,7 +632,7 @@ function NewPostModal({ onClose, onCreated }: { onClose: () => void, onCreated: 
                         </div>
                         <span className="text-[10px] text-slate-300 truncate uppercase font-bold">{item.name}</span>
                       </div>
-                      <button onClick={() => removeMedia(i)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all">
+                      <button type="button" onClick={() => setMedia(media.filter((_, idx) => idx !== i))} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all">
                         <X size={12} />
                       </button>
                     </div>
@@ -461,7 +671,7 @@ function NewPostModal({ onClose, onCreated }: { onClose: () => void, onCreated: 
               <Button type="button" onClick={onClose} variant="ghost" className="flex-1 h-10">Discard</Button>
               <Button type="submit" disabled={isCreating || !payload || !identity} className="flex-[2] h-10">
                 {isCreating ? (
-                  <><RefreshCw size={14} className="animate-spin" /><span>Assembling Tree...</span></>
+                  <><RefreshCw size={14} className="animate-spin" /><span>Assembling...</span></>
                 ) : (
                   <><Send size={14} /><span>Publish Post</span></>
                 )}
@@ -478,7 +688,32 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
   const [showRaw, setShowRaw] = useState(false);
   const [showInspect, setShowInspect] = useState(false);
 
-  // --- Assembly Logic ---
+  // --- Profile Assembly (The Author) ---
+  const authorProfileManifest = [...allObjects].reverse().find(o => 
+    o.payloadType === VCO_TYPE_MANIFEST && 
+    JSON.parse(o.payload).type === "profile" && 
+    o.creatorId === obj.creatorId
+  );
+  
+  let authorData = { name: obj.creatorId.substring(0, 12) + "...", avatar: null };
+  if (authorProfileManifest) {
+    try {
+      const manifest = JSON.parse(authorProfileManifest.payload);
+      const bioObj = allObjects.find(o => o.headerHash === manifest.content);
+      if (bioObj) {
+        authorData.name = JSON.parse(bioObj.payload).name;
+      }
+      if (manifest.avatar) {
+        const avatarObj = allObjects.find(o => o.headerHash === manifest.avatar);
+        if (avatarObj) {
+          const [_, ...dataParts] = avatarObj.payload.split(":");
+          authorData.avatar = dataParts.join(":") as any;
+        }
+      }
+    } catch(e) {}
+  }
+
+  // --- Content Assembly (The Post) ---
   const isManifest = obj.payloadType === VCO_TYPE_MANIFEST;
   let manifestData: any = null;
   let assembledContent = obj.payload;
@@ -499,27 +734,37 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
     }
   }
 
-  const mediaObjects = isManifest && manifestData?.media 
-    ? manifestData.media.map((hash: string) => allObjects.find(o => o.headerHash === hash)).filter(Boolean)
+  const isProfile = isManifest && manifestData?.type === "profile";
+  const mediaLinks = isManifest 
+    ? (isProfile ? (manifestData.avatar ? [manifestData.avatar] : []) : (manifestData?.media || []))
     : [];
+    
+  const mediaObjects = mediaLinks.map((hash: string) => ({
+    hash,
+    obj: allObjects.find(o => o.headerHash === hash)
+  }));
 
   return (
     <Card className={`transition-all duration-200 group hover:border-teal-500/30 ${obj.isLocal ? 'border-l-2 border-l-teal-500' : ''}`}>
       <div className="p-5">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 border border-slate-700 rounded flex items-center justify-center transition-colors ${isManifest ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' : 'bg-slate-800 text-teal-400 group-hover:border-teal-500/30'}`}>
-              {isManifest ? <Layers size={18} strokeWidth={1.5} /> : <Shield size={18} strokeWidth={1.5} />}
+            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+              {authorData.avatar ? (
+                <img src={authorData.avatar} className="w-full h-full object-cover" />
+              ) : (
+                <Shield size={20} className="text-teal-500/50" />
+              )}
             </div>
+            
             <div>
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-bold text-slate-100">{obj.creatorId.substring(0, 12)}...</span>
-                {obj.isLocal && <Badge variant="info">Owner</Badge>}
-                {isManifest && <Badge variant="warning">Post Root</Badge>}
-                <Badge variant="success">Verified</Badge>
+                <span className="text-sm font-black text-slate-100 uppercase tracking-tight">{authorData.name}</span>
+                {obj.isLocal && <Badge variant="info">You</Badge>}
+                {isManifest && <Badge variant={isProfile ? "success" : "warning"}>{isProfile ? "Profile" : "Post"}</Badge>}
               </div>
-              <div className="flex items-center gap-2 text-xs font-mono text-slate-400 uppercase">
-                <span>Hash: {obj.headerHash.substring(0, 16)}</span>
+              <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500 uppercase">
+                <span>{obj.creatorId.substring(0, 16)}</span>
                 <span>·</span>
                 <span className="flex items-center gap-1"><Clock size={9} />{timeAgo(obj.timestamp)}</span>
               </div>
@@ -534,28 +779,36 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
         </div>
 
         <div className="space-y-4">
-          <p className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">{assembledContent}</p>
+          <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
+            {isProfile ? (
+              <div className="bg-slate-950/50 border border-slate-800/50 rounded-lg p-3 italic text-slate-400">
+                Identity established: {isAssembled ? JSON.parse(assembledContent).bio : "..."}
+              </div>
+            ) : assembledContent}
+          </div>
           
-          {mediaObjects.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 mt-2">
+          {mediaLinks.length > 0 && (
+            <div className={`${isProfile ? 'flex justify-start' : 'grid grid-cols-2 gap-2'} mt-2`}>
               {mediaObjects.map((m: any, i: number) => {
-                const [type] = m.payload.split(":");
-                const isImage = type.startsWith("image");
-                return (
-                  <div key={i} className="aspect-video bg-slate-950 rounded border border-slate-800 flex flex-col items-center justify-center gap-2 group/media relative overflow-hidden">
-                    {isImage ? (
-                      <div className="absolute inset-0 bg-teal-500/5 flex items-center justify-center">
-                        <LayoutGrid size={24} className="text-teal-500/20" />
-                      </div>
-                    ) : (
-                      <div className="absolute inset-0 bg-sky-500/5 flex items-center justify-center">
-                        <Zap size={24} className="text-sky-500/20" />
-                      </div>
-                    )}
-                    <div className="z-10 flex flex-col items-center">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{type.split("/")[1]}</span>
-                      <span className="text-[8px] font-mono text-slate-600 uppercase">{m.headerHash.substring(0, 8)}</span>
+                if (!m.obj) {
+                  return (
+                    <div key={i} className={`${isProfile ? 'w-20 h-20 rounded-full' : 'aspect-video rounded'} bg-slate-950 border border-dashed border-slate-800 flex flex-col items-center justify-center gap-2 animate-pulse`}>
+                      <RefreshCw size={16} className="text-slate-700 animate-spin" />
                     </div>
+                  );
+                }
+
+                const [type, ...dataParts] = m.obj.payload.split(":");
+                const data = dataParts.join(":");
+                const isImage = type.includes("image");
+                
+                return (
+                  <div key={i} className={`${isProfile ? 'w-20 h-20 rounded-full border-2 border-teal-500/30' : 'aspect-video rounded border border-slate-800'} bg-slate-950 relative overflow-hidden`}>
+                    {isImage ? (
+                      <img src={data} className="absolute inset-0 w-full h-full object-cover" />
+                    ) : (
+                      <video src={data} className="absolute inset-0 w-full h-full object-cover" controls />
+                    )}
                   </div>
                 );
               })}
@@ -689,7 +942,7 @@ function SyncVisualizer({ onComplete }: { onComplete: () => void }) {
             <div className="flex items-center gap-2"><Badge variant="info">0ms</Badge><span className="text-slate-300">CONNECTING_TO_BOOTSTRAP_RELAY...</span></div>
             {progress >= 20 && <div className="flex items-center gap-2 animate-slide-up"><Badge variant="info">142ms</Badge><span className="text-slate-200">PROTOCOL_HANDSHAKE_COMPLETE (VCO/3.2.0)</span></div>}
             {progress >= 45 && <div className="flex items-center gap-2 animate-slide-up"><Badge variant="info">489ms</Badge><span className="text-teal-400">LOCAL_STATE_SNAPSHOT_GENERATED (124 OBJS)</span></div>}
-            {progress >= 75 && <div className="flex items-center gap-2 animate-slide-up"><Badge variant="warning">912ms</Badge><span className="text-amber-400">RANGE_MISMATCH_DETECTED [HASH_COLLISION_CHECK]</span></div>}
+            {progress >= 75 && <div className="flex items-center gap-2 animate-slide-up"><Badge variant="warning">912ms</Badge><span className="text-amber-400">RANGE_MISMATCH_DETECTED [STARTING_BISECTION]</span></div>}
             {progress >= 100 && <div className="flex items-center gap-2 animate-slide-up"><Badge variant="success">1204ms</Badge><span className="text-teal-400 font-bold">SET_RECONCILIATION_SUCCESSFUL (3 NEW ENVELOPES)</span></div>}
           </div>
         </Card>
@@ -726,16 +979,35 @@ function AppContent() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [relays, setRelays] = useState<Relay[]>([]);
   const [feedLayout, setFeedLayout] = useState<"list" | "grid">("list");
-  const [showAddRelay, setShowAddRelay] = useState(false);
-  const [newRelayName, setNewRelayName] = useState("");
-  const [newRelayAddr, setNewRelayAddr] = useState("");
   const [copiedVault, setCopiedVault] = useState<Record<string, boolean>>({});
-  const [networkStats, setNetworkStats] = useState({
-    peers: 1248,
-    latency: 42,
-    inbound: 0.0,
-    outbound: 0.0
-  });
+  const [networkStats, setNetworkStats] = useState({ peers: 1248, latency: 42, inbound: 0.0, outbound: 0.0 });
+  const [discoveryLog, setDiscoveryLog] = useState<{id: string, type: 'mDNS' | 'DHT' | 'Content', label: string, status: string}[]>([]);
+
+  useEffect(() => {
+    const discoveryInterval = setInterval(() => {
+      const types: ('mDNS' | 'DHT' | 'Content')[] = ['mDNS', 'DHT', 'Content'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const labels = {
+        mDNS: "Local Node Hello",
+        DHT: `Peer Lookup [${Math.random().toString(16).slice(2, 10)}]`,
+        Content: `Provider Search [${Math.random().toString(16).slice(2, 10)}]`
+      };
+      
+      const newLog = {
+        id: Math.random().toString(36).slice(2),
+        type,
+        label: labels[type],
+        status: "Active"
+      };
+
+      setDiscoveryLog(prev => [newLog, ...prev].slice(0, 5));
+      setTimeout(() => {
+        setDiscoveryLog(prev => prev.map(l => l.id === newLog.id ? {...l, status: "Resolved"} : l));
+      }, 2000);
+    }, 4000);
+
+    return () => clearInterval(discoveryInterval);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -777,24 +1049,6 @@ function AppContent() {
     setObjects(updatedObjects);
     localStorage.setItem("vco_objects", JSON.stringify(updatedObjects));
     setView("feed");
-  };
-
-  const addRelay = (name: string, address: string) => {
-    const newRelay: Relay = {
-      id: Math.random().toString(36).substring(7),
-      name,
-      address,
-      status: "Online"
-    };
-    const newRelays = [...relays, newRelay];
-    setRelays(newRelays);
-    localStorage.setItem("vco_relays", JSON.stringify(newRelays));
-  };
-
-  const deleteRelay = (id: string) => {
-    const newRelays = relays.filter(r => r.id !== id);
-    setRelays(newRelays);
-    localStorage.setItem("vco_relays", JSON.stringify(newRelays));
   };
 
   return (
@@ -848,7 +1102,7 @@ function AppContent() {
               <h2 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] mb-3 px-3">Core Explorer</h2>
               <nav className="space-y-1">
                 <SidebarItem label="Activity Feed" icon={Activity} active={view === "feed"} onClick={() => setView("feed")} />
-                <SidebarItem label="Network Mesh" icon={Globe} active={view === "network"} onClick={() => setView("network")} />
+                <SidebarItem label="Discovery Hub" icon={Globe} active={view === "network"} onClick={() => setView("network")} />
                 <SidebarItem label="Local Vault" icon={Database} active={view === "vault"} onClick={() => setView("vault")} />
               </nav>
             </section>
@@ -930,95 +1184,105 @@ function AppContent() {
             {view === "network" && (
               <div className="space-y-8 animate-slide-up">
                 <div className="space-y-1 border-b border-slate-800 pb-6">
-                  <h2 className="font-display text-5xl font-black tracking-tight uppercase text-slate-100">Sync Network</h2>
-                  <p className="text-sm text-slate-400 uppercase tracking-widest">Distributed bootstrap and discovery management</p>
+                  <h2 className="font-display text-5xl font-black tracking-tight uppercase text-slate-100">Discovery Hub</h2>
+                  <p className="text-sm text-slate-400 uppercase tracking-widest">Autonomous peer discovery and content addressing</p>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">Network Topology</h3>
-                    <div className="bg-slate-900 border border-slate-800 rounded-lg p-8 h-56 flex items-center justify-center relative overflow-hidden">
-                      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <div className="absolute left-0 right-0 h-px bg-teal-500/10 animate-scan" />
-                      </div>
-                      <Network size={64} strokeWidth={0.5} className="text-teal-500/15" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="relative">
-                          <div className="w-3 h-3 bg-teal-500 rounded-full shadow-[0_0_12px_rgba(20,184,166,0.6)]" />
-                          {/* Dynamically render some dots based on relay count */}
-                          {relays.map((_, i) => (
-                            <div 
-                              key={i} 
-                              className="absolute w-1.5 h-1.5 bg-teal-500/60 rounded-full animate-pulse"
-                              style={{ 
-                                top: `${Math.sin(i * 2) * 50}px`, 
-                                left: `${Math.cos(i * 2) * 80}px` 
-                              }} 
-                            />
-                          ))}
-                          <div className="absolute bottom-[-15px] right-[-65px] w-1.5 h-1.5 bg-slate-700 rounded-full" />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <Card className="flex-1 p-4 text-center space-y-1">
-                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Global Peers</div>
-                        <div className="font-display text-2xl font-black text-teal-400">{networkStats.peers.toLocaleString()}</div>
-                      </Card>
-                      <Card className="flex-1 p-4 text-center space-y-1">
-                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Avg. Latency</div>
-                        <div className="font-display text-2xl font-black text-teal-400">{networkStats.latency.toFixed(0)}ms</div>
-                      </Card>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">Active Endpoints</h3>
-                    <div className="space-y-2">
-                      {relays.map(relay => (
-                        <Card key={relay.id} className="p-4 flex items-center justify-between group hover:border-teal-500/20 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-slate-800 border border-slate-700 rounded flex items-center justify-center text-teal-500">
-                              <Server size={15} />
+                
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Left: Discovery Stream */}
+                  <div className="lg:col-span-2 space-y-6">
+                    <section className="space-y-4">
+                      <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">Protocol Discovery</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Card className="p-5 border-teal-500/20 bg-teal-500/[0.02]">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <Wifi size={16} className="text-teal-400" />
+                              <span className="text-xs font-bold text-slate-200 uppercase tracking-widest">mDNS (Local)</span>
                             </div>
-                            <div>
-                              <div className="text-xs font-bold text-slate-100 uppercase tracking-tight">{relay.name}</div>
-                              <div className="text-xs font-mono text-slate-400 mt-0.5 truncate max-w-[160px]">{relay.address}</div>
-                            </div>
+                            <Badge variant="success">Active</Badge>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <Badge variant={relay.status === "Online" ? "success" : "default"}>{relay.status}</Badge>
-                            <button onClick={() => deleteRelay(relay.id)} className="text-slate-500 hover:text-red-400 transition-colors">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed uppercase font-bold">Broadcasting "HELLO" on local subnet. Detecting peers without internet route.</p>
                         </Card>
-                      ))}
-                      {showAddRelay ? (
-                        <div className="bg-slate-900 border border-slate-700/60 rounded-lg p-4 space-y-3">
-                          <div className="text-xs font-bold text-slate-300 uppercase tracking-widest">Register New Node</div>
-                          <input
-                            value={newRelayName}
-                            onChange={e => setNewRelayName(e.target.value)}
-                            placeholder="Relay name"
-                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:border-teal-500 transition-all"
-                          />
-                          <input
-                            value={newRelayAddr}
-                            onChange={e => setNewRelayAddr(e.target.value)}
-                            placeholder="/ip4/0.0.0.0/udp/4001/quic-v1"
-                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:border-teal-500 transition-all"
-                          />
-                          <div className="flex gap-2">
-                            <button onClick={() => setShowAddRelay(false)} className="flex-1 py-2 text-xs font-bold uppercase tracking-widest text-slate-300 hover:text-slate-100 border border-slate-800 rounded transition-colors">Cancel</button>
-                            <button onClick={() => { if(newRelayName && newRelayAddr) { addRelay(newRelayName, newRelayAddr); setNewRelayName(""); setNewRelayAddr(""); setShowAddRelay(false); }}} className="flex-1 py-2 text-xs font-bold uppercase tracking-widest text-white bg-orange-500 hover:bg-orange-400 border border-orange-500 rounded transition-colors">Register</button>
+                        <Card className="p-5 border-sky-500/20 bg-sky-500/[0.02]">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <Globe size={16} className="text-sky-400" />
+                              <span className="text-xs font-bold text-slate-200 uppercase tracking-widest">Kademlia DHT</span>
+                            </div>
+                            <Badge variant="info">Roaming</Badge>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed uppercase font-bold">Querying nearest neighbors for remote creator locations.</p>
+                        </Card>
+                      </div>
+                    </section>
+
+                    <section className="space-y-4">
+                      <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">Live Lookup Log</h3>
+                      <Card className="bg-slate-950 border-slate-800 divide-y divide-slate-900 overflow-hidden">
+                        {discoveryLog.length > 0 ? discoveryLog.map(log => (
+                          <div key={log.id} className="p-4 flex items-center justify-between group hover:bg-slate-900/50 transition-colors">
+                            <div className="flex items-center gap-4">
+                              <div className={`w-8 h-8 rounded border flex items-center justify-center ${log.type === 'mDNS' ? 'border-teal-500/30 text-teal-400' : log.type === 'DHT' ? 'border-sky-500/30 text-sky-400' : 'border-orange-500/30 text-orange-400'}`}>
+                                {log.type === 'mDNS' ? <Wifi size={14} /> : log.type === 'DHT' ? <Search size={14} /> : <Database size={14} />}
+                              </div>
+                              <div>
+                                <div className="text-xs font-bold text-slate-200 uppercase tracking-tight">{log.label}</div>
+                                <div className="text-[9px] font-mono text-slate-500 mt-0.5">TYPE: {log.type} // RESOLUTION_HOP: {Math.floor(Math.random()*8)+1}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className={`w-1.5 h-1.5 rounded-full ${log.status === 'Active' ? 'bg-amber-500 animate-pulse' : 'bg-teal-500'}`} />
+                              <span className={`text-[10px] font-bold uppercase tracking-widest ${log.status === 'Active' ? 'text-amber-500' : 'text-teal-500'}`}>{log.status}</span>
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="p-12 text-center text-slate-600 text-xs font-bold uppercase tracking-widest">Listening for swarm activity...</div>
+                        )}
+                      </Card>
+                    </section>
+                  </div>
+
+                  {/* Right: Content Routing & Hops */}
+                  <div className="space-y-6">
+                    <section className="space-y-4">
+                      <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">Interest Vectors</h3>
+                      <Card className="p-6 bg-orange-500/[0.02] border-orange-500/20 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                          <Radio size={48} className="text-orange-400 animate-ping" />
+                        </div>
+                        <div className="space-y-4 relative z-10">
+                          <div className="text-[10px] font-bold text-orange-400 uppercase tracking-[0.2em]">Active Provider Search</div>
+                          <div className="space-y-2">
+                            {objects.slice(0, 3).map(obj => (
+                              <div key={obj.headerHash} className="flex items-center gap-2">
+                                <div className="w-1 h-1 bg-orange-500 rounded-full" />
+                                <span className="text-[10px] font-mono text-slate-300 truncate">RECONCILING: {obj.headerHash}</span>
+                              </div>
+                            ))}
+                            {objects.length === 0 && <span className="text-[10px] text-slate-600 italic">No active interest vectors...</span>}
+                          </div>
+                          <div className="pt-2">
+                            <button className="w-full py-2 bg-orange-500/10 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest hover:bg-orange-500/20 transition-all">Broadcast Demand</button>
                           </div>
                         </div>
-                      ) : (
-                        <button
-                          onClick={() => setShowAddRelay(true)}
-                          className="w-full py-3 border border-dashed border-slate-800 rounded-lg text-slate-500 hover:text-teal-400 hover:border-teal-500/30 hover:bg-teal-500/5 transition-all text-xs font-bold uppercase tracking-[0.2em]"
-                        >+ Register New Node</button>
-                      )}
-                    </div>
+                      </Card>
+                    </section>
+
+                    <section className="space-y-4">
+                      <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">Seed Nodes</h3>
+                      <div className="space-y-2">
+                        {relays.map(relay => (
+                          <div key={relay.id} className="flex items-center justify-between p-3 bg-slate-900 border border-slate-800 rounded">
+                            <div className="flex items-center gap-3">
+                              <Server size={14} className="text-slate-500" />
+                              <span className="text-[10px] font-bold text-slate-300 uppercase">{relay.name}</span>
+                            </div>
+                            <Badge variant={relay.status === "Online" ? "success" : "default"}>{relay.status}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
                   </div>
                 </div>
               </div>
@@ -1030,7 +1294,7 @@ function AppContent() {
                   <h2 className="font-display text-5xl font-black tracking-tight uppercase text-slate-100">Identity Hub</h2>
                   <p className="text-sm text-slate-400 uppercase tracking-widest">Manage cryptographic root keys and protocol personas</p>
                 </div>
-                <IdentitySection />
+                <IdentitySection allObjects={objects} onProfileUpdated={handleCreated} />
               </div>
             )}
 
@@ -1090,7 +1354,7 @@ function AppContent() {
       </div>
 
       {/* Modals & Overlays */}
-      {isModalOpen && <NewPostModal onClose={() => setIsModalOpen(false)} onCreated={handleCreated} />}
+      {isModalOpen && <NewPostModal onClose={() => setIsModalOpen(false)} onCreated={handleCreated} allObjects={objects} />}
       {isSyncing && <SyncVisualizer onComplete={() => setIsSyncing(false)} />}
 
       {/* Footer / Status Bar */}
