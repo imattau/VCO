@@ -781,9 +781,9 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
         </div>
 
         <div className="space-y-4">
-          <div className="text-slate-100 leading-relaxed text-xs">
+          <div className="leading-relaxed text-xs">
             {isProfile ? (
-              <div className="bg-slate-950/50 border border-slate-800/50 rounded-lg p-3 italic text-slate-400">
+              <div className="bg-slate-950/50 border border-slate-800/50 rounded-lg p-3 italic text-slate-400 text-slate-100">
                 Identity established: {isAssembled ? JSON.parse(assembledContent).bio : "..."}
               </div>
             ) : (
