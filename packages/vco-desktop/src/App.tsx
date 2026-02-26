@@ -1,4 +1,6 @@
 import { useState, useEffect, createContext, useContext, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Activity, Shield, Zap, Database, Plus, Key, Copy,
   RefreshCw, CheckCircle2, X, Send, Server, Globe,
@@ -779,12 +781,18 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
         </div>
 
         <div className="space-y-4">
-          <div className="text-slate-100 leading-relaxed text-xs whitespace-pre-wrap">
+          <div className="text-slate-100 leading-relaxed text-xs">
             {isProfile ? (
               <div className="bg-slate-950/50 border border-slate-800/50 rounded-lg p-3 italic text-slate-400">
                 Identity established: {isAssembled ? JSON.parse(assembledContent).bio : "..."}
               </div>
-            ) : assembledContent}
+            ) : (
+              <div className="prose prose-invert prose-slate prose-sm max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {assembledContent}
+                </ReactMarkdown>
+              </div>
+            )}
           </div>
           
           {mediaLinks.length > 0 && (
