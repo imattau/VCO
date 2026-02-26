@@ -1064,6 +1064,59 @@ function AppContent() {
   const [networkStats, setNetworkStats] = useState({ peers: 1248, latency: 42, inbound: 0.0, outbound: 0.0 });
   const [discoveryLog, setDiscoveryLog] = useState<{id: string, type: 'mDNS' | 'DHT' | 'Content', label: string, status: string}[]>([]);
 
+  // --- Local Swarm Bridge (Inter-instance Discovery) ---
+  useEffect(() => {
+    if (!identity) return;
+
+    const channel = new BroadcastChannel('vco_swarm_bridge');
+    
+    // 1. Announce presence to other local instances
+    channel.postMessage({
+      type: 'NODE_HELLO',
+      payload: {
+        creatorId: identity.creatorIdHex,
+        instanceId: Math.random().toString(36).slice(2, 8)
+      }
+    });
+
+    // 2. Listen for swarm events
+    channel.onmessage = (event) => {
+      const { type, payload } = event.data;
+
+      if (type === 'NODE_HELLO') {
+        setDiscoveryLog(prev => [{
+          id: Math.random().toString(36).slice(2),
+          type: 'mDNS' as const,
+          label: `Local Peer Discovered: ${payload.creatorId.substring(0, 8)}`,
+          status: 'Resolved'
+        }, ...prev].slice(0, 5));
+      }
+
+      if (type === 'OBJECT_PUBLISHED') {
+        const newObjs = payload.objects as StoredObject[];
+        setObjects(prev => {
+          // Add only objects we don't have
+          const existingHashes = new Set(prev.map(o => o.headerHash));
+          const filtered = newObjs.filter(o => !existingHashes.has(o.headerHash));
+          if (filtered.length === 0) return prev;
+          
+          const updated = [...filtered, ...prev];
+          localStorage.setItem("vco_objects", JSON.stringify(updated));
+          return updated;
+        });
+
+        setDiscoveryLog(prev => [{
+          id: Math.random().toString(36).slice(2),
+          type: 'Content' as const,
+          label: `Inbound Sync: ${newObjs.length} Objects`,
+          status: 'Resolved'
+        }, ...prev].slice(0, 5));
+      }
+    };
+
+    return () => channel.close();
+  }, [identity]);
+
   useEffect(() => {
     const discoveryInterval = setInterval(() => {
       const types: ('mDNS' | 'DHT' | 'Content')[] = ['mDNS', 'DHT', 'Content'];
@@ -1129,6 +1182,15 @@ function AppContent() {
     const updatedObjects = [...newObjs, ...objects];
     setObjects(updatedObjects);
     localStorage.setItem("vco_objects", JSON.stringify(updatedObjects));
+    
+    // Broadcast to local swarm
+    const channel = new BroadcastChannel('vco_swarm_bridge');
+    channel.postMessage({
+      type: 'OBJECT_PUBLISHED',
+      payload: { objects: newObjs }
+    });
+    channel.close();
+
     setView("feed");
   };
 
