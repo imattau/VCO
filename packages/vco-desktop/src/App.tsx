@@ -879,6 +879,79 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
   );
 }
 
+function VaultView({ objects, copiedVault, setCopiedVault }: { objects: StoredObject[], copiedVault: Record<string, boolean>, setCopiedVault: React.Dispatch<React.SetStateAction<Record<string, boolean>>> }) {
+  const [limit, setLimit] = useState(24);
+  const visibleObjects = objects.slice(0, limit);
+  const hasMore = objects.length > limit;
+
+  return (
+    <div className="space-y-8 animate-slide-up">
+      <div className="space-y-1 border-b border-slate-800 pb-6">
+        <h2 className="font-display text-5xl font-black tracking-tight uppercase text-slate-100">Local Vault</h2>
+        <p className="text-sm text-slate-400 uppercase tracking-widest">Immutable object storage persistence — <span className="text-teal-500">{objects.length} stored envelopes</span></p>
+      </div>
+
+      {objects.length === 0 ? (
+        <Card className="p-12 text-center border-dashed">
+          <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Vault Storage Empty</p>
+        </Card>
+      ) : (
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {visibleObjects.map(obj => {
+              const isManifest = obj.payloadType === VCO_TYPE_MANIFEST;
+              return (
+                <Card key={obj.headerHash} className="p-5 group hover:border-teal-500/30 transition-all flex flex-col h-full">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      {isManifest ? <Layers size={18} className="text-orange-400" /> : <Database size={18} className="text-teal-500" />}
+                      <div className="text-sm font-mono text-slate-300 uppercase font-bold truncate max-w-[100px]">{obj.headerHash}</div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Badge variant={isManifest ? "warning" : "info"}>{isManifest ? "MAN" : "LEAF"}</Badge>
+                      <Badge variant="outline">{obj.payload.length}B</Badge>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono bg-slate-950/50 p-2.5 rounded border border-slate-800/50 truncate mb-4">
+                    {obj.payload}
+                  </div>
+                  <div className="mt-auto flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{timeAgo(obj.timestamp)}</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(obj.payload);
+                        setCopiedVault(prev => ({ ...prev, [obj.headerHash]: true }));
+                        setTimeout(() => setCopiedVault(prev => ({ ...prev, [obj.headerHash]: false })), 2000);
+                      }}
+                      className="text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-1"
+                      style={{ color: copiedVault[obj.headerHash] ? '#2dd4bf' : '#14b8a6' }}
+                    >
+                      {copiedVault[obj.headerHash] ? <><CheckCircle2 size={10} /> Copied</> : 'Copy Raw →'}
+                    </button>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+          
+          {hasMore && (
+            <div className="flex justify-center pb-12">
+              <Button 
+                onClick={() => setLimit(prev => prev + 24)}
+                variant="secondary" 
+                className="w-full max-w-xs"
+                icon={Plus}
+              >
+                Load {Math.min(24, objects.length - limit)} More Objects
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SyncVisualizer({ onComplete }: { onComplete: () => void }) {
   const [phase, setPhase] = useState<"INIT" | "COMPARE" | "BISECT" | "EXCHANGE" | "DONE">("INIT");
   const [progress, setProgress] = useState(0);
@@ -1307,55 +1380,11 @@ function AppContent() {
             )}
 
             {view === "vault" && (
-              <div className="space-y-8 animate-slide-up">
-                <div className="space-y-1 border-b border-slate-800 pb-6">
-                  <h2 className="font-display text-5xl font-black tracking-tight uppercase text-slate-100">Local Vault</h2>
-                  <p className="text-sm text-slate-400 uppercase tracking-widest">Immutable object storage persistence — <span className="text-teal-500">{objects.length} stored envelopes</span></p>
-                </div>
-
-                {objects.length === 0 ? (
-                  <Card className="p-12 text-center border-dashed">
-                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Vault Storage Empty</p>
-                  </Card>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {objects.map(obj => {
-                      const isManifest = obj.payloadType === VCO_TYPE_MANIFEST;
-                      return (
-                        <Card key={obj.headerHash} className="p-5 group hover:border-teal-500/30 transition-all">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              {isManifest ? <Layers size={18} className="text-orange-400" /> : <Database size={18} className="text-teal-500" />}
-                              <div className="text-sm font-mono text-slate-300 uppercase font-bold truncate max-w-[120px]">{obj.headerHash}</div>
-                            </div>
-                            <div className="flex gap-2">
-                              <Badge variant={isManifest ? "warning" : "info"}>{isManifest ? "MANIFEST" : "LEAF"}</Badge>
-                              <Badge variant="outline">{obj.payload.length} B</Badge>
-                            </div>
-                          </div>
-                          <div className="text-xs text-slate-200 font-medium bg-slate-950 p-3 rounded border border-slate-800 truncate">
-                            {obj.payload}
-                          </div>
-                          <div className="mt-4 flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{timeAgo(obj.timestamp)}</span>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(obj.payload);
-                                setCopiedVault(prev => ({ ...prev, [obj.headerHash]: true }));
-                                setTimeout(() => setCopiedVault(prev => ({ ...prev, [obj.headerHash]: false })), 2000);
-                              }}
-                              className="text-xs font-bold uppercase tracking-widest transition-colors flex items-center gap-1"
-                              style={{ color: copiedVault[obj.headerHash] ? '#2dd4bf' : '#14b8a6' }}
-                            >
-                              {copiedVault[obj.headerHash] ? <><CheckCircle2 size={11} /> Copied!</> : 'Copy Raw →'}
-                            </button>
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              <VaultView 
+                objects={objects} 
+                copiedVault={copiedVault} 
+                setCopiedVault={setCopiedVault} 
+              />
             )}
           </div>
         </main>
