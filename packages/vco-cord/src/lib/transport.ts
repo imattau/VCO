@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 type Listener = (encoded: Uint8Array) => void;
 
 const listeners = new Map<string, Set<Listener>>();
+const subscribedChannels = new Set<string>(); // channels already registered with sidecar
 let globalListenerInitialised = false;
 
 function base64ToUint8Array(b64: string): Uint8Array {
@@ -41,7 +42,10 @@ export function subscribe(channelId: string, fn: Listener): () => void {
   ensureGlobalListener();
   if (!listeners.has(channelId)) listeners.set(channelId, new Set());
   listeners.get(channelId)!.add(fn);
-  void invoke("vco_subscribe", { channelId });
+  if (!subscribedChannels.has(channelId)) {
+    subscribedChannels.add(channelId);
+    void invoke("vco_subscribe", { channelId });
+  }
   return () => listeners.get(channelId)?.delete(fn);
 }
 

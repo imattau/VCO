@@ -23,10 +23,10 @@ function base64ToUint8Array(b64: string): Uint8Array {
 }
 
 function registerChannelListener(channelId: string): void {
-  if (!inboundListeners.has(channelId)) inboundListeners.set(channelId, []);
-  inboundListeners.get(channelId)!.push((encoded) => {
+  if (inboundListeners.has(channelId)) return; // idempotent — only one emitter per channel
+  inboundListeners.set(channelId, [(encoded) => {
     emit({ type: "envelope", channelId, envelope: uint8ArrayToBase64(encoded) });
-  });
+  }]);
 }
 
 async function main() {
