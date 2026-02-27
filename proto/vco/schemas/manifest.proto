@@ -1,0 +1,23 @@
+syntax = "proto3";
+package vco.schemas;
+
+// SequenceManifest — payload type MULTICODEC_VCO_SEQUENCE (0x04)
+// Envelope schema URI: vco://schemas/core/sequence-manifest/v1
+//
+// Used when a single logical media object exceeds the 1 MB envelope payload
+// limit. Clients resolve chunk_cids in order, verify each chunk against its
+// CID (BLAKE3-256), and assemble in memory before rendering.
+message SequenceManifest {
+  // URI identifying the schema version
+  string schema = 1;
+  // Ordered list of chunk CIDs. Each element is the raw bytes of a
+  // Multihash-encoded BLAKE3-256 CID of a raw-payload envelope (<= 1 MB).
+  repeated bytes chunk_cids = 2;
+  // Total byte length of the reassembled content
+  uint64 total_size = 3;
+  // MIME type of the reassembled content, e.g. "image/jpeg"
+  string mime_type = 4;
+  // Pointer to the previous SequenceManifest CID (for profile avatar history).
+  // Empty bytes if this is the first version.
+  bytes previous_manifest = 5;
+}

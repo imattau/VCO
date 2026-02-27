@@ -1,0 +1,21 @@
+syntax = "proto3";
+package vco.schemas;
+
+// Post — payload type MULTICODEC_PROTOBUF (0x50)
+// Envelope schema URI: vco://schemas/social/post/v1
+message Post {
+  // URI identifying the schema version, e.g. "vco://schemas/social/post/v1"
+  string schema = 1;
+  // UTF-8 text body of the post
+  string content = 2;
+  // Ordered list of media CIDs (multihash bytes) attached to this post.
+  // Each element is the raw bytes of a Multihash-encoded BLAKE3-256 CID.
+  // If any CID exceeds 1 MB of payload, a SequenceManifest envelope is used
+  // and its CID appears here instead of the raw media CID.
+  repeated bytes media_cids = 3;
+  // Unix epoch milliseconds — informational only; canonical ordering uses
+  // the envelope header_hash PoW score.
+  int64 timestamp_ms = 4;
+  // Optional: channel or topic identifier (application-level routing)
+  string channel_id = 5;
+}

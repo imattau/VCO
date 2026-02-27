@@ -1,0 +1,19 @@
+syntax = "proto3";
+package vco.schemas;
+
+// Profile — payload type MULTICODEC_PROTOBUF (0x50)
+// Envelope schema URI: vco://schemas/identity/profile/v1
+message Profile {
+  // URI identifying the schema version
+  string schema = 1;
+  // Human-readable display name
+  string display_name = 2;
+  // Optional avatar: raw bytes of a Multihash-encoded BLAKE3-256 CID.
+  // May point to a SequenceManifest if avatar image > 1 MB.
+  bytes avatar_cid = 3;
+  // Pointer to the previous Profile manifest CID, enabling mutable resolution.
+  // Raw bytes of a Multihash-encoded BLAKE3-256 CID, or empty if first version.
+  bytes previous_manifest = 4;
+  // Short biography or status string
+  string bio = 5;
+}
