@@ -42,10 +42,11 @@ export function subscribe(channelId: string, fn: Listener): () => void {
   ensureGlobalListener();
   if (!listeners.has(channelId)) listeners.set(channelId, new Set());
   listeners.get(channelId)!.add(fn);
-  if (!subscribedChannels.has(channelId)) {
-    subscribedChannels.add(channelId);
-    void invoke("vco_subscribe", { channelId });
-  }
+  // Always send subscribe to trigger sidecar replay of stored envelopes.
+  // The sidecar's registerChannelListener is idempotent so duplicate listener
+  // registration is safe; replay fires every time the renderer re-subscribes.
+  subscribedChannels.add(channelId);
+  void invoke("vco_subscribe", { channelId });
   return () => listeners.get(channelId)?.delete(fn);
 }
 

@@ -10,6 +10,22 @@ const subscriptions = new Set<string>();
 // channel → inbound envelope listeners
 const inboundListeners = new Map<string, Array<(encoded: Uint8Array) => void>>();
 
+// in-memory store: channel → ordered list of envelopes for replay on re-subscribe
+const channelStore = new Map<string, Uint8Array[]>();
+
+function storeEnvelope(channelId: string, encoded: Uint8Array): void {
+  if (!channelStore.has(channelId)) channelStore.set(channelId, []);
+  channelStore.get(channelId)!.push(encoded);
+}
+
+function replayChannel(channelId: string): void {
+  const stored = channelStore.get(channelId);
+  if (!stored) return;
+  for (const encoded of stored) {
+    emit({ type: "envelope", channelId, envelope: uint8ArrayToBase64(encoded) });
+  }
+}
+
 function emit(obj: Record<string, unknown>): void {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
@@ -65,9 +81,10 @@ async function main() {
       while (true) {
         const encoded = await channel.receive();
         decodeEnvelopeProto(encoded); // validate
-        // Broadcast to all subscribed channels
+        // Broadcast to all subscribed channels and persist for replay
         for (const [channelId, listeners] of inboundListeners) {
           if (subscriptions.has(channelId)) {
+            storeEnvelope(channelId, encoded);
             for (const fn of listeners) fn(encoded);
           }
         }
@@ -92,15 +109,14 @@ async function main() {
     if (msg.type === "subscribe") {
       const channelId = msg.channelId as string;
       subscriptions.add(channelId);
-      // Register listener dynamically when subscription arrives
       registerChannelListener(channelId);
+      replayChannel(channelId); // send stored envelopes to renderer
     } else if (msg.type === "unsubscribe") {
       subscriptions.delete(msg.channelId as string);
     } else if (msg.type === "publish") {
       const channelId = msg.channelId as string;
       const encoded = base64ToUint8Array(msg.envelope as string);
-      // Echo back to all subscribers on this node (loopback for now)
-      // Real delivery to remote peers happens via libp2p sync sessions
+      storeEnvelope(channelId, encoded);
       const listeners = inboundListeners.get(channelId);
       if (listeners) {
         for (const fn of listeners) fn(encoded);
