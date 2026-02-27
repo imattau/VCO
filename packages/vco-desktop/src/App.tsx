@@ -239,7 +239,7 @@ function ProfileEditorModal({ onClose, onCreated, allObjects }: { onClose: () =>
 
       const manifestData = {
         v: "3.2",
-        type: "profile",
+        schema: "vco://schemas/identity/profile/v1",
         content: bioHash,
         avatar: avatarHash,
         meta: { timestamp: Date.now() }
@@ -320,7 +320,7 @@ function IdentitySection({ allObjects, onProfileUpdated }: { allObjects: StoredO
   const [isEditing, setIsEditing] = useState(false);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
 
-  const profileManifest = [...allObjects].reverse().find(o => o.payloadType === VCO_TYPE_MANIFEST && JSON.parse(o.payload).type === "profile" && o.creatorId === identity?.creatorIdHex);
+  const profileManifest = [...allObjects].reverse().find(o => o.payloadType === VCO_TYPE_MANIFEST && JSON.parse(o.payload).schema === "vco://schemas/identity/profile/v1" && o.creatorId === identity?.creatorIdHex);
   let profileData = { name: "Anonymous Peer", bio: "Identity not yet established in the distributed swarm.", avatar: null };
   
   if (profileManifest) {
@@ -538,7 +538,7 @@ function NewPostModal({ onClose, onCreated, allObjects }: { onClose: () => void,
 
       const manifestData = {
         v: "3.2",
-        type: "post",
+        schema: "vco://schemas/social/post/v1",
         content: contentHash,
         media: mediaHashes,
         meta: {
@@ -693,7 +693,7 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
   // --- Profile Assembly (The Author) ---
   const authorProfileManifest = [...allObjects].reverse().find(o => 
     o.payloadType === VCO_TYPE_MANIFEST && 
-    JSON.parse(o.payload).type === "profile" && 
+    JSON.parse(o.payload).schema === "vco://schemas/identity/profile/v1" && 
     o.creatorId === obj.creatorId
   );
   
@@ -719,7 +719,8 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
   const isManifest = obj.payloadType === VCO_TYPE_MANIFEST;
   let manifestData: any = null;
   let assembledContent = obj.payload;
-  let isAssembled = false;
+  let isAssembled = false; // keep for backward compatibility with React component
+  let assemblyState: "PENDING" | "PARTIAL" | "COMPLETE" = "PENDING";
 
   if (isManifest) {
     try {
@@ -728,6 +729,7 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
       if (contentObj) {
         assembledContent = contentObj.payload;
         isAssembled = true;
+        assemblyState = "PARTIAL";
       } else {
         assembledContent = "[Content pending synchronization...]";
       }
@@ -736,7 +738,7 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
     }
   }
 
-  const isProfile = isManifest && manifestData?.type === "profile";
+  const isProfile = isManifest && manifestData?.schema === "vco://schemas/identity/profile/v1";
   const mediaLinks = isManifest 
     ? (isProfile ? (manifestData.avatar ? [manifestData.avatar] : []) : (manifestData?.media || []))
     : [];
@@ -745,6 +747,11 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
     hash,
     obj: allObjects.find(o => o.headerHash === hash)
   }));
+
+  if (assemblyState === "PARTIAL") {
+    const allMediaResolved = mediaObjects.every((m: any) => m.obj !== undefined);
+    if (allMediaResolved) assemblyState = "COMPLETE";
+  }
 
   return (
     <Card className={`transition-all duration-200 group hover:border-teal-500/30 ${obj.isLocal ? 'border-l-2 border-l-teal-500' : ''}`}>
@@ -784,7 +791,7 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
           <div className="leading-relaxed text-xs">
             {isProfile ? (
               <div className="bg-slate-950/50 border border-slate-800/50 rounded-lg p-3 italic text-slate-400 text-slate-100">
-                Identity established: {isAssembled ? JSON.parse(assembledContent).bio : "..."}
+                Identity established: {assemblyState !== "PENDING" ? JSON.parse(assembledContent).bio : "..."}
               </div>
             ) : (
               <div className="prose prose-invert prose-slate prose-sm max-w-none">
@@ -847,7 +854,7 @@ function FeedItem({ obj, allObjects }: { obj: StoredObject, allObjects: StoredOb
                 ["Manifest Hash", obj.headerHash],
                 ["Content Link", manifestData?.content || "None"],
                 ["Media Links", manifestData?.media?.length || "0"],
-                ["Assembly", isAssembled ? "COMPLETE" : "PENDING"],
+                ["Assembly", assemblyState],
                 ["Protocol", "VCO/3.2 Distributed"],
               ].map(([k, v]) => (
                 <div key={k} className="flex gap-3 bg-slate-950 rounded border border-slate-800 p-2.5">
@@ -1062,7 +1069,7 @@ function AppContent() {
   const [feedLayout, setFeedLayout] = useState<"list" | "grid">("list");
   const [copiedVault, setCopiedVault] = useState<Record<string, boolean>>({});
   const [networkStats, setNetworkStats] = useState({ peers: 1248, latency: 42, inbound: 0.0, outbound: 0.0 });
-  const [discoveryLog, setDiscoveryLog] = useState<{id: string, type: 'mDNS' | 'DHT' | 'Content', label: string, status: string}[]>([]);
+  const [discoveryLog, setDiscoveryLog] = useState<{id: string, type: 'mDNS' | 'DHT' | 'Content', label: string, status: string, priority: string}[]>([]);
 
   // --- Local Swarm Bridge (Inter-instance Discovery) ---
   useEffect(() => {
@@ -1088,7 +1095,8 @@ function AppContent() {
           id: Math.random().toString(36).slice(2),
           type: 'mDNS' as const,
           label: `Local Peer Discovered: ${payload.creatorId.substring(0, 8)}`,
-          status: 'Resolved'
+          status: 'Resolved',
+          priority: 'NORMAL'
         }, ...prev].slice(0, 5));
       }
 
@@ -1109,7 +1117,8 @@ function AppContent() {
           id: Math.random().toString(36).slice(2),
           type: 'Content' as const,
           label: `Inbound Sync: ${newObjs.length} Objects`,
-          status: 'Resolved'
+          status: 'Resolved',
+          priority: 'HIGH'
         }, ...prev].slice(0, 5));
       }
     };
@@ -1127,11 +1136,13 @@ function AppContent() {
         Content: `Provider Search [${Math.random().toString(16).slice(2, 10)}]`
       };
       
+      const priority = type === 'DHT' ? 'CRITICAL' : type === 'Content' ? (Math.random() > 0.5 ? 'HIGH' : 'LOW') : 'NORMAL';
       const newLog = {
         id: Math.random().toString(36).slice(2),
         type,
         label: labels[type],
-        status: "Active"
+        status: "Active",
+        priority
       };
 
       setDiscoveryLog(prev => [newLog, ...prev].slice(0, 5));

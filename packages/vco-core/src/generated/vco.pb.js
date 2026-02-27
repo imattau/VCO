@@ -2097,6 +2097,301 @@ export const vco = $root.vco = (() => {
             return PayloadFragmentSet;
         })();
 
+        /**
+         * PriorityLevel enum.
+         * @name vco.v3.PriorityLevel
+         * @enum {number}
+         * @property {number} PRIORITY_CRITICAL=0 PRIORITY_CRITICAL value
+         * @property {number} PRIORITY_HIGH=1 PRIORITY_HIGH value
+         * @property {number} PRIORITY_NORMAL=2 PRIORITY_NORMAL value
+         * @property {number} PRIORITY_LOW=3 PRIORITY_LOW value
+         */
+        v3.PriorityLevel = (function() {
+            const valuesById = {}, values = Object.create(valuesById);
+            values[valuesById[0] = "PRIORITY_CRITICAL"] = 0;
+            values[valuesById[1] = "PRIORITY_HIGH"] = 1;
+            values[valuesById[2] = "PRIORITY_NORMAL"] = 2;
+            values[valuesById[3] = "PRIORITY_LOW"] = 3;
+            return values;
+        })();
+
+        v3.InterestVector = (function() {
+
+            /**
+             * Properties of an InterestVector.
+             * @memberof vco.v3
+             * @interface IInterestVector
+             * @property {Array.<Uint8Array>|null} [targetCids] InterestVector targetCids
+             * @property {vco.v3.PriorityLevel|null} [priority] InterestVector priority
+             */
+
+            /**
+             * Constructs a new InterestVector.
+             * @memberof vco.v3
+             * @classdesc Represents an InterestVector.
+             * @implements IInterestVector
+             * @constructor
+             * @param {vco.v3.IInterestVector=} [properties] Properties to set
+             */
+            function InterestVector(properties) {
+                this.targetCids = [];
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * InterestVector targetCids.
+             * @member {Array.<Uint8Array>} targetCids
+             * @memberof vco.v3.InterestVector
+             * @instance
+             */
+            InterestVector.prototype.targetCids = $util.emptyArray;
+
+            /**
+             * InterestVector priority.
+             * @member {vco.v3.PriorityLevel} priority
+             * @memberof vco.v3.InterestVector
+             * @instance
+             */
+            InterestVector.prototype.priority = 0;
+
+            /**
+             * Creates a new InterestVector instance using the specified properties.
+             * @function create
+             * @memberof vco.v3.InterestVector
+             * @static
+             * @param {vco.v3.IInterestVector=} [properties] Properties to set
+             * @returns {vco.v3.InterestVector} InterestVector instance
+             */
+            InterestVector.create = function create(properties) {
+                return new InterestVector(properties);
+            };
+
+            /**
+             * Encodes the specified InterestVector message. Does not implicitly {@link vco.v3.InterestVector.verify|verify} messages.
+             * @function encode
+             * @memberof vco.v3.InterestVector
+             * @static
+             * @param {vco.v3.IInterestVector} message InterestVector message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            InterestVector.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.targetCids != null && message.targetCids.length)
+                    for (let i = 0; i < message.targetCids.length; ++i)
+                        writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.targetCids[i]);
+                if (message.priority != null && Object.hasOwnProperty.call(message, "priority"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).int32(message.priority);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified InterestVector message, length delimited. Does not implicitly {@link vco.v3.InterestVector.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof vco.v3.InterestVector
+             * @static
+             * @param {vco.v3.IInterestVector} message InterestVector message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            InterestVector.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes an InterestVector message from the specified reader or buffer.
+             * @function decode
+             * @memberof vco.v3.InterestVector
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {vco.v3.InterestVector} InterestVector
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            InterestVector.decode = function decode(reader, length, error) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.vco.v3.InterestVector();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    if (tag === error)
+                        break;
+                    switch (tag >>> 3) {
+                    case 1: {
+                            if (!(message.targetCids && message.targetCids.length))
+                                message.targetCids = [];
+                            message.targetCids.push(reader.bytes());
+                            break;
+                        }
+                    case 2: {
+                            message.priority = reader.int32();
+                            break;
+                        }
+                    default:
+                        reader.skipType(tag & 7);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes an InterestVector message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof vco.v3.InterestVector
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {vco.v3.InterestVector} InterestVector
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            InterestVector.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies an InterestVector message.
+             * @function verify
+             * @memberof vco.v3.InterestVector
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            InterestVector.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.targetCids != null && message.hasOwnProperty("targetCids")) {
+                    if (!Array.isArray(message.targetCids))
+                        return "targetCids: array expected";
+                    for (let i = 0; i < message.targetCids.length; ++i)
+                        if (!(message.targetCids[i] && typeof message.targetCids[i].length === "number" || $util.isString(message.targetCids[i])))
+                            return "targetCids: buffer[] expected";
+                }
+                if (message.priority != null && message.hasOwnProperty("priority"))
+                    switch (message.priority) {
+                    default:
+                        return "priority: enum value expected";
+                    case 0:
+                    case 1:
+                    case 2:
+                    case 3:
+                        break;
+                    }
+                return null;
+            };
+
+            /**
+             * Creates an InterestVector message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof vco.v3.InterestVector
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {vco.v3.InterestVector} InterestVector
+             */
+            InterestVector.fromObject = function fromObject(object) {
+                if (object instanceof $root.vco.v3.InterestVector)
+                    return object;
+                let message = new $root.vco.v3.InterestVector();
+                if (object.targetCids) {
+                    if (!Array.isArray(object.targetCids))
+                        throw TypeError(".vco.v3.InterestVector.targetCids: array expected");
+                    message.targetCids = [];
+                    for (let i = 0; i < object.targetCids.length; ++i)
+                        if (typeof object.targetCids[i] === "string")
+                            $util.base64.decode(object.targetCids[i], message.targetCids[i] = $util.newBuffer($util.base64.length(object.targetCids[i])), 0);
+                        else if (object.targetCids[i].length >= 0)
+                            message.targetCids[i] = object.targetCids[i];
+                }
+                switch (object.priority) {
+                default:
+                    if (typeof object.priority === "number") {
+                        message.priority = object.priority;
+                        break;
+                    }
+                    break;
+                case "PRIORITY_CRITICAL":
+                case 0:
+                    message.priority = 0;
+                    break;
+                case "PRIORITY_HIGH":
+                case 1:
+                    message.priority = 1;
+                    break;
+                case "PRIORITY_NORMAL":
+                case 2:
+                    message.priority = 2;
+                    break;
+                case "PRIORITY_LOW":
+                case 3:
+                    message.priority = 3;
+                    break;
+                }
+                return message;
+            };
+
+            /**
+             * Creates a plain object from an InterestVector message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof vco.v3.InterestVector
+             * @static
+             * @param {vco.v3.InterestVector} message InterestVector
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            InterestVector.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                let object = {};
+                if (options.arrays || options.defaults)
+                    object.targetCids = [];
+                if (options.defaults)
+                    object.priority = options.enums === String ? "PRIORITY_CRITICAL" : 0;
+                if (message.targetCids && message.targetCids.length) {
+                    object.targetCids = [];
+                    for (let j = 0; j < message.targetCids.length; ++j)
+                        object.targetCids[j] = options.bytes === String ? $util.base64.encode(message.targetCids[j], 0, message.targetCids[j].length) : options.bytes === Array ? Array.prototype.slice.call(message.targetCids[j]) : message.targetCids[j];
+                }
+                if (message.priority != null && message.hasOwnProperty("priority"))
+                    object.priority = options.enums === String ? $root.vco.v3.PriorityLevel[message.priority] === undefined ? message.priority : $root.vco.v3.PriorityLevel[message.priority] : message.priority;
+                return object;
+            };
+
+            /**
+             * Converts this InterestVector to JSON.
+             * @function toJSON
+             * @memberof vco.v3.InterestVector
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            InterestVector.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            /**
+             * Gets the default type url for InterestVector
+             * @function getTypeUrl
+             * @memberof vco.v3.InterestVector
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            InterestVector.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/vco.v3.InterestVector";
+            };
+
+            return InterestVector;
+        })();
+
         v3.PowChallenge = (function() {
 
             /**
@@ -2357,6 +2652,7 @@ export const vco = $root.vco = (() => {
              * @interface ISyncControl
              * @property {vco.v3.ISyncMessage|null} [syncMessage] SyncControl syncMessage
              * @property {vco.v3.IPowChallenge|null} [powChallenge] SyncControl powChallenge
+             * @property {vco.v3.IInterestVector|null} [interestVector] SyncControl interestVector
              */
 
             /**
@@ -2390,17 +2686,25 @@ export const vco = $root.vco = (() => {
              */
             SyncControl.prototype.powChallenge = null;
 
+            /**
+             * SyncControl interestVector.
+             * @member {vco.v3.IInterestVector|null|undefined} interestVector
+             * @memberof vco.v3.SyncControl
+             * @instance
+             */
+            SyncControl.prototype.interestVector = null;
+
             // OneOf field names bound to virtual getters and setters
             let $oneOfFields;
 
             /**
              * SyncControl message.
-             * @member {"syncMessage"|"powChallenge"|undefined} message
+             * @member {"syncMessage"|"powChallenge"|"interestVector"|undefined} message
              * @memberof vco.v3.SyncControl
              * @instance
              */
             Object.defineProperty(SyncControl.prototype, "message", {
-                get: $util.oneOfGetter($oneOfFields = ["syncMessage", "powChallenge"]),
+                get: $util.oneOfGetter($oneOfFields = ["syncMessage", "powChallenge", "interestVector"]),
                 set: $util.oneOfSetter($oneOfFields)
             });
 
@@ -2432,6 +2736,8 @@ export const vco = $root.vco = (() => {
                     $root.vco.v3.SyncMessage.encode(message.syncMessage, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 if (message.powChallenge != null && Object.hasOwnProperty.call(message, "powChallenge"))
                     $root.vco.v3.PowChallenge.encode(message.powChallenge, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                if (message.interestVector != null && Object.hasOwnProperty.call(message, "interestVector"))
+                    $root.vco.v3.InterestVector.encode(message.interestVector, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 return writer;
             };
 
@@ -2474,6 +2780,10 @@ export const vco = $root.vco = (() => {
                         }
                     case 2: {
                             message.powChallenge = $root.vco.v3.PowChallenge.decode(reader, reader.uint32());
+                            break;
+                        }
+                    case 3: {
+                            message.interestVector = $root.vco.v3.InterestVector.decode(reader, reader.uint32());
                             break;
                         }
                     default:
@@ -2530,6 +2840,16 @@ export const vco = $root.vco = (() => {
                             return "powChallenge." + error;
                     }
                 }
+                if (message.interestVector != null && message.hasOwnProperty("interestVector")) {
+                    if (properties.message === 1)
+                        return "message: multiple values";
+                    properties.message = 1;
+                    {
+                        let error = $root.vco.v3.InterestVector.verify(message.interestVector);
+                        if (error)
+                            return "interestVector." + error;
+                    }
+                }
                 return null;
             };
 
@@ -2554,6 +2874,11 @@ export const vco = $root.vco = (() => {
                     if (typeof object.powChallenge !== "object")
                         throw TypeError(".vco.v3.SyncControl.powChallenge: object expected");
                     message.powChallenge = $root.vco.v3.PowChallenge.fromObject(object.powChallenge);
+                }
+                if (object.interestVector != null) {
+                    if (typeof object.interestVector !== "object")
+                        throw TypeError(".vco.v3.SyncControl.interestVector: object expected");
+                    message.interestVector = $root.vco.v3.InterestVector.fromObject(object.interestVector);
                 }
                 return message;
             };
@@ -2580,6 +2905,11 @@ export const vco = $root.vco = (() => {
                     object.powChallenge = $root.vco.v3.PowChallenge.toObject(message.powChallenge, options);
                     if (options.oneofs)
                         object.message = "powChallenge";
+                }
+                if (message.interestVector != null && message.hasOwnProperty("interestVector")) {
+                    object.interestVector = $root.vco.v3.InterestVector.toObject(message.interestVector, options);
+                    if (options.oneofs)
+                        object.message = "interestVector";
                 }
                 return object;
             };
