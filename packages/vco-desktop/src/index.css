@@ -1,0 +1,107 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-slate-950: #020617;
+  --color-slate-900: #0f172a;
+  --color-slate-800: #1e293b;
+  --color-slate-700: #334155;
+  --color-slate-600: #475569;
+  --color-slate-500: #64748b;
+  --color-slate-400: #94a3b8;
+  --color-slate-300: #cbd5e1;
+  --color-slate-200: #e2e8f0;
+  --color-slate-100: #f1f5f9;
+}
+
+:root {
+  font-family: 'Martian Mono', 'Courier New', monospace;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  color: #cbd5e1;
+  background-color: #020617;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+/* Custom Prose Styles for Markdown */
+.prose {
+  color: #cbd5e1 !important;
+  max-width: none !important;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  color: #f1f5f9 !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: -0.025em !important;
+  margin-top: 1.5em !important;
+  margin-bottom: 0.5em !important;
+}
+
+.prose h1 { font-size: 1.5rem !important; }
+.prose h2 { font-size: 1.25rem !important; }
+.prose h3 { font-size: 1.125rem !important; }
+
+.prose p {
+  margin-top: 0.75em !important;
+  margin-bottom: 0.75em !important;
+  line-height: 1.6 !important;
+}
+
+.prose strong {
+  color: #f1f5f9 !important;
+  font-weight: 700 !important;
+}
+
+.prose a {
+  color: #2dd4bf !important;
+  text-decoration: underline !important;
+  font-weight: 600 !important;
+}
+
+.prose ul {
+  list-style-type: disc !important;
+  padding-left: 1.5em !important;
+}
+
+.prose ol {
+  list-style-type: decimal !important;
+  padding-left: 1.5em !important;
+}
+
+.prose li {
+  margin-top: 0.25em !important;
+  margin-bottom: 0.25em !important;
+}
+
+.prose pre {
+  background-color: #020617 !important;
+  border: 1px solid #1e293b !important;
+  padding: 1rem !important;
+  border-radius: 0.5rem !important;
+  margin: 1rem 0 !important;
+}
+
+.prose code {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  padding: 0.2em 0.4em !important;
+  border-radius: 0.25rem !important;
+  font-weight: 400 !important;
+  font-family: inherit !important;
+}
+
+.prose code::before,
+.prose code::after {
+  content: "" !important;
+}

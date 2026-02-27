@@ -26,6 +26,7 @@ VCO (v3.2) is built on a "Verifiable Content" model where every piece of data (E
 | [`@vco/vco-sync`](./packages/vco-sync) | Range-based set reconciliation and sync state machines. |
 | [`@vco/vco-transport`](./packages/vco-transport) | Libp2p adapters, session management, and TOL (Transport Obfuscation Layer). |
 | [`@vco/vco-relay`](./packages/vco-relay) | A standalone bootstrap relay and storage server. |
+| [`@vco/vco-desktop`](./packages/vco-desktop) | A cross-platform desktop application (Tauri + React). |
 
 ---
 
@@ -38,6 +39,7 @@ VCO is managed as a monorepo using NPM workspaces.
 - **Node.js**: v18 or higher
 - **NPM**: v8 or higher
 - **Git**
+- **Rust** (for desktop app development)
 
 ### Setup
 
@@ -94,6 +96,15 @@ cd packages/vco-relay
 VCO_CONFIG_PATH=./config.json npm start
 ```
 
+### 3. Running the Desktop App
+
+To start the desktop application in development mode:
+
+```bash
+# Requires Rust installed
+npm run tauri dev --workspace=@vco/vco-desktop
+```
+
 ---
 
 ## Documentation
@@ -121,7 +132,7 @@ For detailed guidelines, please refer to **[AGENTS.md](./AGENTS.md)**.
 ## Contributors
 
 - **Gemini** (AI Agent) - Automated installer, relay enhancements, and protocol refinements.
-- **Matt Thomson** - Lead architect and developer.
+- **lostcause** - Lead architect and developer.
 
 ---
 

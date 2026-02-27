@@ -116,6 +116,9 @@ describe("sync + transport integration", () => {
 
     expect(outcome.state).toBe(ReconciliationState.TERMINATED);
     expect(outcome.rounds).toBe(1);
+
+    await leftChannel.close();
+    await rightChannel.close();
   });
 
   it("applies remote PowChallenge policy over a live session channel", async () => {
@@ -150,5 +153,8 @@ describe("sync + transport integration", () => {
 
     expect(outcome.state).toBe(ReconciliationState.TERMINATED);
     expect(policy.getRequiredDifficulty()).toBe(20);
+
+    await leftChannel.close();
+    await rightChannel.close();
   });
 });

@@ -174,6 +174,9 @@ describe("VCO protocol end-to-end", () => {
     const decoded = decodeEnvelopeProto(received);
     assertEnvelopeIntegrity(decoded, crypto);
     expect(new TextDecoder().decode(decoded.payload)).toBe("hello vco");
+
+    await senderChannel.close();
+    await receiverChannel.close();
   });
 
   // 5. PoW admission gate -------------------------------------------------------
@@ -372,6 +375,9 @@ describe("VCO protocol end-to-end", () => {
       assertEnvelopeIntegrity(decoded, crypto);
       expect(new TextDecoder().decode(decoded.payload)).toBe(payloads[i]);
     }
+
+    await senderChannel.close();
+    await receiverChannel.close();
   });
 
   // 10. PoW challenge mid-sync over transport ------------------------------------
@@ -419,6 +425,9 @@ describe("VCO protocol end-to-end", () => {
     await expect(
       admitInboundEnvelope(noPowEncoded, core, { requiredDifficulty: 3 }),
     ).rejects.toThrow("Envelope lacks required PoW difficulty 3.");
+
+    await serverChannel.close();
+    await clientChannel.close();
   });
 
   // 11. Reserved flag bits rejected ---------------------------------------------

@@ -143,6 +143,8 @@ describe("handleSyncSessionChannelsWithPowBackpressure", () => {
     });
     expect(issuedChallengeDifficulty).toBe(23);
     expect(receivedRangeRoots).toEqual([7]);
+
+    await peerChannel.close();
   });
 
   it("tracks remote required difficulty from inbound PowChallenge frames", async () => {
@@ -191,6 +193,8 @@ describe("handleSyncSessionChannelsWithPowBackpressure", () => {
 
     expect(requiredDifficultySeen).toBe(17);
     expect(capturedContext?.getActivePowChallenge()?.minDifficulty).toBe(17);
+
+    await peerChannel.close();
   });
 
   it("notifies about active challenge when updated", async () => {

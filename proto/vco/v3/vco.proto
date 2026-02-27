@@ -61,6 +61,19 @@ message PayloadFragmentSet {
 }
 
 // Receiver-specified PoW backpressure requirement for sync peers.
+
+enum PriorityLevel {
+  PRIORITY_CRITICAL = 0;
+  PRIORITY_HIGH = 1;
+  PRIORITY_NORMAL = 2;
+  PRIORITY_LOW = 3;
+}
+
+message InterestVector {
+  repeated bytes target_cids = 1;
+  PriorityLevel priority = 2;
+}
+
 message PowChallenge {
   uint32 min_difficulty = 1; // required leading-zero-bit threshold
   uint32 ttl_seconds = 2;    // validity window for this challenge
@@ -72,6 +85,7 @@ message SyncControl {
   oneof message {
     SyncMessage sync_message = 1;
     PowChallenge pow_challenge = 2;
+    InterestVector interest_vector = 3;
   }
 }
 

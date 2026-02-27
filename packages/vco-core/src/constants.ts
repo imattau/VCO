@@ -23,3 +23,5 @@ export const MULTIHASH_BLAKE3_256 = 0x1e;
 
 export const ED25519_PUBLIC_KEY_LENGTH = 32;
 export const ED25519_SIGNATURE_LENGTH = 64;
+
+export const MULTICODEC_VCO_SEQUENCE = 0x04;

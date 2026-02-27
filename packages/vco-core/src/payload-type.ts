@@ -1,12 +1,14 @@
 import { code as jsonCodec } from "multiformats/codecs/json";
 import { code as rawCodec } from "multiformats/codecs/raw";
-import { MULTICODEC_PROTOBUF } from "./constants.js";
+import { MULTICODEC_PROTOBUF,
+  MULTICODEC_VCO_SEQUENCE } from "./constants.js";
 import { EnvelopeValidationError } from "./errors.js";
 import { KNOWN_MULTICODEC_CODES } from "./generated/multicodec.codes.js";
 
-const KNOWN_PAYLOAD_MULTICODECS = new Set<number>(KNOWN_MULTICODEC_CODES);
+const KNOWN_PAYLOAD_MULTICODECS = new Set<number>([...KNOWN_MULTICODEC_CODES, MULTICODEC_VCO_SEQUENCE]);
 const SUPPORTED_PAYLOAD_MULTICODECS = new Set<number>([
   MULTICODEC_PROTOBUF,
+  MULTICODEC_VCO_SEQUENCE,
   rawCodec,
   jsonCodec,
 ]);
