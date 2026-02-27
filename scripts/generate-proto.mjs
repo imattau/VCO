@@ -34,7 +34,7 @@ await execFileAsync(
   { cwd: projectRoot },
 );
 
-const dts = `import * as $protobuf from "protobufjs/minimal";
+const dts = `import $protobuf from "protobufjs/minimal.js";
 
 export namespace vco {
   namespace v3 {
@@ -261,6 +261,19 @@ export namespace vco {
   }
 }
 `;
+
+// protobufjs/minimal is CJS. Node.js ESM wraps CJS via `import * as` into a
+// namespace where .roots/.Writer etc are under .default, breaking pbjs output.
+// Use a default import instead, and fix the missing .js extension.
+const jsContent = await fs.readFile(coreOutJsPath, "utf8");
+await fs.writeFile(
+  coreOutJsPath,
+  jsContent.replace(
+    'import * as $protobuf from "protobufjs/minimal";',
+    'import $protobuf from "protobufjs/minimal.js";',
+  ),
+  "utf8",
+);
 
 await fs.writeFile(coreOutDtsPath, dts, "utf8");
 await fs.copyFile(coreOutJsPath, syncOutJsPath);

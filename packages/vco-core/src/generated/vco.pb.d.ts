@@ -1,4 +1,4 @@
-import * as $protobuf from "protobufjs/minimal";
+import $protobuf from "protobufjs/minimal.js";
 
 export namespace vco {
   namespace v3 {
