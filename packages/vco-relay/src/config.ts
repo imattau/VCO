@@ -1,18 +1,34 @@
 import { readFileSync } from "node:fs";
 
+/**
+ * Configuration for Proof of Work (PoW) enforcement at the relay.
+ */
 export interface RelayPowConfig {
+  /** The minimum difficulty required for any envelope. */
   defaultDifficulty: number;
+  /** The maximum difficulty the relay will ever request. */
   maxDifficulty: number;
+  /** The time window in seconds for sliding window rate limiting. */
   windowSeconds: number;
 }
 
+/**
+ * Main configuration for the VCO Relay server.
+ */
 export interface RelayConfig {
+  /** List of multiaddresses to listen on (e.g. libp2p addresses). */
   listenAddrs: string[];
+  /** Host for the HTTP control/monitoring API. */
   httpHost: string;
+  /** Port for the HTTP control/monitoring API. */
   httpPort?: number;
+  /** Directory for persistent storage. */
   dataDir: string;
+  /** Maximum number of concurrent peer connections. */
   maxConnections: number;
+  /** PoW enforcement configuration. */
   pow: RelayPowConfig;
+  /** Maximum size of the object store in MB. 0 means unlimited. */
   maxStoreSizeMb: number;
 }
 
@@ -55,11 +71,23 @@ function parseEnvOverrides(env: Record<string, string | undefined>, config: Rela
   return out;
 }
 
+/**
+ * Options for loading the relay configuration.
+ */
 export interface LoadConfigOptions {
+  /** Path to a JSON configuration file. */
   configPath: string | undefined;
+  /** Environment variables to use for overrides. */
   env: Record<string, string | undefined>;
 }
 
+/**
+ * Loads the relay configuration from defaults, a file, and environment variables.
+ * Precedence: Env Vars > Config File > Defaults.
+ *
+ * @param options Loading options including path and environment.
+ * @returns The fully merged RelayConfig.
+ */
 export function loadConfig(options: LoadConfigOptions): RelayConfig {
   let config: RelayConfig = structuredClone(DEFAULTS);
   if (options.configPath) {
