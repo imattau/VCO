@@ -283,3 +283,133 @@ console.log(`Generated ${path.relative(projectRoot, coreOutJsPath)}`);
 console.log(`Generated ${path.relative(projectRoot, coreOutDtsPath)}`);
 console.log(`Generated ${path.relative(projectRoot, syncOutJsPath)}`);
 console.log(`Generated ${path.relative(projectRoot, syncOutDtsPath)}`);
+
+// ── Application-layer schema protos ──────────────────────────────────────────
+
+const schemasOutDir = path.join(projectRoot, "packages/vco-schemas/src/generated");
+await fs.mkdir(schemasOutDir, { recursive: true });
+
+const schemaTargets = [
+  {
+    protoFile: "proto/vco/schemas/post.proto",
+    outBase: "post",
+    // Top-level re-export so helpers can `import { Post } from "./generated/post.pb.js"`
+    reExport: "export const Post = vco.schemas.Post;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+
+export namespace vco {
+  namespace schemas {
+    interface IPost {
+      schema?: string | null;
+      content?: string | null;
+      mediaCids?: Uint8Array[] | null;
+      timestampMs?: number | null;
+      channelId?: string | null;
+    }
+    class Post implements IPost {
+      constructor(properties?: IPost);
+      public schema: string;
+      public content: string;
+      public mediaCids: Uint8Array[];
+      public timestampMs: number;
+      public channelId: string;
+      public static create(properties?: IPost): Post;
+      public static encode(message: IPost, writer?: $protobuf.Writer): $protobuf.Writer;
+      public static decode(reader: $protobuf.Reader | Uint8Array, length?: number): Post;
+      public static verify(message: { [k: string]: unknown }): string | null;
+    }
+  }
+}
+export const Post: typeof vco.schemas.Post;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/profile.proto",
+    outBase: "profile",
+    reExport: "export const Profile = vco.schemas.Profile;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+
+export namespace vco {
+  namespace schemas {
+    interface IProfile {
+      schema?: string | null;
+      displayName?: string | null;
+      avatarCid?: Uint8Array | null;
+      previousManifest?: Uint8Array | null;
+      bio?: string | null;
+    }
+    class Profile implements IProfile {
+      constructor(properties?: IProfile);
+      public schema: string;
+      public displayName: string;
+      public avatarCid: Uint8Array;
+      public previousManifest: Uint8Array;
+      public bio: string;
+      public static create(properties?: IProfile): Profile;
+      public static encode(message: IProfile, writer?: $protobuf.Writer): $protobuf.Writer;
+      public static decode(reader: $protobuf.Reader | Uint8Array, length?: number): Profile;
+      public static verify(message: { [k: string]: unknown }): string | null;
+    }
+  }
+}
+export const Profile: typeof vco.schemas.Profile;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/manifest.proto",
+    outBase: "manifest",
+    reExport: "export const SequenceManifest = vco.schemas.SequenceManifest;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+
+export namespace vco {
+  namespace schemas {
+    interface ISequenceManifest {
+      schema?: string | null;
+      chunkCids?: Uint8Array[] | null;
+      totalSize?: number | null;
+      mimeType?: string | null;
+      previousManifest?: Uint8Array | null;
+    }
+    class SequenceManifest implements ISequenceManifest {
+      constructor(properties?: ISequenceManifest);
+      public schema: string;
+      public chunkCids: Uint8Array[];
+      public totalSize: number;
+      public mimeType: string;
+      public previousManifest: Uint8Array;
+      public static create(properties?: ISequenceManifest): SequenceManifest;
+      public static encode(message: ISequenceManifest, writer?: $protobuf.Writer): $protobuf.Writer;
+      public static decode(reader: $protobuf.Reader | Uint8Array, length?: number): SequenceManifest;
+      public static verify(message: { [k: string]: unknown }): string | null;
+    }
+  }
+}
+export const SequenceManifest: typeof vco.schemas.SequenceManifest;
+`,
+  },
+];
+
+for (const target of schemaTargets) {
+  const jsOut = path.join(schemasOutDir, `${target.outBase}.pb.js`);
+  const dtsOut = path.join(schemasOutDir, `${target.outBase}.pb.d.ts`);
+
+  await execFileAsync(
+    "npm",
+    ["exec", "--", "pbjs", "-t", "static-module", "-w", "es6", "-o", jsOut,
+      path.join(projectRoot, target.protoFile)],
+    { cwd: projectRoot },
+  );
+
+  // Fix CJS/ESM import + add .js extension, then append top-level re-export.
+  let js = await fs.readFile(jsOut, "utf8");
+  js = js.replace(
+    'import * as $protobuf from "protobufjs/minimal";',
+    'import $protobuf from "protobufjs/minimal.js";',
+  );
+  js += `\n${target.reExport}\n`;
+  await fs.writeFile(jsOut, js, "utf8");
+
+  await fs.writeFile(dtsOut, target.dts, "utf8");
+  console.log(`Generated ${path.relative(projectRoot, jsOut)}`);
+  console.log(`Generated ${path.relative(projectRoot, dtsOut)}`);
+}
