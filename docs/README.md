@@ -1,3 +1,5 @@
+![VCO Header](../VCO_header.png)
+
 # VCO Protocol Documentation
 
 Welcome to the Verifiable Content Object (VCO) protocol documentation. This site provides technical specifications, architectural designs, and detailed API references for the VCO ecosystem.

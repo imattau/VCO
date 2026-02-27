@@ -1,3 +1,5 @@
+![VCO Header](./VCO_header.png)
+
 # VCO (Verifiable Content Object) Protocol
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
