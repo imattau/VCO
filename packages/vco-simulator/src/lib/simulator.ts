@@ -38,6 +38,15 @@ export class SimulatedWire {
     this.emit("sync", `Peer 0xed...f2: Requested range sync for /social/posts`, null, 1200);
     this.emit("sync", `Peer 0xed...f2: Reconciliation complete. 1 new object received.`, null, 1800);
   }
+
+  public simulateSpam() {
+    this.emit("system", "ATTACK: Attempting to flood relay with 0-PoW envelopes...");
+    for (let i = 0; i < 20; i++) {
+      const id = Math.random().toString(16).slice(2, 10);
+      this.emit("transport", `[SPAM] Dropped low-PoW envelope ${id}`, null, i * 50);
+    }
+    this.emit("system", "Relay Health: Stable (PoW filter blocked 20/20 spam attempts)", null, 1100);
+  }
 }
 
 export const globalWire = new SimulatedWire();

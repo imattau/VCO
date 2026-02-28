@@ -4,7 +4,7 @@ import { useIdentity } from "../identity/IdentityContext.js";
 import { buildListing } from "../../lib/vco.js";
 import { globalWire, log } from "../../lib/simulator.js";
 import { Badge } from "../../components/ui/Badge.js";
-import { Activity, Shield, Cpu } from "lucide-react";
+import { Activity, Shield, Cpu, Trash2 } from "lucide-react";
 
 export function ObjectFactory() {
   const { identity } = useIdentity();
@@ -42,6 +42,10 @@ export function ObjectFactory() {
     log("system", `REJECTED: Object ${tamperedId.slice(0, 8)} dropped by relay due to integrity failure.`, null, 900);
   };
 
+  const launchSpamAttack = () => {
+    globalWire.simulateSpam();
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 shadow-xl">
@@ -65,6 +69,13 @@ export function ObjectFactory() {
              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black py-3 rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/10 active:scale-95"
            >
              {busy ? "Hashing & Signing..." : <><Shield size={16} /> Sign & Broadcast</>}
+           </button>
+
+           <button 
+             onClick={launchSpamAttack}
+             className="w-full bg-zinc-900 hover:bg-red-950/20 text-zinc-500 hover:text-red-400 font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition-all border border-zinc-800 hover:border-red-900/30 text-[10px] uppercase tracking-widest mt-2"
+           >
+             <Trash2 size={12} /> Launch Spam Attack (0 PoW)
            </button>
         </div>
       </div>
