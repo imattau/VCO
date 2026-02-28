@@ -7,16 +7,25 @@ import { ListingDetail } from "./features/listings/ListingDetail.js";
 import { MakeOfferModal } from "./features/listings/MakeOfferModal.js";
 import { OffersList } from "./features/listings/OffersList.js";
 import type { ListingWithMetadata, OfferWithMetadata } from "./features/listings/MarketplaceContext.js";
-import { uint8ArrayToHex, buildListing, buildOffer, buildReceipt } from "./lib/vco.js";
+import { uint8ArrayToHex, buildListing, buildOffer, buildReceipt, decodeOfferEnvelope } from "./lib/vco.js";
 import { publish } from "./lib/transport.js";
 
 function Layout() {
   const { identity } = useIdentity();
-  const { listings, offers, addListing } = useMarketplace();
+  const { listings, offers, addListing, addOffer } = useMarketplace();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedListing, setSelectedListing] = useState<ListingWithMetadata | null>(null);
   const [offerListing, setOfferListing] = useState<ListingWithMetadata | null>(null);
-  const [tab, setTab] = useState<"browse" | "my-listings" | "sales">("browse");
+  const [tab, setTab] = useState<"browse" | "my-listings" | "offers">("browse");
+  const [offerType, setOfferType] = useState<"buying" | "selling">("selling");
+
+  const userId = identity ? uint8ArrayToHex(identity.creatorId) : "";
+
+  const incomingOffers = offers.filter(o => 
+    listings.some(l => l.id === o.listingId && l.authorId === userId)
+  );
+  
+  const outgoingOffers = offers.filter(o => o.authorId === userId);
 
   const handleCreateListing = async (data: { title: string; description: string; priceSats: bigint }) => {
     if (!identity) return;
@@ -28,19 +37,28 @@ function Layout() {
     if (!identity) return;
     const encoded = await buildOffer(data, identity);
     publish(`offers:${data.listingId}`, encoded);
+    
+    const knownAuthors = new Map([[uint8ArrayToHex(identity.creatorId), identity.displayName]]);
+    addOffer(decodeOfferEnvelope(encoded, knownAuthors));
+    
     alert("Offer published to the network!");
   };
 
   const handleBuyNow = async (listing: ListingWithMetadata) => {
     if (!identity) return;
-    const encoded = await buildOffer({
+    const data = {
       listingId: listing.id,
       offerSats: listing.priceSats,
       message: "I would like to buy this item at the listed price."
-    }, identity);
+    };
+    const encoded = await buildOffer(data, identity);
     publish(`offers:${listing.id}`, encoded);
+    
+    const knownAuthors = new Map([[uint8ArrayToHex(identity.creatorId), identity.displayName]]);
+    addOffer(decodeOfferEnvelope(encoded, knownAuthors));
+
     setSelectedListing(null);
-    alert("Purchase intent sent! Check your purchase history for updates.");
+    alert("Purchase intent sent! Check your offers for updates.");
   };
 
   const handleAcceptOffer = async (offer: OfferWithMetadata) => {
@@ -96,10 +114,10 @@ function Layout() {
             My Listings
           </button>
           <button 
-            onClick={() => setTab("sales")}
-            className={`w-full text-left px-3 py-2 rounded font-medium text-sm transition-all ${tab === "sales" ? "bg-indigo-600/10 text-indigo-400 border border-indigo-500/20" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"}`}
+            onClick={() => setTab("offers")}
+            className={`w-full text-left px-3 py-2 rounded font-medium text-sm transition-all ${tab === "offers" ? "bg-indigo-600/10 text-indigo-400 border border-indigo-500/20" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"}`}
           >
-            Sales & History
+            Offers
           </button>
           <div className="pt-4 mt-4 border-t border-zinc-800/50">
              <button 
@@ -116,13 +134,35 @@ function Layout() {
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-bold text-white">
-                {tab === "browse" ? "Recent Listings" : tab === "my-listings" ? "My Active Listings" : "Sales & History"}
+                {tab === "browse" ? "Recent Listings" : tab === "my-listings" ? "My Active Listings" : "Manage Offers"}
               </h2>
+              
+              {tab === "offers" && (
+                <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
+                  <button 
+                    onClick={() => setOfferType("selling")}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${offerType === "selling" ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}
+                  >
+                    Incoming (Selling)
+                  </button>
+                  <button 
+                    onClick={() => setOfferType("buying")}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${offerType === "buying" ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}
+                  >
+                    Outgoing (Buying)
+                  </button>
+                </div>
+              )}
             </div>
 
-            {tab === "sales" ? (
-              <OffersList offers={offers} listings={listings} onAccept={handleAcceptOffer} />
-            ) : listings.filter(l => tab === "browse" || (identity && l.authorId === uint8ArrayToHex(identity.creatorId))).length === 0 ? (
+            {tab === "offers" ? (
+              <OffersList 
+                mode={offerType}
+                offers={offerType === "selling" ? incomingOffers : outgoingOffers} 
+                listings={listings} 
+                onAccept={handleAcceptOffer} 
+              />
+            ) : listings.filter(l => tab === "browse" || (identity && l.authorId === userId)).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl">
                 <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-4 text-zinc-700 border border-zinc-800">
                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M2 7v13a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7"/><path d="M12 18V9"/><path d="m9 15 3 3 3-3"/></svg>
