@@ -4,12 +4,13 @@ import type { ListingWithMetadata } from "./MarketplaceContext.js";
 
 interface Props {
   listing: ListingWithMetadata;
+  isSold?: boolean;
   onDetail: (listing: ListingWithMetadata) => void;
 }
 
-export function ListingCard({ listing, onDetail }: Props) {
+export function ListingCard({ listing, isSold, onDetail }: Props) {
   return (
-    <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-xl overflow-hidden group hover:border-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/5">
+    <div className={`bg-zinc-900/40 border border-zinc-800/50 rounded-xl overflow-hidden group hover:border-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/5 ${isSold ? 'opacity-60 grayscale-[0.5]' : ''}`}>
       <div className="aspect-[4/3] bg-zinc-800/50 flex items-center justify-center text-zinc-700 group-hover:bg-zinc-800 transition-colors relative">
         {listing.mediaCids.length > 0 ? (
           <div className="text-xs uppercase tracking-widest opacity-40">Images Attached</div>
@@ -20,6 +21,11 @@ export function ListingCard({ listing, onDetail }: Props) {
            <div className="px-2 py-1 bg-zinc-950/80 backdrop-blur rounded text-[10px] font-bold text-zinc-400 border border-zinc-800">
              POW {listing.powScore}
            </div>
+           {isSold && (
+             <div className="px-2 py-1 bg-emerald-600 backdrop-blur rounded text-[10px] font-black text-white border border-emerald-500 shadow-lg shadow-emerald-500/20">
+               SOLD
+             </div>
+           )}
         </div>
       </div>
       <div className="p-5">

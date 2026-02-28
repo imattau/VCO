@@ -2,34 +2,42 @@
 import { Modal } from "../../components/ui/Modal.js";
 import { Avatar } from "../../components/ui/Avatar.js";
 import type { ListingWithMetadata } from "./MarketplaceContext.js";
-import { ShoppingCart, MessageSquare, Shield, ExternalLink } from "lucide-react";
+import { ShoppingCart, MessageSquare, Shield, ExternalLink, CheckCircle } from "lucide-react";
 
 interface Props {
   listing: ListingWithMetadata | null;
+  isSold?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onMakeOffer: (listing: ListingWithMetadata) => void;
   onBuyNow: (listing: ListingWithMetadata) => void;
 }
 
-export function ListingDetail({ listing, isOpen, onClose, onMakeOffer, onBuyNow }: Props) {
+export function ListingDetail({ listing, isSold, isOpen, onClose, onMakeOffer, onBuyNow }: Props) {
   if (!listing) return null;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Item Details">
       <div className="space-y-6">
-        <div className="aspect-video bg-zinc-900 rounded-lg flex items-center justify-center border border-zinc-800">
+        <div className="aspect-video bg-zinc-900 rounded-lg flex items-center justify-center border border-zinc-800 relative overflow-hidden">
            <span className="text-zinc-700 text-sm font-mono uppercase tracking-[0.2em]">VCO Verifiable Object</span>
+           {isSold && (
+             <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center">
+               <div className="border-4 border-emerald-500 text-emerald-500 font-black text-4xl px-6 py-2 rounded-xl rotate-[-12deg] shadow-2xl">SOLD</div>
+             </div>
+           )}
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-2xl font-black text-white">{listing.title}</h2>
-            <div className="text-2xl font-black text-indigo-400">{listing.priceSats.toLocaleString()} <span className="text-xs uppercase">Sats</span></div>
+            <div className={`text-2xl font-black ${isSold ? 'text-zinc-600 line-through' : 'text-indigo-400'}`}>
+              {listing.priceSats.toLocaleString()} <span className="text-xs uppercase">Sats</span>
+            </div>
           </div>
           <div className="flex items-center gap-2 text-zinc-500 text-xs">
-            <Shield size={12} className="text-emerald-500" />
-            <span>Valid VCO Protocol v3 Object</span>
+            <Shield size={12} className={isSold ? "text-zinc-600" : "text-emerald-500"} />
+            <span>{isSold ? 'Transaction Complete' : 'Valid VCO Protocol v3 Object'}</span>
             <span>•</span>
             <span>CID: {listing.id.slice(0, 16)}...</span>
           </div>
@@ -49,18 +57,26 @@ export function ListingDetail({ listing, isOpen, onClose, onMakeOffer, onBuyNow 
         </div>
 
         <div className="flex gap-3 pt-2">
-          <button 
-            onClick={() => onBuyNow(listing)}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
-          >
-            Buy Now
-          </button>
-          <button 
-            onClick={() => onMakeOffer(listing)}
-            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all border border-zinc-700 active:scale-95"
-          >
-            <ShoppingCart size={18} /> Offer
-          </button>
+          {!isSold ? (
+            <>
+              <button 
+                onClick={() => onBuyNow(listing)}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
+              >
+                Buy Now
+              </button>
+              <button 
+                onClick={() => onMakeOffer(listing)}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all border border-zinc-700 active:scale-95"
+              >
+                <ShoppingCart size={18} /> Offer
+              </button>
+            </>
+          ) : (
+            <div className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-500 font-bold py-3 rounded-lg flex items-center justify-center gap-2">
+              <CheckCircle size={18} className="text-emerald-500" /> This item is no longer available
+            </div>
+          )}
           <button className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors border border-zinc-700">
             <MessageSquare size={18} />
           </button>

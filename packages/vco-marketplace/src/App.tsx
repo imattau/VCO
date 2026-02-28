@@ -6,18 +6,19 @@ import { CreateListingModal } from "./features/listings/CreateListingModal.js";
 import { ListingDetail } from "./features/listings/ListingDetail.js";
 import { MakeOfferModal } from "./features/listings/MakeOfferModal.js";
 import { OffersList } from "./features/listings/OffersList.js";
+import { TradeHistory } from "./features/listings/TradeHistory.js";
 import type { ListingWithMetadata, OfferWithMetadata } from "./features/listings/MarketplaceContext.js";
-import { uint8ArrayToHex, buildListing, buildOffer, buildReceipt, decodeOfferEnvelope } from "./lib/vco.js";
+import { uint8ArrayToHex, buildListing, buildOffer, buildReceipt, decodeOfferEnvelope, decodeReceiptEnvelope } from "./lib/vco.js";
 import { publish } from "./lib/transport.js";
 
 function Layout() {
   const { identity } = useIdentity();
-  const { listings, offers, addListing, addOffer } = useMarketplace();
+  const { listings, offers, receipts, addListing, addOffer, addReceipt } = useMarketplace();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedListing, setSelectedListing] = useState<ListingWithMetadata | null>(null);
   const [offerListing, setOfferListing] = useState<ListingWithMetadata | null>(null);
   const [tab, setTab] = useState<"browse" | "my-listings" | "offers">("browse");
-  const [offerType, setOfferType] = useState<"buying" | "selling">("selling");
+  const [offerType, setOfferType] = useState<"buying" | "selling" | "history">("selling");
 
   const userId = identity ? uint8ArrayToHex(identity.creatorId) : "";
 
@@ -72,8 +73,9 @@ function Layout() {
     }, identity);
     publish(`receipts:${offer.listingId}`, encoded);
     
-    // We'd decode it back to add to state if we don't have decodeReceipt here
-    // For now just alert or mock add
+    const knownAuthors = new Map([[uint8ArrayToHex(identity.creatorId), identity.displayName]]);
+    addReceipt(decodeReceiptEnvelope(encoded, knownAuthors));
+    
     alert("Offer accepted! Receipt published.");
   };
 
@@ -151,17 +153,27 @@ function Layout() {
                   >
                     Outgoing (Buying)
                   </button>
+                  <button 
+                    onClick={() => setOfferType("history")}
+                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${offerType === "history" ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}
+                  >
+                    Trade History
+                  </button>
                 </div>
               )}
             </div>
 
             {tab === "offers" ? (
-              <OffersList 
-                mode={offerType}
-                offers={offerType === "selling" ? incomingOffers : outgoingOffers} 
-                listings={listings} 
-                onAccept={handleAcceptOffer} 
-              />
+              offerType === "history" ? (
+                <TradeHistory receipts={receipts} listings={listings} userId={userId} />
+              ) : (
+                <OffersList 
+                  mode={offerType}
+                  offers={offerType === "selling" ? incomingOffers : outgoingOffers} 
+                  listings={listings} 
+                  onAccept={handleAcceptOffer} 
+                />
+              )
             ) : listings.filter(l => tab === "browse" || (identity && l.authorId === userId)).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl">
                 <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-4 text-zinc-700 border border-zinc-800">
@@ -179,9 +191,14 @@ function Layout() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-12">
                 {listings
-                  .filter(l => tab === "browse" || (identity && l.authorId === uint8ArrayToHex(identity.creatorId)))
+                  .filter(l => tab === "browse" || (identity && l.authorId === userId))
                   .map((l) => (
-                    <ListingCard key={l.id} listing={l} onDetail={setSelectedListing} />
+                    <ListingCard 
+                      key={l.id} 
+                      listing={l} 
+                      isSold={receipts.some(r => r.listingId === l.id)}
+                      onDetail={setSelectedListing} 
+                    />
                   ))}
               </div>
             )}
@@ -197,6 +214,7 @@ function Layout() {
 
       <ListingDetail 
         listing={selectedListing} 
+        isSold={selectedListing ? receipts.some(r => r.listingId === selectedListing.id) : false}
         isOpen={!!selectedListing}
         onClose={() => setSelectedListing(null)}
         onMakeOffer={(l) => {
