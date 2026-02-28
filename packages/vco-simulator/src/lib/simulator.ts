@@ -10,16 +10,29 @@ export interface NetworkEvent {
 
 export class SimulatedWire {
   private listeners: ((event: NetworkEvent) => void)[] = [];
+  public isObfuscated = false;
 
   public addListener(fn: (event: NetworkEvent) => void) {
     this.listeners.push(fn);
   }
 
+  public setObfuscation(enabled: boolean) {
+    this.isObfuscated = enabled;
+    this.emit("system", `TOL Mode ${enabled ? "ENABLED" : "DISABLED"}`);
+  }
+
   public emit(type: NetworkEvent["type"], message: string, data?: any, delay = 0) {
+    let finalMessage = message;
+    
+    // In obfuscated mode, transport/sync events look like generic frames to an observer
+    if (this.isObfuscated && (type === "transport" || type === "sync" || type === "object")) {
+      finalMessage = `[TOL Frame] Encrypted Payload (Fixed Size: 1024 bytes)`;
+    }
+
     const event: NetworkEvent = {
       id: Math.random().toString(36).slice(2, 9),
       type,
-      message,
+      message: finalMessage,
       timestamp: Date.now(),
       data
     };
@@ -43,7 +56,8 @@ export class SimulatedWire {
     this.emit("system", "ATTACK: Attempting to flood relay with 0-PoW envelopes...");
     for (let i = 0; i < 20; i++) {
       const id = Math.random().toString(16).slice(2, 10);
-      this.emit("transport", `[SPAM] Dropped low-PoW envelope ${id}`, null, i * 50);
+      const msg = this.isObfuscated ? `[TOL Frame] Low-PoW Pattern Detected (Dropped)` : `[SPAM] Dropped low-PoW envelope ${id}`;
+      this.emit("transport", msg, null, i * 50);
     }
     this.emit("system", "Relay Health: Stable (PoW filter blocked 20/20 spam attempts)", null, 1100);
   }

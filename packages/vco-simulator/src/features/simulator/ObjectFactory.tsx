@@ -4,7 +4,7 @@ import { useIdentity } from "../identity/IdentityContext.js";
 import { buildListing } from "../../lib/vco.js";
 import { globalWire, log } from "../../lib/simulator.js";
 import { Badge } from "../../components/ui/Badge.js";
-import { Activity, Shield, Cpu, Trash2 } from "lucide-react";
+import { Activity, Shield, Cpu, Trash2, Users } from "lucide-react";
 
 export function ObjectFactory() {
   const { identity } = useIdentity();
@@ -46,6 +46,12 @@ export function ObjectFactory() {
     globalWire.simulateSpam();
   };
 
+  const broadcastToGroup = () => {
+    log("system", "Factory: Encrypting payload for Group ID: 0x77...bb");
+    log("object", "New Group Message created", { type: "GroupChat" });
+    globalWire.broadcast({ id: "group_msg_" + Math.random().toString(36).slice(2, 8), powScore: 4 });
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 shadow-xl">
@@ -71,12 +77,22 @@ export function ObjectFactory() {
              {busy ? "Hashing & Signing..." : <><Shield size={16} /> Sign & Broadcast</>}
            </button>
 
-           <button 
-             onClick={launchSpamAttack}
-             className="w-full bg-zinc-900 hover:bg-red-950/20 text-zinc-500 hover:text-red-400 font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition-all border border-zinc-800 hover:border-red-900/30 text-[10px] uppercase tracking-widest mt-2"
-           >
-             <Trash2 size={12} /> Launch Spam Attack (0 PoW)
-           </button>
+           <div className="grid grid-cols-2 gap-2 mt-2">
+             <button 
+               onClick={launchSpamAttack}
+               className="bg-zinc-900 hover:bg-red-950/20 text-zinc-500 hover:text-red-400 font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition-all border border-zinc-800 hover:border-red-900/30 text-[10px] uppercase tracking-widest"
+             >
+               <Trash2 size={12} /> Spam Attack
+             </button>
+
+             <button 
+               disabled={!identity}
+               onClick={broadcastToGroup}
+               className="bg-zinc-900 hover:bg-indigo-950/20 text-zinc-500 hover:text-indigo-400 font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition-all border border-zinc-800 hover:border-indigo-900/30 text-[10px] uppercase tracking-widest"
+             >
+               <Users size={12} /> Group Chat
+             </button>
+           </div>
         </div>
       </div>
 

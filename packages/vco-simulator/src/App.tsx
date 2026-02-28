@@ -1,4 +1,5 @@
 // packages/vco-simulator/src/App.tsx
+import { useState } from "react";
 import { IdentityProvider, useIdentity } from "./features/identity/IdentityContext.js";
 import { Badge } from "./components/ui/Badge.js";
 import { Avatar } from "./components/ui/Avatar.js";
@@ -6,14 +7,21 @@ import { uint8ArrayToHex } from "./lib/vco.js";
 
 import { ObjectFactory } from "./features/simulator/ObjectFactory.js";
 import { NetworkMonitor } from "./features/simulator/NetworkMonitor.js";
-import { log } from "./lib/simulator.js";
+import { log, globalWire } from "./lib/simulator.js";
 
 function Layout() {
   const { identity } = useIdentity();
+  const [isTOL, setIsTOL] = useState(false);
 
   const resetNodes = () => {
     log("system", "Node Reset initiated. Clearing in-memory stores...");
     setTimeout(() => log("system", "Network topology restored. Peers: 2"), 500);
+  };
+
+  const toggleTOL = () => {
+    const newState = !isTOL;
+    setIsTOL(newState);
+    globalWire.setObfuscation(newState);
   };
 
   return (
@@ -51,9 +59,14 @@ function Layout() {
         <section className="flex-1 flex flex-col bg-black/20">
           <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/20 flex items-center justify-between shrink-0">
             <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Network Activity</h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+               <button 
+                 onClick={toggleTOL}
+                 className={`px-3 py-1 rounded-full text-[10px] font-black transition-all border ${isTOL ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20' : 'bg-zinc-800 text-zinc-500 border-zinc-700'}`}
+               >
+                 {isTOL ? "TOL: ON (Observer View)" : "TOL: OFF (Debug View)"}
+               </button>
                <Badge variant="default">Nodes: 2</Badge>
-               <Badge variant="warning">Latency: 50ms</Badge>
             </div>
           </div>
           <div className="flex-1 overflow-hidden">
