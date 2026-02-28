@@ -61,12 +61,12 @@ export class NobleCryptoProvider implements CryptoProvider {
 
   /** Signs using Ed25519. */
   sign(message: ByteArray, privateKey: ByteArray): ByteArray {
-    return ed25519.sign(message, privateKey);
+    return ed25519.sign(Uint8Array.from(message), Uint8Array.from(privateKey));
   }
 
   /** Verifies using Ed25519. */
   verify(message: ByteArray, signature: ByteArray, publicKey: ByteArray): boolean {
-    return ed25519.verify(signature, message, publicKey);
+    return ed25519.verify(Uint8Array.from(signature), Uint8Array.from(message), Uint8Array.from(publicKey));
   }
 }
 
