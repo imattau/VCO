@@ -18,4 +18,6 @@ message Post {
   int64 timestamp_ms = 4;
   // Optional: channel or topic identifier (application-level routing)
   string channel_id = 5;
+  // Structured tags (e.g. hashtags) for indexing and discovery.
+  repeated string tags = 6;
 }

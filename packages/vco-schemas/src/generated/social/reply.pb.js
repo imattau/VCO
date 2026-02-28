@@ -37,6 +37,7 @@ export const vco = $root.vco = (() => {
              * @property {Array.<Uint8Array>|null} [mediaCids] Reply mediaCids
              * @property {number|Long|null} [timestampMs] Reply timestampMs
              * @property {string|null} [channelId] Reply channelId
+             * @property {Array.<string>|null} [tags] Reply tags
              */
 
             /**
@@ -49,6 +50,7 @@ export const vco = $root.vco = (() => {
              */
             function Reply(properties) {
                 this.mediaCids = [];
+                this.tags = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                         if (properties[keys[i]] != null)
@@ -104,6 +106,14 @@ export const vco = $root.vco = (() => {
             Reply.prototype.channelId = "";
 
             /**
+             * Reply tags.
+             * @member {Array.<string>} tags
+             * @memberof vco.schemas.Reply
+             * @instance
+             */
+            Reply.prototype.tags = $util.emptyArray;
+
+            /**
              * Creates a new Reply instance using the specified properties.
              * @function create
              * @memberof vco.schemas.Reply
@@ -140,6 +150,9 @@ export const vco = $root.vco = (() => {
                     writer.uint32(/* id 5, wireType 0 =*/40).int64(message.timestampMs);
                 if (message.channelId != null && Object.hasOwnProperty.call(message, "channelId"))
                     writer.uint32(/* id 6, wireType 2 =*/50).string(message.channelId);
+                if (message.tags != null && message.tags.length)
+                    for (let i = 0; i < message.tags.length; ++i)
+                        writer.uint32(/* id 7, wireType 2 =*/58).string(message.tags[i]);
                 return writer;
             };
 
@@ -202,6 +215,12 @@ export const vco = $root.vco = (() => {
                             message.channelId = reader.string();
                             break;
                         }
+                    case 7: {
+                            if (!(message.tags && message.tags.length))
+                                message.tags = [];
+                            message.tags.push(reader.string());
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7);
                         break;
@@ -259,6 +278,13 @@ export const vco = $root.vco = (() => {
                 if (message.channelId != null && message.hasOwnProperty("channelId"))
                     if (!$util.isString(message.channelId))
                         return "channelId: string expected";
+                if (message.tags != null && message.hasOwnProperty("tags")) {
+                    if (!Array.isArray(message.tags))
+                        return "tags: array expected";
+                    for (let i = 0; i < message.tags.length; ++i)
+                        if (!$util.isString(message.tags[i]))
+                            return "tags: string[] expected";
+                }
                 return null;
             };
 
@@ -304,6 +330,13 @@ export const vco = $root.vco = (() => {
                         message.timestampMs = new $util.LongBits(object.timestampMs.low >>> 0, object.timestampMs.high >>> 0).toNumber();
                 if (object.channelId != null)
                     message.channelId = String(object.channelId);
+                if (object.tags) {
+                    if (!Array.isArray(object.tags))
+                        throw TypeError(".vco.schemas.Reply.tags: array expected");
+                    message.tags = [];
+                    for (let i = 0; i < object.tags.length; ++i)
+                        message.tags[i] = String(object.tags[i]);
+                }
                 return message;
             };
 
@@ -320,8 +353,10 @@ export const vco = $root.vco = (() => {
                 if (!options)
                     options = {};
                 let object = {};
-                if (options.arrays || options.defaults)
+                if (options.arrays || options.defaults) {
                     object.mediaCids = [];
+                    object.tags = [];
+                }
                 if (options.defaults) {
                     object.schema = "";
                     if (options.bytes === String)
@@ -357,6 +392,11 @@ export const vco = $root.vco = (() => {
                         object.timestampMs = options.longs === String ? $util.Long.prototype.toString.call(message.timestampMs) : options.longs === Number ? new $util.LongBits(message.timestampMs.low >>> 0, message.timestampMs.high >>> 0).toNumber() : message.timestampMs;
                 if (message.channelId != null && message.hasOwnProperty("channelId"))
                     object.channelId = message.channelId;
+                if (message.tags && message.tags.length) {
+                    object.tags = [];
+                    for (let j = 0; j < message.tags.length; ++j)
+                        object.tags[j] = message.tags[j];
+                }
                 return object;
             };
 

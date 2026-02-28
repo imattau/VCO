@@ -7,4 +7,5 @@ message Reply {
   repeated bytes media_cids = 4;
   int64 timestamp_ms = 5;
   string channel_id = 6;
+  repeated string tags = 7;
 }
