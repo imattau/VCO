@@ -1,6 +1,11 @@
 // packages/vco-marketplace/src/features/listings/MarketplaceContext.tsx
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import type { ListingData } from "@vco/vco-schemas";
+import { serialize, deserialize } from "../../lib/storage.js";
+
+const LISTINGS_KEY = "vco_marketplace_listings";
+const OFFERS_KEY = "vco_marketplace_offers";
+const RECEIPTS_KEY = "vco_marketplace_receipts";
 
 export interface ListingWithMetadata extends ListingData {
   id: string; // CID of the envelope
@@ -47,6 +52,30 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
   const [listings, setListings] = useState<ListingWithMetadata[]>([]);
   const [offers, setOffers] = useState<OfferWithMetadata[]>([]);
   const [receipts, setReceipts] = useState<ReceiptWithMetadata[]>([]);
+
+  // Load from storage on mount
+  useEffect(() => {
+    const savedListings = deserialize<ListingWithMetadata[]>(localStorage.getItem(LISTINGS_KEY));
+    const savedOffers = deserialize<OfferWithMetadata[]>(localStorage.getItem(OFFERS_KEY));
+    const savedReceipts = deserialize<ReceiptWithMetadata[]>(localStorage.getItem(RECEIPTS_KEY));
+
+    if (savedListings) setListings(savedListings);
+    if (savedOffers) setOffers(savedOffers);
+    if (savedReceipts) setReceipts(savedReceipts);
+  }, []);
+
+  // Persist to storage on change
+  useEffect(() => {
+    if (listings.length > 0) localStorage.setItem(LISTINGS_KEY, serialize(listings));
+  }, [listings]);
+
+  useEffect(() => {
+    if (offers.length > 0) localStorage.setItem(OFFERS_KEY, serialize(offers));
+  }, [offers]);
+
+  useEffect(() => {
+    if (receipts.length > 0) localStorage.setItem(RECEIPTS_KEY, serialize(receipts));
+  }, [receipts]);
 
   const addListing = (listing: ListingWithMetadata) => {
     setListings((prev) => {
