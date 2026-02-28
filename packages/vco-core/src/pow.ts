@@ -1,11 +1,11 @@
-import { EnvelopeValidationError } from "./errors.js";
+import { PoWError } from "./errors.js";
 
 const MAX_UINT32 = 0xffff_ffff;
 const HASH_BITS = 256;
 
 function assertDifficulty(difficulty: number): void {
   if (!Number.isInteger(difficulty) || difficulty < 0 || difficulty > HASH_BITS) {
-    throw new EnvelopeValidationError("PoW difficulty must be an integer between 0 and 256.");
+    throw new PoWError("PoW difficulty must be an integer between 0 and 256.");
   }
 }
 
@@ -53,7 +53,7 @@ export function solvePoWNonce(input: SolvePoWInput): SolvePoWResult {
   assertDifficulty(input.difficulty);
   const initialNonce = input.initialNonce ?? 0;
   if (!Number.isInteger(initialNonce) || initialNonce < 0 || initialNonce > MAX_UINT32) {
-    throw new EnvelopeValidationError("PoW nonce must be a uint32.");
+    throw new PoWError("PoW nonce must be a uint32.");
   }
 
   let nonce = initialNonce >>> 0;
@@ -69,7 +69,7 @@ export function solvePoWNonce(input: SolvePoWInput): SolvePoWResult {
     nonce = (nonce + 1) >>> 0;
   }
 
-  throw new EnvelopeValidationError("Unable to satisfy PoW difficulty within uint32 nonce space.");
+  throw new PoWError("Unable to satisfy PoW difficulty within uint32 nonce space.");
 }
 
 export function getPowScore(headerHash: Uint8Array): number {

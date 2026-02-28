@@ -4,7 +4,7 @@ import {
   MULTICODEC_SECP256K1_PUB,
   MULTIHASH_BLAKE3_256,
 } from "./constants.js";
-import { EnvelopeValidationError } from "./errors.js";
+import { MultiformatError } from "./errors.js";
 import { digest, varint } from "multiformats";
 
 export interface VarintDecoded {
@@ -25,7 +25,7 @@ export interface DecodedMultihash {
 
 export function encodeVarint(value: number): Uint8Array {
   if (!Number.isInteger(value) || value < 0) {
-    throw new EnvelopeValidationError("Varint value must be a non-negative integer.");
+    throw new MultiformatError("Varint value must be a non-negative integer.");
   }
 
   const out = new Uint8Array(varint.encodingLength(value));
@@ -37,7 +37,7 @@ export function decodeVarint(bytes: Uint8Array, offset = 0): VarintDecoded {
     const [value, bytesRead] = varint.decode(bytes, offset);
     return { value, bytesRead };
   } catch {
-    throw new EnvelopeValidationError("Failed to decode varint.");
+    throw new MultiformatError("Failed to decode varint.");
   }
 }
 
@@ -56,7 +56,7 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
 
 export function encodeEd25519Multikey(publicKey: Uint8Array): Uint8Array {
   if (publicKey.length !== ED25519_PUBLIC_KEY_LENGTH) {
-    throw new EnvelopeValidationError(
+    throw new MultiformatError(
       `Ed25519 public key must be ${ED25519_PUBLIC_KEY_LENGTH} bytes.`,
     );
   }
@@ -66,14 +66,14 @@ export function encodeEd25519Multikey(publicKey: Uint8Array): Uint8Array {
 
 export function decodeMultikey(multikey: Uint8Array): DecodedMultikey {
   if (multikey.length === 0) {
-    throw new EnvelopeValidationError("creatorId must not be empty.");
+    throw new MultiformatError("creatorId must not be empty.");
   }
 
   const { value: codec, bytesRead } = decodeVarint(multikey);
   const keyBytes = multikey.slice(bytesRead);
 
   if (keyBytes.length === 0) {
-    throw new EnvelopeValidationError("multikey must include key bytes.");
+    throw new MultiformatError("multikey must include key bytes.");
   }
 
   return { codec, keyBytes };
@@ -83,7 +83,7 @@ export function assertValidCreatorMultikey(multikey: Uint8Array): void {
   const decoded = decodeMultikey(multikey);
 
   if (decoded.codec === MULTICODEC_ED25519_PUB && decoded.keyBytes.length !== ED25519_PUBLIC_KEY_LENGTH) {
-    throw new EnvelopeValidationError(
+    throw new MultiformatError(
       `Ed25519 multikey payload must be ${ED25519_PUBLIC_KEY_LENGTH} bytes.`,
     );
   }
@@ -93,11 +93,11 @@ export function assertValidCreatorMultikey(multikey: Uint8Array): void {
     decoded.keyBytes.length !== 33 &&
     decoded.keyBytes.length !== 65
   ) {
-    throw new EnvelopeValidationError("Secp256k1 multikey payload must be 33 or 65 bytes.");
+    throw new MultiformatError("Secp256k1 multikey payload must be 33 or 65 bytes.");
   }
 
   if (decoded.codec !== MULTICODEC_ED25519_PUB && decoded.codec !== MULTICODEC_SECP256K1_PUB) {
-    throw new EnvelopeValidationError(`Unsupported multikey codec ${decoded.codec}.`);
+    throw new MultiformatError(`Unsupported multikey codec ${decoded.codec}.`);
   }
 }
 
@@ -114,7 +114,7 @@ export function decodeMultihash(multihash: Uint8Array): DecodedMultihash {
       digestBytes: decoded.digest,
     };
   } catch {
-    throw new EnvelopeValidationError("Failed to decode multihash.");
+    throw new MultiformatError("Failed to decode multihash.");
   }
 }
 
@@ -122,6 +122,6 @@ export function assertValidPayloadMultihash(multihash: Uint8Array): void {
   const decoded = decodeMultihash(multihash);
 
   if (decoded.digestBytes.length === 0) {
-    throw new EnvelopeValidationError("multihash digest must not be empty.");
+    throw new MultiformatError("multihash digest must not be empty.");
   }
 }

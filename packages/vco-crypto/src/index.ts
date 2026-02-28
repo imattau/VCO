@@ -1,6 +1,7 @@
 import { ed25519 } from "@noble/curves/ed25519";
 import { blake3 } from "@noble/hashes/blake3";
 import { varint } from "multiformats";
+import { CryptoError } from "./errors.js";
 
 /**
  * Common type for byte arrays (Uint8Array).
@@ -36,15 +37,15 @@ export interface CryptoProvider extends HashProvider, SignatureProvider {}
  */
 export class UnconfiguredCryptoProvider implements CryptoProvider {
   digest(_payload: ByteArray): ByteArray {
-    throw new Error("No crypto provider configured. Install and wire a standard library adapter.");
+    throw new CryptoError("No crypto provider configured. Install and wire a standard library adapter.");
   }
 
   sign(_message: ByteArray, _privateKey: ByteArray): ByteArray {
-    throw new Error("No crypto provider configured. Install and wire a standard library adapter.");
+    throw new CryptoError("No crypto provider configured. Install and wire a standard library adapter.");
   }
 
   verify(_message: ByteArray, _signature: ByteArray, _publicKey: ByteArray): boolean {
-    throw new Error("No crypto provider configured. Install and wire a standard library adapter.");
+    throw new CryptoError("No crypto provider configured. Install and wire a standard library adapter.");
   }
 }
 

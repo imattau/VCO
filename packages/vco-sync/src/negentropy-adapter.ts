@@ -1,5 +1,6 @@
 import { Negentropy, NegentropyStorage, uint8ArrayToHex } from "@nostr-dev-kit/sync";
 import type { ReconciliationItem } from "./types.js";
+import { SyncProtocolError } from "./errors.js";
 
 const NEGENTROPY_ID_SIZE_BYTES = 32;
 
@@ -11,11 +12,11 @@ export interface NegentropyReconciliation {
 
 function validateItem(item: ReconciliationItem, fieldName: string): void {
   if (!Number.isInteger(item.timestamp) || item.timestamp < 0) {
-    throw new Error(`${fieldName}.timestamp must be a non-negative integer.`);
+    throw new SyncProtocolError(`${fieldName}.timestamp must be a non-negative integer.`);
   }
 
   if (item.id.length !== NEGENTROPY_ID_SIZE_BYTES) {
-    throw new Error(
+    throw new SyncProtocolError(
       `${fieldName}.id must be ${NEGENTROPY_ID_SIZE_BYTES} bytes.`,
     );
   }
