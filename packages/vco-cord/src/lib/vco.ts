@@ -18,17 +18,22 @@ import type { Identity, VcoMessage } from "../types/index.js";
 
 const crypto = createNobleCryptoProvider();
 
-export function generateIdentity(displayName: string): Identity {
-  const privateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
-  const publicKey = deriveEd25519PublicKey(privateKey);
-  const creatorId = deriveEd25519Multikey(privateKey);
-  return { privateKey, publicKey, creatorId, displayName };
+export function initializeIdentity(displayName: string, privateKey?: Uint8Array): Identity {
+  const priv = privateKey ?? globalThis.crypto.getRandomValues(new Uint8Array(32));
+  const publicKey = deriveEd25519PublicKey(priv);
+  const creatorId = deriveEd25519Multikey(priv);
+  return { privateKey: priv, publicKey, creatorId, displayName };
 }
 
 export function uint8ArrayToHex(arr: Uint8Array): string {
   return Array.from(arr)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+export function hexToUint8Array(hex: string): Uint8Array {
+  const pairs = hex.match(/[\da-f]{2}/gi) ?? [];
+  return new Uint8Array(pairs.map((p) => parseInt(p, 16)));
 }
 
 const POW_DIFFICULTY = 4;

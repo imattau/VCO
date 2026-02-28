@@ -1,14 +1,17 @@
 // packages/vco-cord/src/features/channels/ChannelList.tsx
-import { Hash } from "lucide-react";
+import { useState } from "react";
+import { Hash, Settings } from "lucide-react";
 import { useServers } from "../servers/ServerContext.js";
 import { useIdentity } from "../identity/IdentityContext.js";
 import { clsx } from "clsx";
 import { Avatar } from "../../components/ui/Avatar.js";
 import { uint8ArrayToHex } from "../../lib/vco.js";
+import { IdentitySettings } from "../identity/IdentitySettings.js";
 
 export function ChannelList() {
   const { activeServer, activeChannel, setActiveChannel } = useServers();
-  const { identity, regenerate } = useIdentity();
+  const { identity } = useIdentity();
+  const [showSettings, setShowSettings] = useState(false);
 
   return (
     <div className="w-56 bg-zinc-800 flex flex-col shrink-0">
@@ -49,9 +52,16 @@ export function ChannelList() {
               {uint8ArrayToHex(identity.creatorId).slice(0, 10)}…
             </div>
           </div>
-          <button onClick={regenerate} className="text-zinc-500 hover:text-zinc-300 text-xs" title="New identity">⟳</button>
+          <button 
+            onClick={() => setShowSettings(true)} 
+            className="text-zinc-500 hover:text-zinc-300 transition-colors" 
+            title="User Settings"
+          >
+            <Settings size={14} />
+          </button>
         </div>
       )}
+      <IdentitySettings isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }
