@@ -1,0 +1,9 @@
+syntax = "proto3";
+package vco.schemas;
+message Announcement {
+  string schema = 1;
+  string content = 2;
+  string priority = 3;
+  repeated bytes media_cids = 4;
+  int64 timestamp_ms = 5;
+}

@@ -1,0 +1,9 @@
+syntax = "proto3";
+package vco.schemas;
+message Receipt {
+  string schema = 1;
+  bytes listing_cid = 2;
+  bytes offer_cid = 3;
+  string tx_id = 4;
+  int64 timestamp_ms = 5;
+}

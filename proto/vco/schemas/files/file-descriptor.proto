@@ -1,0 +1,11 @@
+syntax = "proto3";
+package vco.schemas;
+message FileDescriptor {
+  string schema = 1;
+  string name = 2;
+  string mime_type = 3;
+  uint64 size = 4;
+  bytes root_manifest_cid = 5;
+  bytes previous_cid = 6;
+  int64 timestamp_ms = 7;
+}

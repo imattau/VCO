@@ -1,0 +1,9 @@
+syntax = "proto3";
+package vco.schemas;
+message Poll {
+  string schema = 1;
+  string question = 2;
+  repeated string options = 3;
+  int64 closes_at_ms = 4;
+  int64 timestamp_ms = 5;
+}

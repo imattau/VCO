@@ -1,0 +1,12 @@
+syntax = "proto3";
+package vco.schemas;
+message ThreadEntry {
+  bytes cid = 1;
+  string schema_uri = 2;
+}
+message Thread {
+  string schema = 1;
+  string title = 2;
+  repeated ThreadEntry entries = 3;
+  int64 timestamp_ms = 4;
+}

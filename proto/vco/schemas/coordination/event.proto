@@ -1,0 +1,11 @@
+syntax = "proto3";
+package vco.schemas;
+message Event {
+  string schema = 1;
+  string title = 2;
+  string description = 3;
+  int64 start_ms = 4;
+  int64 end_ms = 5;
+  string location = 6;
+  bytes previous_cid = 7;
+}

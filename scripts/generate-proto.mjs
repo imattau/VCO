@@ -289,6 +289,10 @@ console.log(`Generated ${path.relative(projectRoot, syncOutDtsPath)}`);
 const schemasOutDir = path.join(projectRoot, "packages/vco-schemas/src/generated");
 await fs.mkdir(schemasOutDir, { recursive: true });
 
+for (const domain of ["social", "marketplace", "files", "coordination"]) {
+  await fs.mkdir(path.join(schemasOutDir, domain), { recursive: true });
+}
+
 const schemaTargets = [
   {
     protoFile: "proto/vco/schemas/post.proto",
@@ -385,6 +389,281 @@ export namespace vco {
   }
 }
 export const SequenceManifest: typeof vco.schemas.SequenceManifest;
+`,
+  },
+  // ── Social ────────────────────────────────────────────────────────────────────
+  {
+    protoFile: "proto/vco/schemas/social/reaction.proto",
+    outBase: "social/reaction",
+    reExport: "export const Reaction = vco.schemas.Reaction;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IReaction { schema?: string|null; targetCid?: Uint8Array|null; emoji?: string|null; timestampMs?: number|null; }
+  class Reaction implements IReaction {
+    constructor(p?: IReaction); schema: string; targetCid: Uint8Array; emoji: string; timestampMs: number;
+    static create(p?: IReaction): Reaction;
+    static encode(m: IReaction, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Reaction;
+  }
+} }
+export const Reaction: typeof vco.schemas.Reaction;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/social/reply.proto",
+    outBase: "social/reply",
+    reExport: "export const Reply = vco.schemas.Reply;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IReply { schema?: string|null; parentCid?: Uint8Array|null; content?: string|null; mediaCids?: Uint8Array[]|null; timestampMs?: number|null; channelId?: string|null; }
+  class Reply implements IReply {
+    constructor(p?: IReply); schema: string; parentCid: Uint8Array; content: string; mediaCids: Uint8Array[]; timestampMs: number; channelId: string;
+    static create(p?: IReply): Reply;
+    static encode(m: IReply, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Reply;
+  }
+} }
+export const Reply: typeof vco.schemas.Reply;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/social/follow.proto",
+    outBase: "social/follow",
+    reExport: "export const Follow = vco.schemas.Follow;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IFollow { schema?: string|null; subjectKey?: Uint8Array|null; action?: string|null; timestampMs?: number|null; }
+  class Follow implements IFollow {
+    constructor(p?: IFollow); schema: string; subjectKey: Uint8Array; action: string; timestampMs: number;
+    static create(p?: IFollow): Follow;
+    static encode(m: IFollow, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Follow;
+  }
+} }
+export const Follow: typeof vco.schemas.Follow;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/social/tombstone.proto",
+    outBase: "social/tombstone",
+    reExport: "export const Tombstone = vco.schemas.Tombstone;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface ITombstone { schema?: string|null; targetCid?: Uint8Array|null; reason?: string|null; timestampMs?: number|null; }
+  class Tombstone implements ITombstone {
+    constructor(p?: ITombstone); schema: string; targetCid: Uint8Array; reason: string; timestampMs: number;
+    static create(p?: ITombstone): Tombstone;
+    static encode(m: ITombstone, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Tombstone;
+  }
+} }
+export const Tombstone: typeof vco.schemas.Tombstone;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/social/thread.proto",
+    outBase: "social/thread",
+    reExport: "export const ThreadEntry = vco.schemas.ThreadEntry;\nexport const Thread = vco.schemas.Thread;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IThreadEntry { cid?: Uint8Array|null; schemaUri?: string|null; }
+  class ThreadEntry implements IThreadEntry {
+    constructor(p?: IThreadEntry); cid: Uint8Array; schemaUri: string;
+    static create(p?: IThreadEntry): ThreadEntry;
+    static encode(m: IThreadEntry, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): ThreadEntry;
+  }
+  interface IThread { schema?: string|null; title?: string|null; entries?: IThreadEntry[]|null; timestampMs?: number|null; }
+  class Thread implements IThread {
+    constructor(p?: IThread); schema: string; title: string; entries: ThreadEntry[]; timestampMs: number;
+    static create(p?: IThread): Thread;
+    static encode(m: IThread, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Thread;
+  }
+} }
+export const ThreadEntry: typeof vco.schemas.ThreadEntry;
+export const Thread: typeof vco.schemas.Thread;
+`,
+  },
+  // ── Marketplace ───────────────────────────────────────────────────────────────
+  {
+    protoFile: "proto/vco/schemas/marketplace/listing.proto",
+    outBase: "marketplace/listing",
+    reExport: "export const Listing = vco.schemas.Listing;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IListing { schema?: string|null; title?: string|null; description?: string|null; priceSats?: number|null; mediaCids?: Uint8Array[]|null; expiryMs?: number|null; previousCid?: Uint8Array|null; }
+  class Listing implements IListing {
+    constructor(p?: IListing); schema: string; title: string; description: string; priceSats: number; mediaCids: Uint8Array[]; expiryMs: number; previousCid: Uint8Array;
+    static create(p?: IListing): Listing;
+    static encode(m: IListing, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Listing;
+  }
+} }
+export const Listing: typeof vco.schemas.Listing;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/marketplace/offer.proto",
+    outBase: "marketplace/offer",
+    reExport: "export const Offer = vco.schemas.Offer;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IOffer { schema?: string|null; listingCid?: Uint8Array|null; offerSats?: number|null; message?: string|null; timestampMs?: number|null; }
+  class Offer implements IOffer {
+    constructor(p?: IOffer); schema: string; listingCid: Uint8Array; offerSats: number; message: string; timestampMs: number;
+    static create(p?: IOffer): Offer;
+    static encode(m: IOffer, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Offer;
+  }
+} }
+export const Offer: typeof vco.schemas.Offer;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/marketplace/receipt.proto",
+    outBase: "marketplace/receipt",
+    reExport: "export const Receipt = vco.schemas.Receipt;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IReceipt { schema?: string|null; listingCid?: Uint8Array|null; offerCid?: Uint8Array|null; txId?: string|null; timestampMs?: number|null; }
+  class Receipt implements IReceipt {
+    constructor(p?: IReceipt); schema: string; listingCid: Uint8Array; offerCid: Uint8Array; txId: string; timestampMs: number;
+    static create(p?: IReceipt): Receipt;
+    static encode(m: IReceipt, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Receipt;
+  }
+} }
+export const Receipt: typeof vco.schemas.Receipt;
+`,
+  },
+  // ── Files ─────────────────────────────────────────────────────────────────────
+  {
+    protoFile: "proto/vco/schemas/files/file-descriptor.proto",
+    outBase: "files/file-descriptor",
+    reExport: "export const FileDescriptor = vco.schemas.FileDescriptor;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IFileDescriptor { schema?: string|null; name?: string|null; mimeType?: string|null; size?: number|null; rootManifestCid?: Uint8Array|null; previousCid?: Uint8Array|null; timestampMs?: number|null; }
+  class FileDescriptor implements IFileDescriptor {
+    constructor(p?: IFileDescriptor); schema: string; name: string; mimeType: string; size: number; rootManifestCid: Uint8Array; previousCid: Uint8Array; timestampMs: number;
+    static create(p?: IFileDescriptor): FileDescriptor;
+    static encode(m: IFileDescriptor, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): FileDescriptor;
+  }
+} }
+export const FileDescriptor: typeof vco.schemas.FileDescriptor;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/files/directory.proto",
+    outBase: "files/directory",
+    reExport: "export const DirectoryEntry = vco.schemas.DirectoryEntry;\nexport const Directory = vco.schemas.Directory;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IDirectoryEntry { cid?: Uint8Array|null; schemaUri?: string|null; name?: string|null; }
+  class DirectoryEntry implements IDirectoryEntry {
+    constructor(p?: IDirectoryEntry); cid: Uint8Array; schemaUri: string; name: string;
+    static create(p?: IDirectoryEntry): DirectoryEntry;
+    static encode(m: IDirectoryEntry, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): DirectoryEntry;
+  }
+  interface IDirectory { schema?: string|null; name?: string|null; entries?: IDirectoryEntry[]|null; previousCid?: Uint8Array|null; timestampMs?: number|null; }
+  class Directory implements IDirectory {
+    constructor(p?: IDirectory); schema: string; name: string; entries: DirectoryEntry[]; previousCid: Uint8Array; timestampMs: number;
+    static create(p?: IDirectory): Directory;
+    static encode(m: IDirectory, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Directory;
+  }
+} }
+export const DirectoryEntry: typeof vco.schemas.DirectoryEntry;
+export const Directory: typeof vco.schemas.Directory;
+`,
+  },
+  // ── Coordination ──────────────────────────────────────────────────────────────
+  {
+    protoFile: "proto/vco/schemas/coordination/poll.proto",
+    outBase: "coordination/poll",
+    reExport: "export const Poll = vco.schemas.Poll;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IPoll { schema?: string|null; question?: string|null; options?: string[]|null; closesAtMs?: number|null; timestampMs?: number|null; }
+  class Poll implements IPoll {
+    constructor(p?: IPoll); schema: string; question: string; options: string[]; closesAtMs: number; timestampMs: number;
+    static create(p?: IPoll): Poll;
+    static encode(m: IPoll, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Poll;
+  }
+} }
+export const Poll: typeof vco.schemas.Poll;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/coordination/vote.proto",
+    outBase: "coordination/vote",
+    reExport: "export const Vote = vco.schemas.Vote;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IVote { schema?: string|null; pollCid?: Uint8Array|null; optionIndex?: number|null; timestampMs?: number|null; }
+  class Vote implements IVote {
+    constructor(p?: IVote); schema: string; pollCid: Uint8Array; optionIndex: number; timestampMs: number;
+    static create(p?: IVote): Vote;
+    static encode(m: IVote, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Vote;
+  }
+} }
+export const Vote: typeof vco.schemas.Vote;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/coordination/event.proto",
+    outBase: "coordination/event",
+    reExport: "export const Event = vco.schemas.Event;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IEvent { schema?: string|null; title?: string|null; description?: string|null; startMs?: number|null; endMs?: number|null; location?: string|null; previousCid?: Uint8Array|null; }
+  class Event implements IEvent {
+    constructor(p?: IEvent); schema: string; title: string; description: string; startMs: number; endMs: number; location: string; previousCid: Uint8Array;
+    static create(p?: IEvent): Event;
+    static encode(m: IEvent, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Event;
+  }
+} }
+export const Event: typeof vco.schemas.Event;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/coordination/rsvp.proto",
+    outBase: "coordination/rsvp",
+    reExport: "export const Rsvp = vco.schemas.Rsvp;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IRsvp { schema?: string|null; eventCid?: Uint8Array|null; status?: string|null; timestampMs?: number|null; }
+  class Rsvp implements IRsvp {
+    constructor(p?: IRsvp); schema: string; eventCid: Uint8Array; status: string; timestampMs: number;
+    static create(p?: IRsvp): Rsvp;
+    static encode(m: IRsvp, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Rsvp;
+  }
+} }
+export const Rsvp: typeof vco.schemas.Rsvp;
+`,
+  },
+  {
+    protoFile: "proto/vco/schemas/coordination/announcement.proto",
+    outBase: "coordination/announcement",
+    reExport: "export const Announcement = vco.schemas.Announcement;",
+    dts: `import $protobuf from "protobufjs/minimal.js";
+export namespace vco { namespace schemas {
+  interface IAnnouncement { schema?: string|null; content?: string|null; priority?: string|null; mediaCids?: Uint8Array[]|null; timestampMs?: number|null; }
+  class Announcement implements IAnnouncement {
+    constructor(p?: IAnnouncement); schema: string; content: string; priority: string; mediaCids: Uint8Array[]; timestampMs: number;
+    static create(p?: IAnnouncement): Announcement;
+    static encode(m: IAnnouncement, w?: $protobuf.Writer): $protobuf.Writer;
+    static decode(r: $protobuf.Reader|Uint8Array, l?: number): Announcement;
+  }
+} }
+export const Announcement: typeof vco.schemas.Announcement;
 `,
   },
 ];

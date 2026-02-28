@@ -1,0 +1,14 @@
+syntax = "proto3";
+package vco.schemas;
+message DirectoryEntry {
+  bytes cid = 1;
+  string schema_uri = 2;
+  string name = 3;
+}
+message Directory {
+  string schema = 1;
+  string name = 2;
+  repeated DirectoryEntry entries = 3;
+  bytes previous_cid = 4;
+  int64 timestamp_ms = 5;
+}
