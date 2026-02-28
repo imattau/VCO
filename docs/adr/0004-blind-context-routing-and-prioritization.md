@@ -1,7 +1,7 @@
 # ADR 0004: Blind Context Routing and PoW Prioritization
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 The development of the Transport Obfuscation Layer (TOL) and the Protocol Simulator revealed a performance bottleneck in high-traffic group messaging and decentralized discovery. When `OBFUSCATED = 1`, a receiver (or relay) must fully decrypt and decode an envelope before it can determine the message's category or destination. This prevents efficient routing and allows for "Decryption Flood" attacks where a malicious peer sends millions of valid-sized but irrelevant packets.

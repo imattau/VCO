@@ -5,6 +5,7 @@ export const IDLE_TIMEOUT_SECONDS = 300;
 export const MAGIC_BYTES = 0x56434f03;
 
 export const HEADER_HASH_LENGTH = 32;
+export const CONTEXT_ID_LENGTH = 8;
 
 export const FLAG_EPHEMERAL = 1 << 7;
 export const FLAG_OBFUSCATED = 1 << 6;

@@ -24,6 +24,7 @@ message Envelope {
   bytes payload = 8;       // The actual data
   ZKPExtension zkp_extension = 9; // Present when FLAGS bit 4 (ZKP_AUTH) is set
   uint32 nonce = 10;       // PoW nonce; 32-bit unsigned integer
+  bytes context_id = 11;   // Optional 8-byte blind context identifier
 }
 
 // Deterministic signing material (not transmitted directly).
@@ -33,6 +34,7 @@ message EnvelopeSigningMaterial {
   uint32 payload_type = 3;
   bytes creator_id = 4;
   bytes payload_hash = 5;
+  bytes context_id = 6;
 }
 
 // Deterministic header-hash material (not transmitted directly).
@@ -44,6 +46,7 @@ message EnvelopeHeaderHashMaterial {
   bytes payload_hash = 5;
   bytes signature = 6;
   uint32 nonce = 7;
+  bytes context_id = 8;
 }
 
 // Canonical payload fragmentation record for envelopes.

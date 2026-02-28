@@ -1,4 +1,5 @@
 import { PoWError } from "./errors.js";
+import type { VcoEnvelope } from "./types.js";
 
 const MAX_UINT32 = 0xffff_ffff;
 const HASH_BITS = 256;
@@ -74,4 +75,15 @@ export function solvePoWNonce(input: SolvePoWInput): SolvePoWResult {
 
 export function getPowScore(headerHash: Uint8Array): number {
   return countLeadingZeroBits(headerHash);
+}
+
+/**
+ * Compares two envelopes by their Proof-of-Work score for prioritization.
+ * Returns a negative number if 'a' has more work than 'b', positive if less,
+ * and zero if equal. Useful for sort() functions to place higher work first.
+ */
+export function compareEnvelopesByPoW(a: VcoEnvelope, b: VcoEnvelope): number {
+  const scoreA = getPowScore(a.headerHash);
+  const scoreB = getPowScore(b.headerHash);
+  return scoreB - scoreA;
 }

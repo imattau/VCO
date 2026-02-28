@@ -389,6 +389,7 @@ export const vco = $root.vco = (() => {
              * @property {Uint8Array|null} [payload] Envelope payload
              * @property {vco.v3.IZKPExtension|null} [zkpExtension] Envelope zkpExtension
              * @property {number|null} [nonce] Envelope nonce
+             * @property {Uint8Array|null} [contextId] Envelope contextId
              */
 
             /**
@@ -487,6 +488,14 @@ export const vco = $root.vco = (() => {
             Envelope.prototype.nonce = 0;
 
             /**
+             * Envelope contextId.
+             * @member {Uint8Array} contextId
+             * @memberof vco.v3.Envelope
+             * @instance
+             */
+            Envelope.prototype.contextId = $util.newBuffer([]);
+
+            /**
              * Creates a new Envelope instance using the specified properties.
              * @function create
              * @memberof vco.v3.Envelope
@@ -530,6 +539,8 @@ export const vco = $root.vco = (() => {
                     $root.vco.v3.ZKPExtension.encode(message.zkpExtension, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
                 if (message.nonce != null && Object.hasOwnProperty.call(message, "nonce"))
                     writer.uint32(/* id 10, wireType 0 =*/80).uint32(message.nonce);
+                if (message.contextId != null && Object.hasOwnProperty.call(message, "contextId"))
+                    writer.uint32(/* id 11, wireType 2 =*/90).bytes(message.contextId);
                 return writer;
             };
 
@@ -606,6 +617,10 @@ export const vco = $root.vco = (() => {
                             message.nonce = reader.uint32();
                             break;
                         }
+                    case 11: {
+                            message.contextId = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7);
                         break;
@@ -673,6 +688,9 @@ export const vco = $root.vco = (() => {
                 if (message.nonce != null && message.hasOwnProperty("nonce"))
                     if (!$util.isInteger(message.nonce))
                         return "nonce: integer expected";
+                if (message.contextId != null && message.hasOwnProperty("contextId"))
+                    if (!(message.contextId && typeof message.contextId.length === "number" || $util.isString(message.contextId)))
+                        return "contextId: buffer expected";
                 return null;
             };
 
@@ -726,6 +744,11 @@ export const vco = $root.vco = (() => {
                 }
                 if (object.nonce != null)
                     message.nonce = object.nonce >>> 0;
+                if (object.contextId != null)
+                    if (typeof object.contextId === "string")
+                        $util.base64.decode(object.contextId, message.contextId = $util.newBuffer($util.base64.length(object.contextId)), 0);
+                    else if (object.contextId.length >= 0)
+                        message.contextId = object.contextId;
                 return message;
             };
 
@@ -783,6 +806,13 @@ export const vco = $root.vco = (() => {
                     }
                     object.zkpExtension = null;
                     object.nonce = 0;
+                    if (options.bytes === String)
+                        object.contextId = "";
+                    else {
+                        object.contextId = [];
+                        if (options.bytes !== Array)
+                            object.contextId = $util.newBuffer(object.contextId);
+                    }
                 }
                 if (message.headerHash != null && message.hasOwnProperty("headerHash"))
                     object.headerHash = options.bytes === String ? $util.base64.encode(message.headerHash, 0, message.headerHash.length) : options.bytes === Array ? Array.prototype.slice.call(message.headerHash) : message.headerHash;
@@ -804,6 +834,8 @@ export const vco = $root.vco = (() => {
                     object.zkpExtension = $root.vco.v3.ZKPExtension.toObject(message.zkpExtension, options);
                 if (message.nonce != null && message.hasOwnProperty("nonce"))
                     object.nonce = message.nonce;
+                if (message.contextId != null && message.hasOwnProperty("contextId"))
+                    object.contextId = options.bytes === String ? $util.base64.encode(message.contextId, 0, message.contextId.length) : options.bytes === Array ? Array.prototype.slice.call(message.contextId) : message.contextId;
                 return object;
             };
 
@@ -847,6 +879,7 @@ export const vco = $root.vco = (() => {
              * @property {number|null} [payloadType] EnvelopeSigningMaterial payloadType
              * @property {Uint8Array|null} [creatorId] EnvelopeSigningMaterial creatorId
              * @property {Uint8Array|null} [payloadHash] EnvelopeSigningMaterial payloadHash
+             * @property {Uint8Array|null} [contextId] EnvelopeSigningMaterial contextId
              */
 
             /**
@@ -905,6 +938,14 @@ export const vco = $root.vco = (() => {
             EnvelopeSigningMaterial.prototype.payloadHash = $util.newBuffer([]);
 
             /**
+             * EnvelopeSigningMaterial contextId.
+             * @member {Uint8Array} contextId
+             * @memberof vco.v3.EnvelopeSigningMaterial
+             * @instance
+             */
+            EnvelopeSigningMaterial.prototype.contextId = $util.newBuffer([]);
+
+            /**
              * Creates a new EnvelopeSigningMaterial instance using the specified properties.
              * @function create
              * @memberof vco.v3.EnvelopeSigningMaterial
@@ -938,6 +979,8 @@ export const vco = $root.vco = (() => {
                     writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.creatorId);
                 if (message.payloadHash != null && Object.hasOwnProperty.call(message, "payloadHash"))
                     writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.payloadHash);
+                if (message.contextId != null && Object.hasOwnProperty.call(message, "contextId"))
+                    writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.contextId);
                 return writer;
             };
 
@@ -994,6 +1037,10 @@ export const vco = $root.vco = (() => {
                             message.payloadHash = reader.bytes();
                             break;
                         }
+                    case 6: {
+                            message.contextId = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7);
                         break;
@@ -1044,6 +1091,9 @@ export const vco = $root.vco = (() => {
                 if (message.payloadHash != null && message.hasOwnProperty("payloadHash"))
                     if (!(message.payloadHash && typeof message.payloadHash.length === "number" || $util.isString(message.payloadHash)))
                         return "payloadHash: buffer expected";
+                if (message.contextId != null && message.hasOwnProperty("contextId"))
+                    if (!(message.contextId && typeof message.contextId.length === "number" || $util.isString(message.contextId)))
+                        return "contextId: buffer expected";
                 return null;
             };
 
@@ -1075,6 +1125,11 @@ export const vco = $root.vco = (() => {
                         $util.base64.decode(object.payloadHash, message.payloadHash = $util.newBuffer($util.base64.length(object.payloadHash)), 0);
                     else if (object.payloadHash.length >= 0)
                         message.payloadHash = object.payloadHash;
+                if (object.contextId != null)
+                    if (typeof object.contextId === "string")
+                        $util.base64.decode(object.contextId, message.contextId = $util.newBuffer($util.base64.length(object.contextId)), 0);
+                    else if (object.contextId.length >= 0)
+                        message.contextId = object.contextId;
                 return message;
             };
 
@@ -1109,6 +1164,13 @@ export const vco = $root.vco = (() => {
                         if (options.bytes !== Array)
                             object.payloadHash = $util.newBuffer(object.payloadHash);
                     }
+                    if (options.bytes === String)
+                        object.contextId = "";
+                    else {
+                        object.contextId = [];
+                        if (options.bytes !== Array)
+                            object.contextId = $util.newBuffer(object.contextId);
+                    }
                 }
                 if (message.version != null && message.hasOwnProperty("version"))
                     object.version = message.version;
@@ -1120,6 +1182,8 @@ export const vco = $root.vco = (() => {
                     object.creatorId = options.bytes === String ? $util.base64.encode(message.creatorId, 0, message.creatorId.length) : options.bytes === Array ? Array.prototype.slice.call(message.creatorId) : message.creatorId;
                 if (message.payloadHash != null && message.hasOwnProperty("payloadHash"))
                     object.payloadHash = options.bytes === String ? $util.base64.encode(message.payloadHash, 0, message.payloadHash.length) : options.bytes === Array ? Array.prototype.slice.call(message.payloadHash) : message.payloadHash;
+                if (message.contextId != null && message.hasOwnProperty("contextId"))
+                    object.contextId = options.bytes === String ? $util.base64.encode(message.contextId, 0, message.contextId.length) : options.bytes === Array ? Array.prototype.slice.call(message.contextId) : message.contextId;
                 return object;
             };
 
@@ -1165,6 +1229,7 @@ export const vco = $root.vco = (() => {
              * @property {Uint8Array|null} [payloadHash] EnvelopeHeaderHashMaterial payloadHash
              * @property {Uint8Array|null} [signature] EnvelopeHeaderHashMaterial signature
              * @property {number|null} [nonce] EnvelopeHeaderHashMaterial nonce
+             * @property {Uint8Array|null} [contextId] EnvelopeHeaderHashMaterial contextId
              */
 
             /**
@@ -1239,6 +1304,14 @@ export const vco = $root.vco = (() => {
             EnvelopeHeaderHashMaterial.prototype.nonce = 0;
 
             /**
+             * EnvelopeHeaderHashMaterial contextId.
+             * @member {Uint8Array} contextId
+             * @memberof vco.v3.EnvelopeHeaderHashMaterial
+             * @instance
+             */
+            EnvelopeHeaderHashMaterial.prototype.contextId = $util.newBuffer([]);
+
+            /**
              * Creates a new EnvelopeHeaderHashMaterial instance using the specified properties.
              * @function create
              * @memberof vco.v3.EnvelopeHeaderHashMaterial
@@ -1276,6 +1349,8 @@ export const vco = $root.vco = (() => {
                     writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.signature);
                 if (message.nonce != null && Object.hasOwnProperty.call(message, "nonce"))
                     writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.nonce);
+                if (message.contextId != null && Object.hasOwnProperty.call(message, "contextId"))
+                    writer.uint32(/* id 8, wireType 2 =*/66).bytes(message.contextId);
                 return writer;
             };
 
@@ -1340,6 +1415,10 @@ export const vco = $root.vco = (() => {
                             message.nonce = reader.uint32();
                             break;
                         }
+                    case 8: {
+                            message.contextId = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7);
                         break;
@@ -1396,6 +1475,9 @@ export const vco = $root.vco = (() => {
                 if (message.nonce != null && message.hasOwnProperty("nonce"))
                     if (!$util.isInteger(message.nonce))
                         return "nonce: integer expected";
+                if (message.contextId != null && message.hasOwnProperty("contextId"))
+                    if (!(message.contextId && typeof message.contextId.length === "number" || $util.isString(message.contextId)))
+                        return "contextId: buffer expected";
                 return null;
             };
 
@@ -1434,6 +1516,11 @@ export const vco = $root.vco = (() => {
                         message.signature = object.signature;
                 if (object.nonce != null)
                     message.nonce = object.nonce >>> 0;
+                if (object.contextId != null)
+                    if (typeof object.contextId === "string")
+                        $util.base64.decode(object.contextId, message.contextId = $util.newBuffer($util.base64.length(object.contextId)), 0);
+                    else if (object.contextId.length >= 0)
+                        message.contextId = object.contextId;
                 return message;
             };
 
@@ -1476,6 +1563,13 @@ export const vco = $root.vco = (() => {
                             object.signature = $util.newBuffer(object.signature);
                     }
                     object.nonce = 0;
+                    if (options.bytes === String)
+                        object.contextId = "";
+                    else {
+                        object.contextId = [];
+                        if (options.bytes !== Array)
+                            object.contextId = $util.newBuffer(object.contextId);
+                    }
                 }
                 if (message.version != null && message.hasOwnProperty("version"))
                     object.version = message.version;
@@ -1491,6 +1585,8 @@ export const vco = $root.vco = (() => {
                     object.signature = options.bytes === String ? $util.base64.encode(message.signature, 0, message.signature.length) : options.bytes === Array ? Array.prototype.slice.call(message.signature) : message.signature;
                 if (message.nonce != null && message.hasOwnProperty("nonce"))
                     object.nonce = message.nonce;
+                if (message.contextId != null && message.hasOwnProperty("contextId"))
+                    object.contextId = options.bytes === String ? $util.base64.encode(message.contextId, 0, message.contextId.length) : options.bytes === Array ? Array.prototype.slice.call(message.contextId) : message.contextId;
                 return object;
             };
 

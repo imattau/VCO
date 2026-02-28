@@ -23,6 +23,7 @@ interface EnvelopeSigningMaterial {
   payloadType: number;
   creatorId: Uint8Array;
   payloadHash: Uint8Array;
+  contextId?: Uint8Array;
 }
 
 interface EnvelopeHeaderHashMaterial extends EnvelopeSigningMaterial {
@@ -37,6 +38,7 @@ interface CreateEnvelopeInputBase {
   version?: number;
   nonce?: number;
   powDifficulty?: number;
+  contextId?: Uint8Array;
 }
 
 /**
@@ -113,6 +115,7 @@ function toEnvelopeSigningMaterial(envelope: VcoEnvelope): EnvelopeSigningMateri
     payloadType: envelope.header.payloadType,
     creatorId: envelope.header.creatorId,
     payloadHash: envelope.header.payloadHash,
+    contextId: envelope.header.contextId,
   };
 }
 
@@ -198,6 +201,7 @@ export function createEnvelope(
     payloadType: input.payloadType,
     creatorId,
     payloadHash,
+    contextId: input.contextId ? Uint8Array.from(input.contextId) : undefined,
   };
 
   if (!isZkpAuth) {
@@ -238,6 +242,7 @@ export function createEnvelope(
       payloadHash,
       signature,
       nonce,
+      contextId: material.contextId,
     },
     payload,
     zkpExtension,

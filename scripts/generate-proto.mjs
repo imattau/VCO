@@ -49,6 +49,7 @@ export namespace vco {
       payload?: Uint8Array | null;
       zkpExtension?: IZKPExtension | null;
       nonce?: number | null;
+      contextId?: Uint8Array | null;
     }
 
     class Envelope implements IEnvelope {
@@ -63,6 +64,7 @@ export namespace vco {
       public payload: Uint8Array;
       public zkpExtension?: ZKPExtension | null;
       public nonce: number;
+      public contextId: Uint8Array;
       public static create(properties?: IEnvelope): Envelope;
       public static encode(message: IEnvelope, writer?: $protobuf.Writer): $protobuf.Writer;
       public static decode(reader: $protobuf.Reader | Uint8Array, length?: number): Envelope;
@@ -130,6 +132,7 @@ export namespace vco {
       payloadType?: number | null;
       creatorId?: Uint8Array | null;
       payloadHash?: Uint8Array | null;
+      contextId?: Uint8Array | null;
     }
 
     class EnvelopeSigningMaterial implements IEnvelopeSigningMaterial {
@@ -139,6 +142,7 @@ export namespace vco {
       public payloadType: number;
       public creatorId: Uint8Array;
       public payloadHash: Uint8Array;
+      public contextId: Uint8Array;
       public static create(properties?: IEnvelopeSigningMaterial): EnvelopeSigningMaterial;
       public static encode(
         message: IEnvelopeSigningMaterial,
@@ -159,6 +163,7 @@ export namespace vco {
       payloadHash?: Uint8Array | null;
       signature?: Uint8Array | null;
       nonce?: number | null;
+      contextId?: Uint8Array | null;
     }
 
     class EnvelopeHeaderHashMaterial implements IEnvelopeHeaderHashMaterial {
@@ -170,6 +175,7 @@ export namespace vco {
       public payloadHash: Uint8Array;
       public signature: Uint8Array;
       public nonce: number;
+      public contextId: Uint8Array;
       public static create(properties?: IEnvelopeHeaderHashMaterial): EnvelopeHeaderHashMaterial;
       public static encode(
         message: IEnvelopeHeaderHashMaterial,

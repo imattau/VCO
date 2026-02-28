@@ -46,6 +46,9 @@ export class SimulatedWire {
 
   public broadcast(object: any) {
     this.emit("transport", `Relay: Received envelope ${object.id.slice(0, 8)}`, object);
+    if (object.contextId) {
+      this.emit("transport", `Relay: Routing by Blind Context ID (0x${object.contextId})`, null, 200);
+    }
     this.emit("transport", `Relay: Verifying PoW score (${object.powScore})...`, null, 400);
     this.emit("transport", `Relay: Signature valid. Propagating to 5 peers.`, null, 800);
     this.emit("sync", `Peer 0xed...f2: Requested range sync for /social/posts`, null, 1200);

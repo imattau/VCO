@@ -100,6 +100,10 @@ export function validateEnvelope(envelope: VcoEnvelope): void {
     throw new EnvelopeValidationError("nonce must be a uint32.");
   }
 
+  if (envelope.header.contextId) {
+    assertLength("contextId", envelope.header.contextId, 8);
+  }
+
   const isZkpAuth = (envelope.header.flags & FLAG_ZKP_AUTH) !== 0;
   if (isZkpAuth) {
     if (envelope.header.creatorId.length > 0 && !isZeroed(envelope.header.creatorId)) {

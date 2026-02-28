@@ -6,6 +6,7 @@ import {
   decodeEnvelopeProto,
   getPowScore,
   MULTICODEC_PROTOBUF,
+  deriveContextId
 } from "@vco/vco-core";
 import { 
   LISTING_SCHEMA_URI,
@@ -55,7 +56,7 @@ const POW_DIFFICULTY = 4;
 const FLAG_ZKP_AUTH = 1 << 4;
 
 export async function buildListing(
-  data: { title: string; description: string; priceSats: bigint; mediaCids?: string[] },
+  data: { title: string; description: string; priceSats: bigint; mediaCids?: string[]; contextId?: Uint8Array },
   identity: Identity,
 ): Promise<any> {
   const mediaCidsBytes = (data.mediaCids ?? []).map(cid => hexToUint8Array(cid));
@@ -77,6 +78,7 @@ export async function buildListing(
       creatorId: identity.creatorId,
       privateKey: identity.privateKey,
       powDifficulty: POW_DIFFICULTY,
+      contextId: data.contextId,
     },
     crypto,
   );
@@ -94,11 +96,12 @@ export async function buildListing(
     authorName: identity.displayName,
     powScore: getPowScore(envelope.headerHash),
     timestamp: Date.now(),
+    contextId: data.contextId ? uint8ArrayToHex(data.contextId) : undefined,
   };
 }
 
 export async function buildZkpListing(
-  data: { title: string; description: string; priceSats: bigint },
+  data: { title: string; description: string; priceSats: bigint; contextId?: Uint8Array },
 ): Promise<any> {
   const payload = encodeListing({
     schema: LISTING_SCHEMA_URI,
@@ -122,6 +125,7 @@ export async function buildZkpListing(
       creatorId: new Uint8Array(32), 
       privateKey: new Uint8Array(32), 
       powDifficulty: POW_DIFFICULTY,
+      contextId: data.contextId,
       zkpExtension: {
         circuitId: 1, // "Membership"
         proof,
@@ -150,6 +154,7 @@ export async function buildZkpListing(
     timestamp: Date.now(),
     isZkp: true,
     nullifier: uint8ArrayToHex(nullifier),
+    contextId: data.contextId ? uint8ArrayToHex(data.contextId) : undefined,
   };
 }
 
@@ -332,4 +337,11 @@ export async function buildVcoFile(
   envelopes.set(descriptorCid, encodeEnvelopeProto(descriptorEnv));
 
   return { descriptorCid, envelopes };
+}
+
+/**
+ * Public utility to derive context ID from a topic string.
+ */
+export function deriveSimulatorContextId(topic: string): Uint8Array {
+  return deriveContextId(topic, crypto.digest.bind(crypto));
 }

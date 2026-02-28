@@ -17,6 +17,8 @@ export interface VcoHeader {
   signature: Uint8Array;
   /** Number used once for Proof of Work (PoW). */
   nonce: number;
+  /** Optional 8-byte blind context identifier for efficient routing without decryption. */
+  contextId?: Uint8Array;
 }
 
 /**

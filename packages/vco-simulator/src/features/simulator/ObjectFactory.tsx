@@ -1,15 +1,16 @@
 // packages/vco-simulator/src/features/simulator/ObjectFactory.tsx
 import { useState } from "react";
 import { useIdentity } from "../identity/IdentityContext.js";
-import { buildListing, buildZkpListing } from "../../lib/vco.js";
+import { buildListing, buildZkpListing, deriveSimulatorContextId, uint8ArrayToHex } from "../../lib/vco.js";
 import { globalWire, log } from "../../lib/simulator.js";
 import { Badge } from "../../components/ui/Badge.js";
-import { Activity, Shield, Cpu, Trash2, Users, Ghost, Repeat } from "lucide-react";
+import { Activity, Shield, Cpu, Trash2, Users, Ghost, Repeat, Hash } from "lucide-react";
 
 export function ObjectFactory() {
   const { identity } = useIdentity();
   const [busy, setBusy] = useState(false);
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [topic, setTopic] = useState("vco-dev");
   const [lastObject, setLastObject] = useState<any>(null);
 
   const createDummyObject = async () => {
@@ -17,10 +18,13 @@ export function ObjectFactory() {
     setBusy(true);
     log("system", `Factory: Starting ${isAnonymous ? 'ZKP-Auth' : 'Signature-Auth'} creation sequence...`);
     
+    const contextId = deriveSimulatorContextId(topic);
+    log("system", `Factory: Derived Blind Context ID from "${topic}": 0x${uint8ArrayToHex(contextId)}`);
+
     try {
       const listing = isAnonymous 
-        ? await buildZkpListing({ title: "Anonymous Item", description: "Identity hidden by ZKP", priceSats: 500n })
-        : await buildListing({ title: "Simulated Item", description: "Created in the protocol simulator", priceSats: 1000n }, identity);
+        ? await buildZkpListing({ title: "Anonymous Item", description: "Identity hidden by ZKP", priceSats: 500n, contextId })
+        : await buildListing({ title: "Simulated Item", description: "Created in the protocol simulator", priceSats: 1000n, contextId }, identity);
       
       setLastObject(listing);
       log("object", `New ${isAnonymous ? 'Anonymous ' : ''}Listing created: ${listing.id.slice(0, 16)}...`, listing);
@@ -77,6 +81,17 @@ export function ObjectFactory() {
         </div>
         
         <div className="space-y-4">
+           <div className="relative">
+             <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
+             <input 
+               type="text" 
+               value={topic}
+               onChange={(e) => setTopic(e.target.value)}
+               placeholder="Topic or Group Name"
+               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-2.5 pl-9 pr-4 text-xs focus:outline-none focus:border-indigo-500 transition-all text-white"
+             />
+           </div>
+
            <button 
              onClick={() => setIsAnonymous(!isAnonymous)}
              className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border text-[10px] font-black uppercase transition-all ${isAnonymous ? 'bg-orange-500/10 border-orange-500/40 text-orange-400' : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300'}`}
@@ -143,6 +158,12 @@ export function ObjectFactory() {
                 <span className="text-purple-400">creator_id:</span>
                 <span className={`break-all ml-2 ${lastObject.isZkp ? 'text-zinc-700' : 'text-zinc-300'}`}>{lastObject.authorId}</span>
               </div>
+              {lastObject.contextId && (
+                <div>
+                  <span className="text-blue-500">context_id:</span>
+                  <span className="text-zinc-300 ml-2">0x{lastObject.contextId}</span>
+                </div>
+              )}
               {lastObject.isZkp && (
                 <div className="pt-2 mt-2 border-t border-zinc-900">
                   <div className="text-orange-400 mb-1">zkp_extension: {'{'}</div>

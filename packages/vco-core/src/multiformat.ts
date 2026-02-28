@@ -1,4 +1,5 @@
 import {
+  CONTEXT_ID_LENGTH,
   ED25519_PUBLIC_KEY_LENGTH,
   MULTICODEC_ED25519_PUB,
   MULTICODEC_SECP256K1_PUB,
@@ -38,6 +39,22 @@ export function uint8ArrayToHex(arr: Uint8Array): string {
 export function hexToUint8Array(hex: string): Uint8Array {
   const pairs = hex.match(/[\da-f]{2}/gi) ?? [];
   return new Uint8Array(pairs.map((p) => parseInt(p, 16)));
+}
+
+/**
+ * Derives a fixed-length blind context identifier from a topic string.
+ *
+ * @param topic The human-readable topic or group identifier.
+ * @param digest A function that returns a cryptographic hash (e.g. Blake3).
+ * @returns An 8-byte Uint8Array for blind routing.
+ */
+export function deriveContextId(
+  topic: string,
+  digest: (data: Uint8Array) => Uint8Array,
+): Uint8Array {
+  const topicBytes = new TextEncoder().encode(topic);
+  const hash = digest(topicBytes);
+  return hash.slice(0, CONTEXT_ID_LENGTH);
 }
 
 export function encodeVarint(value: number): Uint8Array {
