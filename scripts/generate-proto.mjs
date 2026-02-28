@@ -400,12 +400,19 @@ for (const target of schemaTargets) {
     { cwd: projectRoot },
   );
 
-  // Fix CJS/ESM import + add .js extension, then append top-level re-export.
+  // Fix CJS/ESM import + add .js extension.
+  // Use a unique root name per schema file so each pb.js does NOT clobber
+  // the shared $protobuf.roots["default"] namespace used by vco.pb.js.
   let js = await fs.readFile(jsOut, "utf8");
-  js = js.replace(
-    'import * as $protobuf from "protobufjs/minimal";',
-    'import $protobuf from "protobufjs/minimal.js";',
-  );
+  js = js
+    .replace(
+      'import * as $protobuf from "protobufjs/minimal";',
+      'import $protobuf from "protobufjs/minimal.js";',
+    )
+    .replace(
+      /\$protobuf\.roots\["default"\]/g,
+      `$protobuf.roots["vco-schemas-${target.outBase}"]`,
+    );
   js += `\n${target.reExport}\n`;
   await fs.writeFile(jsOut, js, "utf8");
 

@@ -5,7 +5,7 @@ import $protobuf from "protobufjs/minimal.js";
 const $Reader = $protobuf.Reader, $Writer = $protobuf.Writer, $util = $protobuf.util;
 
 // Exported root namespace
-const $root = $protobuf.roots["default"] || ($protobuf.roots["default"] = {});
+const $root = $protobuf.roots["vco-schemas-profile"] || ($protobuf.roots["vco-schemas-profile"] = {});
 
 export const vco = $root.vco = (() => {
 
