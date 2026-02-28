@@ -8,6 +8,7 @@ export namespace vco {
       mediaCids?: Uint8Array[] | null;
       timestampMs?: number | null;
       channelId?: string | null;
+      tags?: string[] | null;
     }
     class Post implements IPost {
       constructor(properties?: IPost);
@@ -16,6 +17,7 @@ export namespace vco {
       public mediaCids: Uint8Array[];
       public timestampMs: number;
       public channelId: string;
+      public tags: string[];
       public static create(properties?: IPost): Post;
       public static encode(message: IPost, writer?: $protobuf.Writer): $protobuf.Writer;
       public static decode(reader: $protobuf.Reader | Uint8Array, length?: number): Post;
