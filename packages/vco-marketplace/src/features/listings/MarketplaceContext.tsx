@@ -40,10 +40,12 @@ interface MarketplaceCtx {
   listings: ListingWithMetadata[];
   offers: OfferWithMetadata[];
   receipts: ReceiptWithMetadata[];
+  envelopes: Map<string, Uint8Array>;
   addListing: (listing: ListingWithMetadata) => void;
   removeListing: (id: string) => void;
   addOffer: (offer: OfferWithMetadata) => void;
   addReceipt: (receipt: ReceiptWithMetadata) => void;
+  addEnvelopes: (newEnvelopes: Map<string, Uint8Array>) => void;
 }
 
 const Ctx = createContext<MarketplaceCtx | undefined>(undefined);
@@ -52,16 +54,19 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
   const [listings, setListings] = useState<ListingWithMetadata[]>([]);
   const [offers, setOffers] = useState<OfferWithMetadata[]>([]);
   const [receipts, setReceipts] = useState<ReceiptWithMetadata[]>([]);
+  const [envelopes, setEnvelopes] = useState<Map<string, Uint8Array>>(new Map());
 
   // Load from storage on mount
   useEffect(() => {
     const savedListings = deserialize<ListingWithMetadata[]>(localStorage.getItem(LISTINGS_KEY));
     const savedOffers = deserialize<OfferWithMetadata[]>(localStorage.getItem(OFFERS_KEY));
     const savedReceipts = deserialize<ReceiptWithMetadata[]>(localStorage.getItem(RECEIPTS_KEY));
+    const savedEnvelopesArr = deserialize<[string, Uint8Array][]>(localStorage.getItem("vco_marketplace_envelopes"));
 
     if (savedListings) setListings(savedListings);
     if (savedOffers) setOffers(savedOffers);
     if (savedReceipts) setReceipts(savedReceipts);
+    if (savedEnvelopesArr) setEnvelopes(new Map(savedEnvelopesArr));
   }, []);
 
   // Persist to storage on change
@@ -76,6 +81,12 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (receipts.length > 0) localStorage.setItem(RECEIPTS_KEY, serialize(receipts));
   }, [receipts]);
+
+  useEffect(() => {
+    if (envelopes.size > 0) {
+      localStorage.setItem("vco_marketplace_envelopes", serialize(Array.from(envelopes.entries())));
+    }
+  }, [envelopes]);
 
   const addListing = (listing: ListingWithMetadata) => {
     setListings((prev) => {
@@ -102,8 +113,18 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const addEnvelopes = (newEnvelopes: Map<string, Uint8Array>) => {
+    setEnvelopes((prev) => {
+      const next = new Map(prev);
+      for (const [k, v] of newEnvelopes) {
+        next.set(k, v);
+      }
+      return next;
+    });
+  };
+
   return (
-    <Ctx.Provider value={{ listings, offers, receipts, addListing, removeListing, addOffer, addReceipt }}>
+    <Ctx.Provider value={{ listings, offers, receipts, envelopes, addListing, removeListing, addOffer, addReceipt, addEnvelopes }}>
       {children}
     </Ctx.Provider>
   );

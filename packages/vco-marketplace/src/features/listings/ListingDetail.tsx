@@ -1,6 +1,8 @@
 // packages/vco-marketplace/src/features/listings/ListingDetail.tsx
 import { Modal } from "../../components/ui/Modal.js";
 import { Avatar } from "../../components/ui/Avatar.js";
+import { VcoImage } from "../../components/ui/VcoImage.js";
+import { uint8ArrayToHex } from "../../lib/vco.js";
 import type { ListingWithMetadata } from "./MarketplaceContext.js";
 import { ShoppingCart, MessageSquare, Shield, ExternalLink, CheckCircle } from "lucide-react";
 
@@ -20,7 +22,12 @@ export function ListingDetail({ listing, isSold, isOpen, onClose, onMakeOffer, o
     <Modal isOpen={isOpen} onClose={onClose} title="Item Details">
       <div className="space-y-6">
         <div className="aspect-video bg-zinc-900 rounded-lg flex items-center justify-center border border-zinc-800 relative overflow-hidden">
-           <span className="text-zinc-700 text-sm font-mono uppercase tracking-[0.2em]">VCO Verifiable Object</span>
+           {listing.mediaCids.length > 0 ? (
+             <VcoImage cid={uint8ArrayToHex(listing.mediaCids[0])} className="w-full h-full" />
+           ) : (
+             <span className="text-zinc-700 text-sm font-mono uppercase tracking-[0.2em]">VCO Verifiable Object</span>
+           )}
+           
            {isSold && (
              <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center">
                <div className="border-4 border-emerald-500 text-emerald-500 font-black text-4xl px-6 py-2 rounded-xl rotate-[-12deg] shadow-2xl">SOLD</div>

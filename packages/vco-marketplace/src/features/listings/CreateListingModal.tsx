@@ -1,19 +1,36 @@
 // packages/vco-marketplace/src/features/listings/CreateListingModal.tsx
 import { useState } from "react";
 import { Modal } from "../../components/ui/Modal.js";
-import { Package, AlignLeft, DollarSign, Clock, Send } from "lucide-react";
+import { Package, AlignLeft, DollarSign, Clock, Send, Image as ImageIcon, X } from "lucide-react";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: { title: string; description: string; priceSats: bigint }) => Promise<void>;
+  onSubmit: (data: { title: string; description: string; priceSats: bigint; mediaCids: string[] }) => Promise<void>;
+  onUploadFile: (file: File) => Promise<string>;
 }
 
-export function CreateListingModal({ isOpen, onClose, onSubmit }: Props) {
+export function CreateListingModal({ isOpen, onClose, onSubmit, onUploadFile }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("1000");
+  const [mediaCids, setMediaCids] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const cid = await onUploadFile(file);
+      setMediaCids(prev => [...prev, cid]);
+    } catch (err) {
+      alert("Failed to upload image to VCO.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSub = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,10 +39,12 @@ export function CreateListingModal({ isOpen, onClose, onSubmit }: Props) {
       await onSubmit({ 
         title, 
         description, 
-        priceSats: BigInt(price) 
+        priceSats: BigInt(price),
+        mediaCids
       });
       setTitle("");
       setDescription("");
+      setMediaCids([]);
       onClose();
     } finally {
       setBusy(false);
@@ -88,6 +107,34 @@ export function CreateListingModal({ isOpen, onClose, onSubmit }: Props) {
                 <option>Never</option>
               </select>
             </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 block">Media (Verifiable Images)</label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {mediaCids.map((cid) => (
+              <div key={cid} className="relative w-16 h-16 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center group overflow-hidden">
+                <ImageIcon size={20} className="text-zinc-700" />
+                <button 
+                  type="button"
+                  onClick={() => setMediaCids(prev => prev.filter(c => c !== cid))}
+                  className="absolute top-0 right-0 p-0.5 bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+            {uploading ? (
+              <div className="w-16 h-16 border border-dashed border-indigo-500/50 rounded-lg flex items-center justify-center animate-pulse">
+                <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <label className="w-16 h-16 border border-dashed border-zinc-800 hover:border-zinc-600 rounded-lg flex items-center justify-center cursor-pointer transition-colors">
+                <ImageIcon size={20} className="text-zinc-700" />
+                <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+              </label>
+            )}
           </div>
         </div>
 

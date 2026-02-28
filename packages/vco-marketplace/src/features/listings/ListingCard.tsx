@@ -1,5 +1,7 @@
 // packages/vco-marketplace/src/features/listings/ListingCard.tsx
 import { Avatar } from "../../components/ui/Avatar.js";
+import { VcoImage } from "../../components/ui/VcoImage.js";
+import { uint8ArrayToHex } from "../../lib/vco.js";
 import type { ListingWithMetadata } from "./MarketplaceContext.js";
 
 interface Props {
@@ -9,11 +11,15 @@ interface Props {
 }
 
 export function ListingCard({ listing, isSold, onDetail }: Props) {
+  const primaryMediaCid = listing.mediaCids.length > 0 
+    ? uint8ArrayToHex(listing.mediaCids[0]) 
+    : null;
+
   return (
     <div className={`bg-zinc-900/40 border border-zinc-800/50 rounded-xl overflow-hidden group hover:border-indigo-500/30 transition-all hover:shadow-2xl hover:shadow-indigo-500/5 ${isSold ? 'opacity-60 grayscale-[0.5]' : ''}`}>
       <div className="aspect-[4/3] bg-zinc-800/50 flex items-center justify-center text-zinc-700 group-hover:bg-zinc-800 transition-colors relative">
-        {listing.mediaCids.length > 0 ? (
-          <div className="text-xs uppercase tracking-widest opacity-40">Images Attached</div>
+        {primaryMediaCid ? (
+          <VcoImage cid={primaryMediaCid} className="w-full h-full" />
         ) : (
           <span className="text-xs font-mono uppercase tracking-widest opacity-20">No Media</span>
         )}

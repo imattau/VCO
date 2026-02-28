@@ -8,12 +8,12 @@ import { MakeOfferModal } from "./features/listings/MakeOfferModal.js";
 import { OffersList } from "./features/listings/OffersList.js";
 import { TradeHistory } from "./features/listings/TradeHistory.js";
 import type { ListingWithMetadata, OfferWithMetadata } from "./features/listings/MarketplaceContext.js";
-import { uint8ArrayToHex, buildListing, buildOffer, buildReceipt, decodeOfferEnvelope, decodeReceiptEnvelope } from "./lib/vco.js";
+import { uint8ArrayToHex, buildListing, buildOffer, buildReceipt, decodeOfferEnvelope, decodeReceiptEnvelope, buildVcoFile } from "./lib/vco.js";
 import { publish } from "./lib/transport.js";
 
 function Layout() {
   const { identity } = useIdentity();
-  const { listings, offers, receipts, addListing, addOffer, addReceipt } = useMarketplace();
+  const { listings, offers, receipts, addListing, addOffer, addReceipt, addEnvelopes } = useMarketplace();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedListing, setSelectedListing] = useState<ListingWithMetadata | null>(null);
   const [offerListing, setOfferListing] = useState<ListingWithMetadata | null>(null);
@@ -28,10 +28,23 @@ function Layout() {
   
   const outgoingOffers = offers.filter(o => o.authorId === userId);
 
-  const handleCreateListing = async (data: { title: string; description: string; priceSats: bigint }) => {
+  const handleCreateListing = async (data: { title: string; description: string; priceSats: bigint; mediaCids: string[] }) => {
     if (!identity) return;
     const listing = await buildListing(data, identity);
     addListing(listing);
+  };
+
+  const handleUploadFile = async (file: File): Promise<string> => {
+    if (!identity) throw new Error("Identity required");
+    const buffer = await file.arrayBuffer();
+    const data = new Uint8Array(buffer);
+    const { descriptorCid, envelopes } = await buildVcoFile({
+      name: file.name,
+      type: file.type,
+      data
+    }, identity);
+    addEnvelopes(envelopes);
+    return descriptorCid;
   };
 
   const handleMakeOffer = async (data: { listingId: string; offerSats: bigint; message: string }) => {
@@ -210,6 +223,7 @@ function Layout() {
         isOpen={showCreate} 
         onClose={() => setShowCreate(false)} 
         onSubmit={handleCreateListing} 
+        onUploadFile={handleUploadFile}
       />
 
       <ListingDetail 
