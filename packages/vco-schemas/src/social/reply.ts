@@ -37,7 +37,7 @@ export function decodeReply(bytes: Uint8Array): ReplyData {
   let channelId = m.channelId;
 
   if (isV2) {
-    const channelTag = m.tags.find(t => t.startsWith('c:'));
+    const channelTag = m.tags?.find(t => t.startsWith('c:'));
     if (channelTag) channelId = channelTag.slice(2);
   }
 
@@ -46,7 +46,7 @@ export function decodeReply(bytes: Uint8Array): ReplyData {
     parentCid: new Uint8Array(m.parentCid), 
     content: m.content, 
     mediaCids: m.mediaCids.map(c => new Uint8Array(c)), 
-    timestampMs: BigInt(m.timestampMs as number), 
+    timestampMs: BigInt(m.timestampMs?.toString() ?? "0"), 
     channelId: channelId || undefined,
     tags: m.tags ?? []
   };

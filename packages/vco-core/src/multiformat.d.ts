@@ -19,3 +19,4 @@ export declare function assertValidCreatorMultikey(multikey: Uint8Array): void;
 export declare function encodeBlake3Multihash(digestBytes: Uint8Array): Uint8Array;
 export declare function decodeMultihash(multihash: Uint8Array): DecodedMultihash;
 export declare function assertValidPayloadMultihash(multihash: Uint8Array): void;
+//# sourceMappingURL=multiformat.d.ts.map

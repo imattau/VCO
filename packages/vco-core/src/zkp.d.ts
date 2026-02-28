@@ -31,3 +31,4 @@ export declare class VCOCore {
     unregisterVerifier(circuitId: number): void;
     validateEnvelope(envelope: VcoEnvelope, options?: EnvelopeValidationOptions): Promise<boolean>;
 }
+//# sourceMappingURL=zkp.d.ts.map

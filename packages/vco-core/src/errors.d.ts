@@ -21,6 +21,8 @@ export declare class VcoError extends Error {
     readonly code: VcoErrorCode;
     /** Optional structured metadata describing the error context. */
     readonly details?: Record<string, unknown>;
+    /** Explicitly override the name property. */
+    name: string;
     constructor(message: string, code?: VcoErrorCode, details?: Record<string, unknown>);
 }
 /**
@@ -47,3 +49,4 @@ export declare class CryptoProviderError extends VcoError {
 export declare class PoWError extends VcoError {
     constructor(message: string, details?: Record<string, unknown>);
 }
+//# sourceMappingURL=errors.d.ts.map

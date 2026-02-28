@@ -16,3 +16,4 @@ export declare function encodePayloadFragmentProto(fragment: PayloadFragment): U
 export declare function decodePayloadFragmentProto(encoded: Uint8Array): PayloadFragment;
 export declare function encodePayloadFragmentSetProto(fragmentSet: PayloadFragmentSet): Uint8Array;
 export declare function decodePayloadFragmentSetProto(encoded: Uint8Array): PayloadFragmentSet;
+//# sourceMappingURL=protobuf.d.ts.map

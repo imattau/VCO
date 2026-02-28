@@ -12,3 +12,4 @@ export interface SolvePoWResult {
 }
 export declare function solvePoWNonce(input: SolvePoWInput): SolvePoWResult;
 export declare function getPowScore(headerHash: Uint8Array): number;
+//# sourceMappingURL=pow.d.ts.map

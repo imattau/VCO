@@ -50,3 +50,4 @@ export interface VcoEnvelope {
     /** Optional ZKP extension for privacy-preserving authentication. */
     zkpExtension?: VcoZkpExtension;
 }
+//# sourceMappingURL=types.d.ts.map

@@ -9,3 +9,4 @@ export * from "./protobuf.js";
 export * from "./types.js";
 export * from "./validation.js";
 export * from "./zkp.js";
+//# sourceMappingURL=index.d.ts.map

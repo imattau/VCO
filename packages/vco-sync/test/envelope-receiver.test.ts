@@ -18,9 +18,13 @@ import { handleEnvelopeStream } from "../src/envelope-receiver.js";
 class TestCryptoProvider implements EnvelopeCryptoProvider {
   digest(payload: Uint8Array): Uint8Array {
     const out = new Uint8Array(32);
+    let sum = 0;
     for (let index = 0; index < payload.length; index += 1) {
-      out[index % 32] = (out[index % 32] + payload[index]) & 0xff;
+      sum = (sum + payload[index] + index) & 0xff;
     }
+    // Fill the output with the total sum to ensure any input change
+    // affects the leading bits (PoW score).
+    out.fill(sum);
     return out;
   }
 

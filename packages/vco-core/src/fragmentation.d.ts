@@ -19,3 +19,4 @@ export declare function fragmentEnvelopePayload(envelope: VcoEnvelope, maxChunkS
 export declare function fragmentPayload(payload: Uint8Array, context: PayloadFragmentContext, maxChunkSize?: number): PayloadFragmentSet;
 export declare function assertPayloadFragmentSetIntegrity(fragmentSet: PayloadFragmentSet): void;
 export declare function reassemblePayloadFragments(fragmentSet: PayloadFragmentSet): Uint8Array;
+//# sourceMappingURL=fragmentation.d.ts.map

@@ -22,6 +22,8 @@ export class VcoError extends Error {
     code;
     /** Optional structured metadata describing the error context. */
     details;
+    /** Explicitly override the name property. */
+    name;
     constructor(message, code = VcoErrorCode.GENERIC_ERROR, details) {
         super(message);
         this.name = "VcoError";

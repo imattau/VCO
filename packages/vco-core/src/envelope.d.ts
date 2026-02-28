@@ -73,3 +73,4 @@ export declare function assertEnvelopeIntegrity(envelope: VcoEnvelope, crypto: E
  */
 export declare function verifyEnvelope(envelope: VcoEnvelope, crypto: EnvelopeCryptoProvider): boolean;
 export {};
+//# sourceMappingURL=envelope.d.ts.map

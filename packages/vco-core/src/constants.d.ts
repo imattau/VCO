@@ -17,3 +17,4 @@ export declare const MULTIHASH_BLAKE3_256 = 30;
 export declare const ED25519_PUBLIC_KEY_LENGTH = 32;
 export declare const ED25519_SIGNATURE_LENGTH = 64;
 export declare const MULTICODEC_VCO_SEQUENCE = 4;
+//# sourceMappingURL=constants.d.ts.map

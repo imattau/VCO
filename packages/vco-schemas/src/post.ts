@@ -67,7 +67,7 @@ export function decodePost(bytes: Uint8Array, options: DecodePostOptions = {}): 
   
   // In v3, extract channelId from 'c:' tag if present
   if (isV3) {
-    const channelTag = msg.tags.find(t => t.startsWith('c:'));
+    const channelTag = msg.tags?.find(t => t.startsWith('c:'));
     if (channelTag) {
       channelId = channelTag.slice(2);
     }
@@ -77,7 +77,7 @@ export function decodePost(bytes: Uint8Array, options: DecodePostOptions = {}): 
     schema: msg.schema,
     content: msg.content,
     mediaCids: msg.mediaCids.map((c) => new Uint8Array(c)),
-    timestampMs: BigInt(msg.timestampMs as number),
+    timestampMs: BigInt(msg.timestampMs?.toString() ?? "0"),
     channelId: channelId || undefined,
     tags: msg.tags ?? [],
   };

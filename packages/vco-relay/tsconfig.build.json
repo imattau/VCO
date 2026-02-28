@@ -1,16 +1,14 @@
 {
   "extends": "./tsconfig.json",
-  "references": [
-    { "path": "../vco-crypto/tsconfig.build.json" },
-    { "path": "../vco-core/tsconfig.build.json" },
-    { "path": "../vco-sync/tsconfig.build.json" },
-    { "path": "../vco-transport/tsconfig.build.json" }
-  ],
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "noEmit": false
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "composite": false
   },
+  "references": [],
   "include": [
     "src/**/*.ts"
   ]

@@ -22,6 +22,8 @@ export class VcoError extends Error {
   public readonly code: VcoErrorCode;
   /** Optional structured metadata describing the error context. */
   public readonly details?: Record<string, unknown>;
+  /** Explicitly override the name property. */
+  public name: string;
 
   constructor(message: string, code: VcoErrorCode = VcoErrorCode.GENERIC_ERROR, details?: Record<string, unknown>) {
     super(message);
