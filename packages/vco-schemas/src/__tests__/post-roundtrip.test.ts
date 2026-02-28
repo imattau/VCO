@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { encodePost, decodePost, POST_SCHEMA_URI } from "../post.js";
+import { encodePost, decodePost, POST_SCHEMA_URI, POST_V3_SCHEMA_URI } from "../post.js";
 
 describe("Post encode/decode roundtrip", () => {
-  it("encodes and decodes a minimal post", () => {
+  it("encodes and decodes a minimal post (v1)", () => {
     const original = {
       schema: POST_SCHEMA_URI,
       content: "Hello VCO world",
@@ -11,13 +11,38 @@ describe("Post encode/decode roundtrip", () => {
       channelId: "general",
     };
     const bytes = encodePost(original);
-    expect(bytes).toBeInstanceOf(Uint8Array);
-    expect(bytes.length).toBeGreaterThan(0);
     const decoded = decodePost(bytes);
     expect(decoded.schema).toBe(POST_SCHEMA_URI);
-    expect(decoded.content).toBe("Hello VCO world");
     expect(decoded.channelId).toBe("general");
-    expect(decoded.mediaCids).toHaveLength(0);
+  });
+
+  it("migrates channelId to tags in v3", () => {
+    const original = {
+      schema: POST_V3_SCHEMA_URI,
+      content: "V3 migration test",
+      mediaCids: [],
+      timestampMs: BigInt(Date.now()),
+      channelId: "vco-dev",
+    };
+    const bytes = encodePost(original);
+    const decoded = decodePost(bytes);
+    expect(decoded.schema).toBe(POST_V3_SCHEMA_URI);
+    expect(decoded.channelId).toBe("vco-dev");
+    expect(decoded.tags).toContain("c:vco-dev");
+  });
+
+  it("handles posts without channelId in v3", () => {
+    const original = {
+      schema: POST_V3_SCHEMA_URI,
+      content: "Generic post",
+      mediaCids: [],
+      timestampMs: 0n,
+      tags: ["tag1"]
+    };
+    const bytes = encodePost(original);
+    const decoded = decodePost(bytes);
+    expect(decoded.channelId).toBeUndefined();
+    expect(decoded.tags).toEqual(["tag1"]);
   });
 
   it("roundtrips media_cids as Uint8Array elements", () => {

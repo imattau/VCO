@@ -8,7 +8,7 @@ import {
   getPowScore,
   MULTICODEC_PROTOBUF,
 } from "@vco/vco-core";
-import { encodePost, decodePost, POST_SCHEMA_URI } from "@vco/vco-schemas";
+import { encodePost, decodePost, POST_V3_SCHEMA_URI, extractHashtags } from "@vco/vco-schemas";
 import {
   createNobleCryptoProvider,
   deriveEd25519Multikey,
@@ -43,12 +43,14 @@ export async function buildMessage(
   content: string,
   identity: Identity,
 ): Promise<VcoMessage> {
+  const tags = extractHashtags(content);
   const payload = encodePost({
-    schema: POST_SCHEMA_URI,
+    schema: POST_V3_SCHEMA_URI,
     content,
     mediaCids: [],
     timestampMs: BigInt(Date.now()),
-    channelId,
+    channelId, // encodePost will move this to a 'c:' tag for v3
+    tags,
   });
   const envelope = createEnvelope(
     {
@@ -93,15 +95,19 @@ export function decodeMessage(
   }
   const authorId = uint8ArrayToHex(envelope.header.creatorId);
   let content: string;
+  let msgChannelId = channelId;
   try {
     const post = decodePost(envelope.payload);
     content = post.content;
+    if (post.channelId) {
+      msgChannelId = post.channelId;
+    }
   } catch {
     content = new TextDecoder().decode(envelope.payload);
   }
   return {
     id: uint8ArrayToHex(envelope.headerHash),
-    channelId,
+    channelId: msgChannelId,
     authorId,
     authorName: knownAuthors.get(authorId) ?? authorId.slice(0, 8) + "…",
     content,

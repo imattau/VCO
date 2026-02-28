@@ -16,8 +16,8 @@ message Post {
   // Unix epoch milliseconds — informational only; canonical ordering uses
   // the envelope header_hash PoW score.
   int64 timestamp_ms = 4;
-  // Optional: channel or topic identifier (application-level routing)
-  string channel_id = 5;
+  // Optional: channel or topic identifier (Deprecated in v3 in favor of tags)
+  string channel_id = 5 [deprecated = true];
   // Structured tags (e.g. hashtags) for indexing and discovery.
   repeated string tags = 6;
 }

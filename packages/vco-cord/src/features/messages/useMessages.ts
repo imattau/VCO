@@ -14,6 +14,9 @@ export function useMessages(channelId: string, identity: Identity | null) {
     const unsub = subscribe(channelId, (encoded) => {
       try {
         const msg = decodeMessage(channelId, encoded, knownAuthors);
+        // Only show messages belonging to this channel
+        if (msg.channelId !== channelId) return;
+        
         setMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev;
           return [...prev, msg];

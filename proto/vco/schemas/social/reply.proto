@@ -6,6 +6,6 @@ message Reply {
   string content = 3;
   repeated bytes media_cids = 4;
   int64 timestamp_ms = 5;
-  string channel_id = 6;
+  string channel_id = 6 [deprecated = true];
   repeated string tags = 7;
 }
