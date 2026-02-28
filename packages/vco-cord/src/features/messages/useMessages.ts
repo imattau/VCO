@@ -12,8 +12,15 @@ export function useMessages(channelId: string, identity: Identity | null) {
   useEffect(() => {
     setMessages([]);
     const unsub = subscribe(channelId, (encoded) => {
-      const msg = decodeMessage(channelId, encoded, knownAuthors);
-      setMessages((prev) => [...prev, msg]);
+      try {
+        const msg = decodeMessage(channelId, encoded, knownAuthors);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+      } catch (err) {
+        console.error("Failed to decode incoming message:", err);
+      }
     });
     return unsub;
   }, [channelId]);
@@ -25,6 +32,11 @@ export function useMessages(channelId: string, identity: Identity | null) {
       knownAuthors.set(uint8ArrayToHex(identity.creatorId), identity.displayName);
       const msg = await buildMessage(channelId, content, identity);
       publish(channelId, msg.rawEnvelope);
+      // Optimistic update: Add the message to the list immediately
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
     } finally {
       setSending(false);
     }
