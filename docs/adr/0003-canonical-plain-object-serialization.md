@@ -1,7 +1,7 @@
 # ADR 0003: Canonical Plain Object Serialization
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 During the development of the VCO Protocol Simulator and Marketplace applications, a recurring challenge emerged regarding the developer ergonomics of handling VCO objects in JavaScript/TypeScript environments. VCO schemas heavily utilize `BigInt` (for micro-denominations and timestamps) and `Uint8Array` (for CIDs and public keys). Neither of these types is natively supported by `JSON.stringify()`, leading to "Do not know how to serialize a BigInt" errors and silent data loss for byte arrays.

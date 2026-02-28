@@ -6,6 +6,7 @@ export * from "./multiformat.js";
 export * from "./payload-type.js";
 export * from "./pow.js";
 export * from "./protobuf.js";
+export * from "./serialization.js";
 export * from "./types.js";
 export * from "./validation.js";
 export * from "./zkp.js";

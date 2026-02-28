@@ -23,6 +23,23 @@ export interface DecodedMultihash {
   digestBytes: Uint8Array;
 }
 
+/**
+ * Converts a Uint8Array to a hex-encoded string.
+ */
+export function uint8ArrayToHex(arr: Uint8Array): string {
+  return Array.from(arr)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Converts a hex-encoded string to a Uint8Array.
+ */
+export function hexToUint8Array(hex: string): Uint8Array {
+  const pairs = hex.match(/[\da-f]{2}/gi) ?? [];
+  return new Uint8Array(pairs.map((p) => parseInt(p, 16)));
+}
+
 export function encodeVarint(value: number): Uint8Array {
   if (!Number.isInteger(value) || value < 0) {
     throw new MultiformatError("Varint value must be a non-negative integer.");
