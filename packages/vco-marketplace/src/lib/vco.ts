@@ -13,7 +13,10 @@ import {
   decodeListing as decodeListingSchema,
   OFFER_SCHEMA_URI,
   encodeOffer,
-  decodeOffer
+  decodeOffer,
+  RECEIPT_SCHEMA_URI,
+  encodeReceipt,
+  decodeReceipt as decodeReceiptSchema
 } from "@vco/vco-schemas";
 import {
   createNobleCryptoProvider,
@@ -21,7 +24,7 @@ import {
   deriveEd25519PublicKey,
 } from "@vco/vco-crypto";
 import type { Identity } from "../types/index.js";
-import type { ListingWithMetadata, OfferWithMetadata } from "../features/listings/MarketplaceContext.js";
+import type { ListingWithMetadata, OfferWithMetadata, ReceiptWithMetadata } from "../features/listings/MarketplaceContext.js";
 
 const crypto = createNobleCryptoProvider();
 
@@ -143,6 +146,52 @@ export function decodeOfferEnvelope(
     listingId: uint8ArrayToHex(data.listingCid),
     offerSats: data.offerSats,
     message: data.message,
+    authorId,
+    authorName: knownAuthors.get(authorId) ?? authorId.slice(0, 8) + "…",
+    timestamp: Date.now(),
+  };
+}
+
+export async function buildReceipt(
+  data: { listingId: string; offerId: string; txId: string },
+  identity: Identity,
+): Promise<Uint8Array> {
+  const payload = encodeReceipt({
+    schema: RECEIPT_SCHEMA_URI,
+    listingCid: hexToUint8Array(data.listingId),
+    offerCid: hexToUint8Array(data.offerId),
+    txId: data.txId,
+    timestampMs: BigInt(Date.now()),
+  });
+
+  const envelope = createEnvelope(
+    {
+      payload,
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: identity.creatorId,
+      privateKey: identity.privateKey,
+      powDifficulty: POW_DIFFICULTY,
+    },
+    crypto,
+  );
+
+  return encodeEnvelopeProto(envelope);
+}
+
+export function decodeReceiptEnvelope(
+  encoded: Uint8Array,
+  knownAuthors: Map<string, string>,
+): ReceiptWithMetadata {
+  const envelope = decodeEnvelopeProto(encoded);
+  const authorId = uint8ArrayToHex(envelope.header.creatorId);
+  const data = decodeReceiptSchema(envelope.payload);
+
+  return {
+    id: uint8ArrayToHex(envelope.headerHash),
+    listingId: uint8ArrayToHex(data.listingCid),
+    offerId: uint8ArrayToHex(data.offerCid),
+    txId: data.txId,
+    timestampMs: data.timestampMs,
     authorId,
     authorName: knownAuthors.get(authorId) ?? authorId.slice(0, 8) + "…",
     timestamp: Date.now(),

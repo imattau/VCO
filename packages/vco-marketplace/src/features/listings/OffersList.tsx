@@ -5,9 +5,10 @@ import { CheckCircle, XCircle } from "lucide-react";
 interface Props {
   offers: OfferWithMetadata[];
   listings: ListingWithMetadata[];
+  onAccept: (offer: OfferWithMetadata) => void;
 }
 
-export function OffersList({ offers, listings }: Props) {
+export function OffersList({ offers, listings, onAccept }: Props) {
   if (offers.length === 0) {
     return (
       <div className="py-12 flex flex-col items-center justify-center bg-zinc-900/20 border border-dashed border-zinc-800 rounded-2xl">
@@ -40,7 +41,13 @@ export function OffersList({ offers, listings }: Props) {
                <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">SATS</div>
             </div>
             <div className="flex gap-2">
-               <button className="p-2 text-zinc-500 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-all" title="Accept"><CheckCircle size={20} /></button>
+               <button 
+                 onClick={() => onAccept(o)}
+                 className="p-2 text-zinc-500 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-all" 
+                 title="Accept"
+               >
+                 <CheckCircle size={20} />
+               </button>
                <button className="p-2 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all" title="Reject"><XCircle size={20} /></button>
             </div>
           </div>

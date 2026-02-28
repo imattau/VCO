@@ -20,12 +20,25 @@ export interface OfferWithMetadata {
   timestamp: number;
 }
 
+export interface ReceiptWithMetadata {
+  id: string;
+  listingId: string;
+  offerId: string;
+  txId: string;
+  timestampMs: bigint;
+  authorId: string;
+  authorName: string;
+  timestamp: number;
+}
+
 interface MarketplaceCtx {
   listings: ListingWithMetadata[];
   offers: OfferWithMetadata[];
+  receipts: ReceiptWithMetadata[];
   addListing: (listing: ListingWithMetadata) => void;
   removeListing: (id: string) => void;
   addOffer: (offer: OfferWithMetadata) => void;
+  addReceipt: (receipt: ReceiptWithMetadata) => void;
 }
 
 const Ctx = createContext<MarketplaceCtx | undefined>(undefined);
@@ -33,6 +46,7 @@ const Ctx = createContext<MarketplaceCtx | undefined>(undefined);
 export function MarketplaceProvider({ children }: { children: ReactNode }) {
   const [listings, setListings] = useState<ListingWithMetadata[]>([]);
   const [offers, setOffers] = useState<OfferWithMetadata[]>([]);
+  const [receipts, setReceipts] = useState<ReceiptWithMetadata[]>([]);
 
   const addListing = (listing: ListingWithMetadata) => {
     setListings((prev) => {
@@ -52,8 +66,15 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const addReceipt = (receipt: ReceiptWithMetadata) => {
+    setReceipts((prev) => {
+      if (prev.some((r) => r.id === receipt.id)) return prev;
+      return [...prev, receipt];
+    });
+  };
+
   return (
-    <Ctx.Provider value={{ listings, offers, addListing, removeListing, addOffer }}>
+    <Ctx.Provider value={{ listings, offers, receipts, addListing, removeListing, addOffer, addReceipt }}>
       {children}
     </Ctx.Provider>
   );

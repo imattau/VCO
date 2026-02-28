@@ -1,6 +1,6 @@
 /** @vitest-environment node */
-import { describe, it, expect, vi } from "vitest";
-import { buildListing, initializeIdentity } from "../lib/vco.js";
+import { describe, it, expect } from "vitest";
+import { buildListing, buildReceipt, initializeIdentity } from "../lib/vco.js";
 import { LISTING_SCHEMA_URI } from "@vco/vco-schemas";
 
 describe("Marketplace App Logic", () => {
@@ -19,5 +19,18 @@ describe("Marketplace App Logic", () => {
     expect(listing.priceSats).toBe(data.priceSats);
     expect(listing.authorName).toBe("Seller");
     expect(listing.id).toBeDefined();
+  });
+
+  it("buildReceipt creates a valid verifiable receipt object", async () => {
+    const identity = initializeIdentity("Seller");
+    const data = {
+      listingId: "00".repeat(32),
+      offerId: "11".repeat(32),
+      txId: "tx123"
+    };
+
+    const encoded = await buildReceipt(data, identity);
+    expect(encoded).toBeInstanceOf(Uint8Array);
+    expect(encoded.length).toBeGreaterThan(0);
   });
 });

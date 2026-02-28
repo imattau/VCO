@@ -6,15 +6,17 @@ import { ShoppingCart, MessageSquare, Shield, ExternalLink } from "lucide-react"
 
 interface Props {
   listing: ListingWithMetadata | null;
+  isOpen: boolean;
   onClose: () => void;
   onMakeOffer: (listing: ListingWithMetadata) => void;
+  onBuyNow: (listing: ListingWithMetadata) => void;
 }
 
-export function ListingDetail({ listing, onClose, onMakeOffer }: Props) {
+export function ListingDetail({ listing, isOpen, onClose, onMakeOffer, onBuyNow }: Props) {
   if (!listing) return null;
 
   return (
-    <Modal isOpen={!!listing} onClose={onClose} title="Item Details">
+    <Modal isOpen={isOpen} onClose={onClose} title="Item Details">
       <div className="space-y-6">
         <div className="aspect-video bg-zinc-900 rounded-lg flex items-center justify-center border border-zinc-800">
            <span className="text-zinc-700 text-sm font-mono uppercase tracking-[0.2em]">VCO Verifiable Object</span>
@@ -48,10 +50,16 @@ export function ListingDetail({ listing, onClose, onMakeOffer }: Props) {
 
         <div className="flex gap-3 pt-2">
           <button 
-            onClick={() => onMakeOffer(listing)}
+            onClick={() => onBuyNow(listing)}
             className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
           >
-            <ShoppingCart size={18} /> Make Offer
+            Buy Now
+          </button>
+          <button 
+            onClick={() => onMakeOffer(listing)}
+            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all border border-zinc-700 active:scale-95"
+          >
+            <ShoppingCart size={18} /> Offer
           </button>
           <button className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors border border-zinc-700">
             <MessageSquare size={18} />

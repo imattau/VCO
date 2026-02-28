@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { IdentityProvider, useIdentity } from "./features/identity/IdentityContext.js";
 import { MarketplaceProvider, useMarketplace } from "./features/listings/MarketplaceContext.js";
-import { uint8ArrayToHex, buildListing, buildOffer } from "./lib/vco.js";
 import { ListingCard } from "./features/listings/ListingCard.js";
 import { CreateListingModal } from "./features/listings/CreateListingModal.js";
 import { ListingDetail } from "./features/listings/ListingDetail.js";
 import { MakeOfferModal } from "./features/listings/MakeOfferModal.js";
 import { OffersList } from "./features/listings/OffersList.js";
-import type { ListingWithMetadata } from "./features/listings/MarketplaceContext.js";
+import type { ListingWithMetadata, OfferWithMetadata } from "./features/listings/MarketplaceContext.js";
+import { uint8ArrayToHex, buildListing, buildOffer, buildReceipt } from "./lib/vco.js";
 import { publish } from "./lib/transport.js";
 
 function Layout() {
@@ -29,6 +29,34 @@ function Layout() {
     const encoded = await buildOffer(data, identity);
     publish(`offers:${data.listingId}`, encoded);
     alert("Offer published to the network!");
+  };
+
+  const handleBuyNow = async (listing: ListingWithMetadata) => {
+    if (!identity) return;
+    const encoded = await buildOffer({
+      listingId: listing.id,
+      offerSats: listing.priceSats,
+      message: "I would like to buy this item at the listed price."
+    }, identity);
+    publish(`offers:${listing.id}`, encoded);
+    setSelectedListing(null);
+    alert("Purchase intent sent! Check your purchase history for updates.");
+  };
+
+  const handleAcceptOffer = async (offer: OfferWithMetadata) => {
+    if (!identity) return;
+    // In a real app, txId would come from a payment provider or on-chain tx
+    const txId = `vco_tx_${Math.random().toString(36).slice(2, 10)}`;
+    const encoded = await buildReceipt({
+      listingId: offer.listingId,
+      offerId: offer.id,
+      txId
+    }, identity);
+    publish(`receipts:${offer.listingId}`, encoded);
+    
+    // We'd decode it back to add to state if we don't have decodeReceipt here
+    // For now just alert or mock add
+    alert("Offer accepted! Receipt published.");
   };
 
   return (
@@ -93,7 +121,7 @@ function Layout() {
             </div>
 
             {tab === "sales" ? (
-              <OffersList offers={offers} listings={listings} />
+              <OffersList offers={offers} listings={listings} onAccept={handleAcceptOffer} />
             ) : listings.filter(l => tab === "browse" || (identity && l.authorId === uint8ArrayToHex(identity.creatorId))).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/20 border border-dashed border-zinc-800 rounded-3xl">
                 <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-4 text-zinc-700 border border-zinc-800">
@@ -129,11 +157,13 @@ function Layout() {
 
       <ListingDetail 
         listing={selectedListing} 
+        isOpen={!!selectedListing}
         onClose={() => setSelectedListing(null)}
         onMakeOffer={(l) => {
           setSelectedListing(null);
           setOfferListing(l);
         }}
+        onBuyNow={handleBuyNow}
       />
 
       <MakeOfferModal 
