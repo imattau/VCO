@@ -52,6 +52,7 @@ export function hexToUint8Array(hex: string): Uint8Array {
 }
 
 const POW_DIFFICULTY = 4;
+const FLAG_ZKP_AUTH = 1 << 4;
 
 export async function buildListing(
   data: { title: string; description: string; priceSats: bigint; mediaCids?: string[] },
@@ -93,6 +94,62 @@ export async function buildListing(
     authorName: identity.displayName,
     powScore: getPowScore(envelope.headerHash),
     timestamp: Date.now(),
+  };
+}
+
+export async function buildZkpListing(
+  data: { title: string; description: string; priceSats: bigint },
+): Promise<any> {
+  const payload = encodeListing({
+    schema: LISTING_SCHEMA_URI,
+    title: data.title,
+    description: data.description,
+    priceSats: data.priceSats,
+    mediaCids: [],
+    expiryMs: BigInt(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    previousCid: new Uint8Array(32),
+  });
+
+  // Simulated ZKP generation
+  const nullifier = globalThis.crypto.getRandomValues(new Uint8Array(32));
+  const proof = globalThis.crypto.getRandomValues(new Uint8Array(128));
+
+  const envelope = createEnvelope(
+    {
+      payload,
+      payloadType: MULTICODEC_PROTOBUF,
+      // In ZKP mode, creatorId and privateKey are not used for signing the header
+      creatorId: new Uint8Array(32), 
+      privateKey: new Uint8Array(32), 
+      powDifficulty: POW_DIFFICULTY,
+      zkpExtension: {
+        circuitId: 1, // "Membership"
+        proof,
+        proofLength: proof.length,
+        publicInputs: new Uint8Array(32),
+        inputsLength: 32,
+        nullifier,
+      }
+    },
+    crypto,
+  );
+
+  // Manually set the ZKP_AUTH flag
+  envelope.header.flags |= FLAG_ZKP_AUTH;
+
+  return {
+    id: uint8ArrayToHex(envelope.headerHash),
+    schema: LISTING_SCHEMA_URI,
+    title: data.title,
+    description: data.description,
+    priceSats: data.priceSats,
+    mediaCids: [],
+    authorId: "00".repeat(32), // Anonymous
+    authorName: "Anonymous Member",
+    powScore: getPowScore(envelope.headerHash),
+    timestamp: Date.now(),
+    isZkp: true,
+    nullifier: uint8ArrayToHex(nullifier),
   };
 }
 
