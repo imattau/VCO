@@ -13,9 +13,18 @@ import {
 } from 'lucide-react';
 
 export default function StudioView() {
-  const { channel, updateChannel, publishEpisode } = usePodcast();
+  const { channel, updateChannel, publishEpisode, createChannel, resetChannel } = usePodcast();
   const [activeTab, setActiveTab] = useState<'profile' | 'upload'>('upload');
   
+  // Creation State
+  const [isCreating, setIsCreating] = useState(false);
+  const [newChannelData, setNewChannelData] = useState({
+    name: '',
+    bio: '',
+    author: 'did:vco:new_creator',
+    categories: ''
+  });
+
   // Profile State
   const [profileData, setProfileData] = useState({
     name: channel?.name || '',
@@ -35,7 +44,79 @@ export default function StudioView() {
   const [isPublishing, setIsPublishing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (!channel) return null;
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCreating(true);
+    await createChannel({
+      name: newChannelData.name,
+      bio: newChannelData.bio,
+      author: newChannelData.author,
+      categories: newChannelData.categories.split(',').map(c => c.trim()).filter(Boolean),
+      avatarCid: new Uint8Array(32) // Default empty avatar
+    });
+    setIsCreating(false);
+  };
+
+  if (!channel) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+        <div className="text-center space-y-6 mb-12">
+           <div className="inline-flex bg-blue-600/10 p-6 rounded-[2rem] border border-blue-500/20 mb-4">
+              <Music className="text-blue-500 w-12 h-12" />
+           </div>
+           <h2 className="text-5xl font-black text-white tracking-tighter">Start Your Swarm</h2>
+           <p className="text-zinc-500 text-xl font-medium leading-relaxed">
+              You haven't established a media channel on the VCO network yet. Create your decentralized identity to start publishing.
+           </p>
+        </div>
+
+        <form onSubmit={handleCreate} className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] shadow-2xl space-y-8">
+           <div className="space-y-6">
+              <div className="space-y-3">
+                <label className="text-xs font-black text-zinc-500 uppercase tracking-widest ml-1">Show Name</label>
+                <input
+                  type="text"
+                  value={newChannelData.name}
+                  onChange={e => setNewChannelData({...newChannelData, name: e.target.value})}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-5 py-4 text-white font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-inner"
+                  placeholder="e.g. The Decentralized Voice"
+                  required
+                />
+              </div>
+              <div className="space-y-3">
+                <label className="text-xs font-black text-zinc-500 uppercase tracking-widest ml-1">Creator DID</label>
+                <input
+                  type="text"
+                  value={newChannelData.author}
+                  onChange={e => setNewChannelData({...newChannelData, author: e.target.value})}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-5 py-4 text-white font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-inner"
+                  required
+                />
+              </div>
+              <div className="space-y-3">
+                <label className="text-xs font-black text-zinc-500 uppercase tracking-widest ml-1">One-sentence Bio</label>
+                <textarea
+                  value={newChannelData.bio}
+                  onChange={e => setNewChannelData({...newChannelData, bio: e.target.value})}
+                  rows={3}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-5 py-4 text-white font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-inner resize-none"
+                  placeholder="What is your show about?"
+                />
+              </div>
+           </div>
+
+           <button
+              type="submit"
+              disabled={isCreating}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-3xl font-black text-sm uppercase tracking-widest transition-all shadow-2xl active:translate-y-1 flex items-center justify-center gap-3"
+           >
+              {isCreating ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
+              {isCreating ? 'Broadcasting Identity...' : 'Initialize Media Channel'}
+           </button>
+        </form>
+      </div>
+    );
+  }
 
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,14 +234,24 @@ export default function StudioView() {
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={isSavingProfile}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-2xl active:translate-y-1 flex items-center justify-center gap-3 disabled:bg-zinc-800 disabled:text-zinc-600"
-            >
-              {isSavingProfile ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-              {isSavingProfile ? 'Updating Decentralized Profile...' : 'Save Profile Changes'}
-            </button>
+            <div className="flex flex-col gap-4">
+              <button
+                type="submit"
+                disabled={isSavingProfile}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-2xl active:translate-y-1 flex items-center justify-center gap-3 disabled:bg-zinc-800 disabled:text-zinc-600"
+              >
+                {isSavingProfile ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+                {isSavingProfile ? 'Updating Decentralized Profile...' : 'Save Profile Changes'}
+              </button>
+
+              <button
+                type="button"
+                onClick={resetChannel}
+                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-600 hover:text-red-500 hover:border-red-500/20 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
+              >
+                Reset Session (Logout Simulator)
+              </button>
+            </div>
           </form>
         ) : (
           <form onSubmit={handlePublish} className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] shadow-2xl space-y-10 animate-in zoom-in-95 duration-500">

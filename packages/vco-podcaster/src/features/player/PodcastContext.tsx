@@ -12,6 +12,8 @@ interface PodcastContextType {
   togglePlayback: () => void;
   updateChannel: (data: Partial<MediaChannelData>) => Promise<void>;
   publishEpisode: (manifest: Omit<MediaManifestData, 'schema' | 'publishedAtMs' | 'previousItemCid'>, file: Blob) => Promise<void>;
+  createChannel: (data: Omit<MediaChannelData, 'schema' | 'latestItemCid' | 'isLive'>) => Promise<void>;
+  resetChannel: () => Promise<void>;
 }
 
 const PodcastContext = createContext<PodcastContextType | undefined>(undefined);
@@ -34,6 +36,9 @@ export function PodcastProvider({ children }: { children: ReactNode }) {
         setChannel(ch);
         const history = await MockMediaService.getChannelHistory(ch.latestItemCid);
         setEpisodes(history);
+      } else {
+        setChannel(null);
+        setEpisodes([]);
       }
     } catch (err) {
       console.error("Failed to bootstrap podcast data:", err);
@@ -68,6 +73,17 @@ export function PodcastProvider({ children }: { children: ReactNode }) {
     const updated = { ...channel, ...data };
     await MockMediaService.updateChannel(MockMediaService.getDefaultChannelCid(), updated);
     setChannel(updated);
+  };
+
+  const createChannel = async (data: Omit<MediaChannelData, 'schema' | 'latestItemCid' | 'isLive'>) => {
+    const { channel: newChannel } = await MockMediaService.createChannel(data);
+    setChannel(newChannel);
+    setEpisodes([]);
+  };
+
+  const resetChannel = async () => {
+    MockMediaService.resetSession();
+    await loadChannel();
   };
 
   const publishEpisode = async (
@@ -112,7 +128,9 @@ export function PodcastProvider({ children }: { children: ReactNode }) {
       playEpisode,
       togglePlayback,
       updateChannel,
-      publishEpisode
+      publishEpisode,
+      createChannel,
+      resetChannel
     }}>
       {children}
     </PodcastContext.Provider>

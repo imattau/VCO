@@ -134,15 +134,35 @@ export const MockMediaService = {
   },
 
   /**
+   * Create a brand new channel
+   */
+  async createChannel(data: Omit<MediaChannelData, 'schema' | 'latestItemCid' | 'isLive'>): Promise<{ cid: Uint8Array, channel: MediaChannelData }> {
+    const cid = mockCid(`channel-${Math.random().toString(36).slice(2, 11)}`);
+    const channel: MediaChannelData = {
+      ...data,
+      schema: MEDIA_CHANNEL_SCHEMA_URI,
+      latestItemCid: new Uint8Array(0), // Empty head
+      isLive: false
+    };
+    
+    networkStore.set(toHex(cid), encodeMediaChannel(channel));
+    (this as any)._activeCid = cid;
+    
+    return { cid, channel };
+  },
+
+  /**
    * Helper to fetch a channel's history by walking the previousItemCid chain
    */
   async getChannelHistory(latestCidBytes: Uint8Array): Promise<{ cid: Uint8Array, manifest: MediaManifestData }[]> {
+    if (!latestCidBytes || latestCidBytes.length === 0) return [];
+    
     const history: { cid: Uint8Array, manifest: MediaManifestData }[] = [];
     let currentCid: Uint8Array | undefined = latestCidBytes;
 
     // Limit to 10 for simulation safety
     let depth = 0;
-    while (currentCid && depth < 10) {
+    while (currentCid && currentCid.length > 0 && depth < 10) {
       const manifest = await this.getManifest(currentCid);
       if (manifest) {
         history.push({ cid: currentCid, manifest });
@@ -158,6 +178,13 @@ export const MockMediaService = {
 
   // Expose the mock channel CID for the app to bootstrap
   getDefaultChannelCid() {
-    return MOCK_CHANNEL_CID;
+    return (this as any)._activeCid || MOCK_CHANNEL_CID;
+  },
+
+  /**
+   * Resets the active session (for demonstration)
+   */
+  resetSession() {
+    (this as any)._activeCid = null;
   }
 };
