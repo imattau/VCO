@@ -31,7 +31,7 @@ message ZKPExtension {
   bytes proof = 3;
   uint32 inputs_length = 4;
   bytes public_inputs = 5;
-  bytes nullifier = 6;
+  reserved 6; // nullifier moved to top-level Envelope
 }
 
 message Envelope {
@@ -45,6 +45,20 @@ message Envelope {
   bytes payload = 8;
   ZKPExtension zkp_extension = 9;
   uint32 nonce = 10;       // PoW nonce (uint32)
+  bytes context_id = 11;   // Optional 8-byte blind context identifier
+  bytes nullifier = 12;    // 32-byte uniqueness nullifier
+}
+
+enum PriorityLevel {
+  PRIORITY_LOW = 0;
+  PRIORITY_NORMAL = 1;
+  PRIORITY_HIGH = 2;
+  PRIORITY_CRITICAL = 3;
+}
+
+message InterestVector {
+  repeated bytes target_cids = 1;
+  PriorityLevel priority = 2;
 }
 
 message PowChallenge {
@@ -57,6 +71,7 @@ message SyncControl {
   oneof message {
     SyncMessage sync_message = 1;
     PowChallenge pow_challenge = 2;
+    InterestVector interest_vector = 3;
   }
 }
 ```
@@ -67,7 +82,8 @@ message SyncControl {
 - Bit 6: `OBFUSCATED`
 - Bit 5: `POW_ACTIVE`
 - Bit 4: `ZKP_AUTH`
-- Bits 0-3: reserved and **MUST** be zero.
+- Bits 2-3: reserved and **MUST** be zero.
+- Bits 0-1: `PRIORITY_HINT` (0=LOW, 1=NORMAL, 2=HIGH, 3=CRITICAL).
 
 ### 2.2 Envelope Constraints
 
@@ -77,6 +93,8 @@ message SyncControl {
 - `header_hash` MUST be 32 bytes.
 - `payload_hash` MUST be valid Multihash.
 - `nonce` MUST be uint32 (`0..4294967295`).
+- `context_id` MUST be 8 bytes if present.
+- `nullifier` MUST be 32 bytes if present.
 - `payload` MUST respect `MAX_VCO_SIZE` unless fragmented.
 
 `ZKP_AUTH = 0`:
@@ -87,7 +105,8 @@ message SyncControl {
 `ZKP_AUTH = 1`:
 - `creator_id` MUST be empty or zeroed.
 - `signature` MUST be empty or zeroed.
-- `zkp_extension` MUST be present and validated (`proof_length`, `inputs_length`, `nullifier`).
+- `nullifier` MUST be present and verified for uniqueness.
+- `zkp_extension` MUST be present and validated (`proof_length`, `inputs_length`).
 
 ### 2.3 Deterministic Derivation Rules
 
@@ -95,21 +114,31 @@ Implementations MUST use canonical derivation messages in `vco.proto`:
 
 1. `payload_hash = Multihash(BLAKE3(payload))` (default profile).
 2. Signature-auth mode only: sign `EnvelopeSigningMaterial`.
-3. Compute `header_hash = BLAKE3(EnvelopeHeaderHashMaterial)` where `nonce` is included.
+3. Compute `header_hash = BLAKE3(EnvelopeHeaderHashMaterial)` where `nonce`, `context_id`, and `nullifier` are included.
 4. Serialize final `Envelope` with Protobuf.
 
 Custom concatenation and custom wire parsers are non-compliant.
 
 ---
 
-## 3. ZKP-Agnostic Extension (v3.1)
+## 3. Blind Context Routing (v3.2)
+
+`Envelope.context_id` is an optional 8-byte field used for "Blind Dispatching".
+
+- It SHOULD be derived from an HMAC of the Topic/Group ID.
+- Relays MUST support routing and filtering based on BCID without content inspection.
+- BCID allows nodes to drop irrelevant traffic before expensive decryption or ZKP verification.
+
+---
+
+## 4. ZKP-Agnostic Extension (v3.1)
 
 `ZKPExtension` is a blind slot for application-defined proof systems.
 
 Library responsibilities:
 - carry `zkp_extension` bytes,
 - dispatch by `circuit_id` via app-registered verifier interface,
-- enforce nullifier replay protection.
+- enforce nullifier replay protection (using the top-level `nullifier`).
 
 Application responsibilities:
 - generate proof bytes and public inputs,
@@ -117,7 +146,7 @@ Application responsibilities:
 
 ---
 
-## 4. PoW Extension (v3.2)
+## 5. PoW Extension (v3.2)
 
 ### 4.1 Purpose
 
@@ -154,17 +183,17 @@ Transport/session layers MAY communicate this via `SyncControl.pow_challenge`.
 `PowChallenge.min_difficulty` indicates required leading-zero-bit threshold.
 `PowChallenge.ttl_seconds` indicates challenge validity window.
 
-`SyncControl.sync_message` and `SyncControl.pow_challenge` MUST be mutually exclusive per frame.
+`SyncControl` messages MUST contain exactly one of `sync_message`, `pow_challenge`, or `interest_vector`.
 
 ### 4.6 Priority and Retention Guidance
 
-Nodes SHOULD use PoW score (`leading_zero_bits(header_hash)`) for:
+Nodes MUST use `PriorityHint` (primary) and PoW score (`leading_zero_bits(header_hash)`) (secondary) for:
 - request prioritization in sync/fetch queues,
-- cache/storage eviction (lower work evicted first).
+- cache/storage eviction (lower priority/work evicted first).
 
 ---
 
-## 5. VCO-Sync
+## 6. VCO-Sync
 
 State flow:
 1. INIT
@@ -175,9 +204,18 @@ State flow:
 
 `SyncMessage` wire format MUST use `proto/vco/v3/vco.proto`.
 
+### 6.1 Filtered Sync (Interest Vectors)
+
+Nodes MAY signal their interest in specific topics or priority levels using `SyncControl.interest_vector`.
+
+- `InterestVector.target_cids`: A list of BCIDs the node wants to synchronize.
+- `InterestVector.priority`: The minimum priority level the node is interested in.
+
+Relays SHOULD apply these filters to the outbound sync stream to conserve bandwidth.
+
 ---
 
-## 6. Transport
+## 7. Transport
 
 Current library baseline uses libp2p adapters:
 - QUIC: `@chainsafe/libp2p-quic`
@@ -188,7 +226,7 @@ Active profile in codebase: `Noise_XX_25519_ChaChaPoly_SHA256`.
 
 ---
 
-## 7. Constants
+## 8. Constants
 
 | Constant | Value | Description |
 | --- | --- | --- |
@@ -196,12 +234,14 @@ Active profile in codebase: `Noise_XX_25519_ChaChaPoly_SHA256`.
 | `RECON_THRESHOLD` | `16` | Sync list-exchange threshold. |
 | `IDLE_TIMEOUT` | `300s` | Inactive session timeout. |
 | `MAGIC_BYTES` | `0x56434F03` | Discovery marker in non-obfuscated contexts. |
+| `BCID_LENGTH` | `8 bytes` | Blind Context Identifier length. |
+| `NULLIFIER_LENGTH` | `32 bytes` | Uniqueness nullifier length. |
 
 ---
 
-## 8. Compliance Notes
+## 9. Compliance Notes
 
 - Protobuf schema is the canonical envelope/sync wire contract.
 - Multikey/Multihash are mandatory for algorithm agility.
-- PoW and ZKP are optional features but normative when their flags are active.
+- PoW, BCID, and ZKP are optional features but normative when their flags are active.
 - Any custom replacement for crypto/serialization/transport primitives requires ADR in `docs/adr/`.
