@@ -1,12 +1,12 @@
 import { ClassicLevel } from "classic-level";
-import { encodeEnvelopeProto, decodeEnvelopeProto, getPowScore } from "@vco/vco-core";
+import { encodeEnvelopeProto, decodeEnvelopeProto, getPowScore, type NullifierStore } from "@vco/vco-core";
 import type { VcoEnvelope } from "@vco/vco-core";
 
-export interface IRelayStore {
+export interface IRelayStore extends NullifierStore {
   open(): Promise<void>;
   put(envelope: VcoEnvelope): Promise<void>;
   get(headerHash: Uint8Array): Promise<VcoEnvelope | undefined>;
-  has(headerHash: Uint8Array): Promise<boolean>;
+  hasEnvelope(headerHash: Uint8Array): Promise<boolean>;
   allHeaderHashes(): AsyncIterable<Uint8Array>;
   lowestPowScoreHash(): Promise<Uint8Array | undefined>;
   powScore(headerHash: Uint8Array): Promise<number>;
@@ -37,6 +37,19 @@ export class LevelDBRelayStore implements IRelayStore {
     await this.db.open();
   }
 
+  async has(nullifierHex: string): Promise<boolean> {
+    try {
+      await this.db.get(`nul:${nullifierHex}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async add(nullifierHex: string): Promise<void> {
+    await this.db.put(`nul:${nullifierHex}`, new Uint8Array(0));
+  }
+
   async put(envelope: VcoEnvelope): Promise<void> {
     const hashHex = toHex(envelope.headerHash);
     const score = getPowScore(envelope.headerHash);
@@ -57,7 +70,7 @@ export class LevelDBRelayStore implements IRelayStore {
     }
   }
 
-  async has(headerHash: Uint8Array): Promise<boolean> {
+  async hasEnvelope(headerHash: Uint8Array): Promise<boolean> {
     try {
       await this.db.get(`env:${toHex(headerHash)}`);
       return true;

@@ -51,7 +51,7 @@ export async function handleSyncSession(
       const valid = await core.validateEnvelope(envelope, { powDifficulty: requiredDifficulty });
       if (!valid) continue;
 
-      if (!await store.has(envelope.headerHash)) {
+      if (!await store.hasEnvelope(envelope.headerHash)) {
         await store.put(envelope);
 
         // Evict lowest PoW envelope if store size limit exceeded

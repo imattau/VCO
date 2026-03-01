@@ -30,6 +30,9 @@ export class RelayServer {
     await store.open();
     this.store = store;
 
+    // Use persistent store for core (nullifier tracking)
+    (this.core as any).nullifierStore = store;
+
     const node = await createVcoLibp2pNode({
       addresses: { listen: this.config.listenAddrs },
       services: {

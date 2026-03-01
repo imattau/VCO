@@ -40,18 +40,25 @@ describe("LevelDBRelayStore", () => {
     expect(retrieved!.payload).toEqual(env.payload);
   });
 
-  it("has returns true after put", async () => {
+  it("hasEnvelope returns true after put", async () => {
     const env = makeEnvelope(2);
-    expect(await store.has(env.headerHash)).toBe(false);
+    expect(await store.hasEnvelope(env.headerHash)).toBe(false);
     await store.put(env);
-    expect(await store.has(env.headerHash)).toBe(true);
+    expect(await store.hasEnvelope(env.headerHash)).toBe(true);
   });
 
   it("evict removes envelope", async () => {
     const env = makeEnvelope(3);
     await store.put(env);
     await store.evict(env.headerHash);
-    expect(await store.has(env.headerHash)).toBe(false);
+    expect(await store.hasEnvelope(env.headerHash)).toBe(false);
+  });
+
+  it("persists and checks ZKP nullifiers", async () => {
+    const nullifier = "deadbeef".repeat(8);
+    expect(await store.has(nullifier)).toBe(false);
+    await store.add(nullifier);
+    expect(await store.has(nullifier)).toBe(true);
   });
 
   it("allHeaderHashes yields stored hashes", async () => {
