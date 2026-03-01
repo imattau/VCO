@@ -32,3 +32,8 @@ export * from "./coordination/announcement.js";
 
 // Network
 export * from "./network/policy.js";
+
+// Media
+export * from "./media/manifest.js";
+export * from "./media/channel.js";
+export * from "./media/transcript.js";

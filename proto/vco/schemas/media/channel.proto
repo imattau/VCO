@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package vco.schemas;
+
+message MediaChannel {
+  string schema = 1;
+  string name = 2;
+  string author = 3;
+  string bio = 4;
+  bytes avatar_cid = 5;
+  bytes latest_item_cid = 6;
+  repeated string categories = 7;
+  bool is_live = 8;
+}

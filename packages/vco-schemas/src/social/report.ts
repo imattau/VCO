@@ -7,7 +7,7 @@ export { ReportReason };
 export interface ReportData {
   schema: string;
   targetCid: Uint8Array;
-  reason: ReportReason;
+  reason: number;
   detail?: string;
   proofOfHarmCid?: Uint8Array;
   timestampMs: bigint;

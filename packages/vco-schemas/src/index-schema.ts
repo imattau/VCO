@@ -35,7 +35,7 @@ export function decodeKeywordIndex(bytes: Uint8Array): KeywordIndexData {
     schema: msg.schema,
     keyword: msg.keyword,
     entries: msg.entries.map(e => ({
-      cid: new Uint8Array(e.cid),
+      cid: new Uint8Array(e.cid as any),
       weight: e.weight || undefined,
       indexedAtMs: (e.indexedAtMs && e.indexedAtMs.toString() !== "0") ? BigInt(e.indexedAtMs.toString()) : undefined
     })),

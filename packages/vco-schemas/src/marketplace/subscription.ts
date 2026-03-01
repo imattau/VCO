@@ -36,7 +36,7 @@ export function decodeSubscriptionManifest(bytes: Uint8Array): SubscriptionManif
     contentCid: new Uint8Array(msg.contentCid),
     tierName: msg.tierName,
     requirements: msg.requirements.map(r => ({
-      type: r.type,
+      type: r.type as number,
       contractRef: (r.contractRef && r.contractRef.length > 0) ? new Uint8Array(r.contractRef) : undefined,
       zkpCircuitId: r.zkpCircuitId || undefined
     }))

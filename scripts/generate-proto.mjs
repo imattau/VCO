@@ -93,11 +93,29 @@ console.log(`Generated ${path.relative(projectRoot, syncOutDtsPath)}`);
 const schemasOutDir = path.join(projectRoot, "packages/vco-schemas/src/generated");
 await fs.mkdir(schemasOutDir, { recursive: true });
 
-for (const domain of ["social", "marketplace", "files", "coordination", "network"]) {
+for (const domain of ["social", "marketplace", "files", "coordination", "network", "media"]) {
   await fs.mkdir(path.join(schemasOutDir, domain), { recursive: true });
 }
 
 const schemaTargets = [
+  {
+    protoFile: "proto/vco/schemas/media/manifest.proto",
+    outBase: "media/manifest",
+    reExports: ["export const MediaManifest: typeof vco.schemas.MediaManifest;"],
+  },
+  {
+    protoFile: "proto/vco/schemas/media/channel.proto",
+    outBase: "media/channel",
+    reExports: ["export const MediaChannel: typeof vco.schemas.MediaChannel;"],
+  },
+  {
+    protoFile: "proto/vco/schemas/media/transcript.proto",
+    outBase: "media/transcript",
+    reExports: [
+      "export const TranscriptEntry: typeof vco.schemas.TranscriptEntry;",
+      "export const Transcript: typeof vco.schemas.Transcript;"
+    ],
+  },
   {
     protoFile: "proto/vco/schemas/post.proto",
     outBase: "post",
