@@ -101,7 +101,6 @@ describe("createEnvelope", () => {
           proof: new Uint8Array([9, 8, 7]),
           inputsLength: 2,
           publicInputs: new Uint8Array([1, 2]),
-          nullifier: filled(32, 6),
         },
       },
       crypto,

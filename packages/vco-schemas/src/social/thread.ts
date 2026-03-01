@@ -11,5 +11,13 @@ export function encodeThread(d: ThreadData): Uint8Array {
 }
 export function decodeThread(bytes: Uint8Array): ThreadData {
   const m = Thread.decode(bytes);
-  return { schema: m.schema, title: m.title, entries: m.entries.map(e => ({ cid: new Uint8Array(e.cid), schemaUri: e.schemaUri })), timestampMs: BigInt(m.timestampMs as number) };
+  return {
+    schema: m.schema ?? "",
+    title: m.title ?? "",
+    entries: (m.entries ?? []).map(e => ({
+      cid: new Uint8Array(e.cid ?? []),
+      schemaUri: e.schemaUri ?? ""
+    })),
+    timestampMs: BigInt(m.timestampMs?.toString() ?? "0")
+  };
 }

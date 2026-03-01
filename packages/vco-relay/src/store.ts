@@ -3,14 +3,25 @@ import { encodeEnvelopeProto, decodeEnvelopeProto, getPowScore, type NullifierSt
 import type { VcoEnvelope } from "@vco/vco-core";
 
 export interface IRelayStore extends NullifierStore {
+  /** Opens the underlying database. */
   open(): Promise<void>;
+  /** Stores an envelope in the relay's persistent storage and update priority/context indexes. */
   put(envelope: VcoEnvelope): Promise<void>;
+  /** Retrieves an envelope by its 32-byte header hash. */
   get(headerHash: Uint8Array): Promise<VcoEnvelope | undefined>;
+  /** Checks if an envelope with the given header hash exists. */
   hasEnvelope(headerHash: Uint8Array): Promise<boolean>;
+  /** Iterates over all stored envelope header hashes. */
   allHeaderHashes(): AsyncIterable<Uint8Array>;
-  lowestPowScoreHash(): Promise<Uint8Array | undefined>;
+  /** Iterates over header hashes matching the specified blind context ID. */
+  getByContext(contextId: Uint8Array): AsyncIterable<Uint8Array>;
+  /** Returns the header hash of the envelope with the lowest priority and work score. */
+  worstEnvelopeHash(): Promise<Uint8Array | undefined>;
+  /** Returns the PoW score of a given envelope hash. */
   powScore(headerHash: Uint8Array): Promise<number>;
+  /** Deletes an envelope and its associated index entries. */
   evict(headerHash: Uint8Array): Promise<void>;
+  /** Closes the underlying database. */
   close(): Promise<void>;
 }
 
@@ -22,8 +33,8 @@ function fromHex(hex: string): Uint8Array {
   return Uint8Array.from(Buffer.from(hex, "hex"));
 }
 
-function powScoreKey(score: number, hashHex: string): string {
-  return `idx:${String(score).padStart(3, "0")}:${hashHex}`;
+function priorityScoreKey(priority: number, score: number, hashHex: string): string {
+  return `idx:${priority}:${String(score).padStart(3, "0")}:${hashHex}`;
 }
 
 export class LevelDBRelayStore implements IRelayStore {
@@ -53,10 +64,16 @@ export class LevelDBRelayStore implements IRelayStore {
   async put(envelope: VcoEnvelope): Promise<void> {
     const hashHex = toHex(envelope.headerHash);
     const score = getPowScore(envelope.headerHash);
+    const priority = envelope.header.priorityHint ?? 1;
     const encoded = encodeEnvelopeProto(envelope);
     const batch = this.db.batch();
     batch.put(`env:${hashHex}`, encoded);
-    batch.put(powScoreKey(score, hashHex), new Uint8Array(0));
+    batch.put(priorityScoreKey(priority, score, hashHex), new Uint8Array(0));
+    
+    if (envelope.header.contextId) {
+      batch.put(`ctx:${toHex(envelope.header.contextId)}:${hashHex}`, new Uint8Array(0));
+    }
+    
     await batch.write();
   }
 
@@ -85,10 +102,18 @@ export class LevelDBRelayStore implements IRelayStore {
     }
   }
 
-  async lowestPowScoreHash(): Promise<Uint8Array | undefined> {
+  async *getByContext(contextId: Uint8Array): AsyncIterable<Uint8Array> {
+    const ctxHex = toHex(contextId);
+    for await (const key of this.db.keys({ gte: `ctx:${ctxHex}:`, lte: `ctx:${ctxHex}:~` })) {
+      const parts = key.split(":");
+      yield fromHex(parts[2]);
+    }
+  }
+
+  async worstEnvelopeHash(): Promise<Uint8Array | undefined> {
     for await (const key of this.db.keys({ gte: "idx:", lte: "idx:~", limit: 1 })) {
       const parts = key.split(":");
-      return fromHex(parts[2]);
+      return fromHex(parts[3]);
     }
     return undefined;
   }
@@ -98,11 +123,20 @@ export class LevelDBRelayStore implements IRelayStore {
   }
 
   async evict(headerHash: Uint8Array): Promise<void> {
+    const env = await this.get(headerHash);
+    if (!env) return;
+
     const hashHex = toHex(headerHash);
     const score = getPowScore(headerHash);
+    const priority = env.header.priorityHint ?? 1;
     const batch = this.db.batch();
     batch.del(`env:${hashHex}`);
-    batch.del(powScoreKey(score, hashHex));
+    batch.del(priorityScoreKey(priority, score, hashHex));
+    
+    if (env.header.contextId) {
+      batch.del(`ctx:${toHex(env.header.contextId)}:${hashHex}`);
+    }
+    
     await batch.write();
   }
 

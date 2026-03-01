@@ -11,5 +11,15 @@ export function encodeDirectory(d: DirectoryData): Uint8Array {
 }
 export function decodeDirectory(bytes: Uint8Array): DirectoryData {
   const m = Directory.decode(bytes);
-  return { schema: m.schema, name: m.name, entries: m.entries.map(e => ({ cid: new Uint8Array(e.cid), schemaUri: e.schemaUri, name: e.name })), previousCid: new Uint8Array(m.previousCid), timestampMs: BigInt(m.timestampMs as number) };
+  return {
+    schema: m.schema ?? "",
+    name: m.name ?? "",
+    entries: (m.entries ?? []).map(e => ({
+      cid: new Uint8Array(e.cid ?? []),
+      schemaUri: e.schemaUri ?? "",
+      name: e.name ?? ""
+    })),
+    previousCid: new Uint8Array(m.previousCid ?? []),
+    timestampMs: BigInt(m.timestampMs?.toString() ?? "0")
+  };
 }

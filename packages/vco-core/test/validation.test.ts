@@ -104,7 +104,6 @@ describe("validateEnvelope", () => {
           proof: new Uint8Array([1, 2, 3]),
           inputsLength: 2,
           publicInputs: new Uint8Array([4, 5]),
-          nullifier: filled(32, 6),
         },
       }),
     ).not.toThrow();
@@ -151,7 +150,6 @@ describe("validateEnvelope", () => {
           proof: new Uint8Array([1, 2, 3]),
           inputsLength: 2,
           publicInputs: new Uint8Array([4, 5]),
-          nullifier: filled(32, 6),
         },
       }),
     ).toThrow(/must be omitted unless FLAG_ZKP_AUTH is set/i);
@@ -179,7 +177,6 @@ describe("validateEnvelope", () => {
           proof: new Uint8Array([1, 2, 3]),
           inputsLength: 2,
           publicInputs: new Uint8Array([4, 5]),
-          nullifier: filled(31, 6),
         },
       }),
     ).toThrow(/proofLength|nullifier/i);

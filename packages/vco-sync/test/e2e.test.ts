@@ -212,13 +212,13 @@ describe("VCO protocol end-to-end", () => {
         payload: new TextEncoder().encode("zkp payload"),
         payloadType: 1,
         flags: FLAG_ZKP_AUTH,
+        nullifier,
         zkpExtension: {
           circuitId: 1,
           proof,
           proofLength: 32,
           publicInputs,
           inputsLength: 16,
-          nullifier,
         },
       },
       crypto,
@@ -232,12 +232,12 @@ describe("VCO protocol end-to-end", () => {
 
     // creatorId must be empty or zeroed
     const creatorIdAllZero = decoded.header.creatorId.length === 0 ||
-      decoded.header.creatorId.every((b) => b === 0);
+      decoded.header.creatorId.every((b: number) => b === 0);
     expect(creatorIdAllZero).toBe(true);
 
     // signature must be empty or zeroed
     const sigAllZero = decoded.header.signature.length === 0 ||
-      decoded.header.signature.every((b) => b === 0);
+      decoded.header.signature.every((b: number) => b === 0);
     expect(sigAllZero).toBe(true);
   });
 
@@ -255,13 +255,13 @@ describe("VCO protocol end-to-end", () => {
         payload: new TextEncoder().encode("zkp replay test"),
         payloadType: 1,
         flags: FLAG_ZKP_AUTH,
+        nullifier,
         zkpExtension: {
           circuitId: 1,
           proof,
           proofLength: 32,
           publicInputs,
           inputsLength: 16,
-          nullifier,
         },
       },
       crypto,

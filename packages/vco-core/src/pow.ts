@@ -92,6 +92,10 @@ export function compareEnvelopesByPoW(a: VcoEnvelope, b: VcoEnvelope): number {
  * Compares two envelopes by their Priority Hint first, then by Proof-of-Work score.
  * Returns a negative number if 'a' is higher priority than 'b', positive if lower,
  * and zero if equal.
+ *
+ * @param a The first envelope to compare.
+ * @param b The second envelope to compare.
+ * @returns A number indicating the relative priority.
  */
 export function compareEnvelopesByPriorityAndPoW(a: VcoEnvelope, b: VcoEnvelope): number {
   const priorityA = a.header.priorityHint ?? 0;

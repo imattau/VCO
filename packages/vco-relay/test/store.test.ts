@@ -71,15 +71,34 @@ describe("LevelDBRelayStore", () => {
     expect(hashes.length).toBe(2);
   });
 
-  it("PoW-sorted eviction: lowest score evicted first", async () => {
-    const plain = makeEnvelope(6);
-    const powered = createEnvelope(
-      { payload: new Uint8Array([7]), payloadType: MULTICODEC_PROTOBUF, creatorId: CREATOR_ID, privateKey: PRIVATE_KEY, powDifficulty: 4 },
+  it("Priority-aware eviction: lowest priority evicted first", async () => {
+    const lowPriorityHighPow = createEnvelope(
+      { payload: new Uint8Array([8]), payloadType: MULTICODEC_PROTOBUF, creatorId: CREATOR_ID, privateKey: PRIVATE_KEY, priorityHint: 0, powDifficulty: 8 },
       crypto,
     );
-    await store.put(plain);
-    await store.put(powered);
-    const lowest = await store.lowestPowScoreHash();
-    expect(lowest).toBeDefined();
+    const criticalPriorityLowPow = createEnvelope(
+      { payload: new Uint8Array([9]), payloadType: MULTICODEC_PROTOBUF, creatorId: CREATOR_ID, privateKey: PRIVATE_KEY, priorityHint: 3, powDifficulty: 0 },
+      crypto,
+    );
+    await store.put(lowPriorityHighPow);
+    await store.put(criticalPriorityLowPow);
+    
+    const worst = await store.worstEnvelopeHash();
+    expect(worst).toBeDefined();
+    expect(worst).toEqual(lowPriorityHighPow.headerHash);
+  });
+
+  it("contextId indexing works", async () => {
+    const contextId = new Uint8Array(8).fill(0xaa);
+    const env = createEnvelope(
+      { payload: new Uint8Array([10]), payloadType: MULTICODEC_PROTOBUF, creatorId: CREATOR_ID, privateKey: PRIVATE_KEY, contextId },
+      crypto,
+    );
+    await store.put(env);
+    
+    const hashes: Uint8Array[] = [];
+    for await (const h of store.getByContext(contextId)) hashes.push(h);
+    expect(hashes.length).toBe(1);
+    expect(hashes[0]).toEqual(env.headerHash);
   });
 });

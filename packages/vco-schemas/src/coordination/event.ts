@@ -6,5 +6,13 @@ export function encodeEvent(d: EventData): Uint8Array {
 }
 export function decodeEvent(bytes: Uint8Array): EventData {
   const m = Event.decode(bytes);
-  return { schema: m.schema, title: m.title, description: m.description, startMs: BigInt(m.startMs as number), endMs: BigInt(m.endMs as number), location: m.location, previousCid: new Uint8Array(m.previousCid) };
+  return {
+    schema: m.schema ?? "",
+    title: m.title ?? "",
+    description: m.description ?? "",
+    startMs: BigInt(m.startMs?.toString() ?? "0"),
+    endMs: BigInt(m.endMs?.toString() ?? "0"),
+    location: m.location ?? "",
+    previousCid: new Uint8Array(m.previousCid ?? [])
+  };
 }

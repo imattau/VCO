@@ -8,29 +8,6 @@ import {
 import type { VcoEnvelope } from "./types.js";
 import { validateEnvelope } from "./validation.js";
 
-interface ProtoEnvelope {
-  headerHash: Uint8Array;
-  version: number;
-  flags: number;
-  payloadType: number;
-  creatorId: Uint8Array;
-  payloadHash: Uint8Array;
-  signature: Uint8Array;
-  payload: Uint8Array;
-  nonce: number;
-  zkpExtension?: ProtoZkpExtension | null;
-  contextId?: Uint8Array | null;
-  nullifier?: Uint8Array | null;
-}
-
-interface ProtoZkpExtension {
-  circuitId: number;
-  proofLength: number;
-  proof: Uint8Array;
-  inputsLength: number;
-  publicInputs: Uint8Array;
-}
-
 interface ProtoSyncRange {
   startHash: Uint8Array;
   endHash: Uint8Array;
@@ -72,7 +49,7 @@ function toUint8Array(value: Uint8Array | number[] | null | undefined): Uint8Arr
   return value.constructor === Uint8Array ? value as Uint8Array : Uint8Array.from(value);
 }
 
-function toProtoEnvelope(envelope: VcoEnvelope): ProtoEnvelope {
+function toProtoEnvelope(envelope: VcoEnvelope): vco.v3.IEnvelope {
   return {
     headerHash: envelope.headerHash,
     version: envelope.header.version,
@@ -97,7 +74,7 @@ function toProtoEnvelope(envelope: VcoEnvelope): ProtoEnvelope {
   };
 }
 
-function fromProtoEnvelope(message: ProtoEnvelope): VcoEnvelope {
+function fromProtoEnvelope(message: vco.v3.IEnvelope): VcoEnvelope {
   const zkpExtension = message.zkpExtension
     ? {
         circuitId: message.zkpExtension.circuitId ?? 0,
@@ -114,14 +91,14 @@ function fromProtoEnvelope(message: ProtoEnvelope): VcoEnvelope {
   return {
     headerHash: toUint8Array(message.headerHash),
     header: {
-      version: message.version,
-      flags: message.flags,
-      payloadType: message.payloadType,
+      version: message.version ?? 0,
+      flags: message.flags ?? 0,
+      payloadType: message.payloadType ?? 0,
       creatorId: toUint8Array(message.creatorId),
       payloadHash: toUint8Array(message.payloadHash),
       signature: toUint8Array(message.signature),
       nonce: message.nonce ?? 0,
-      priorityHint: message.flags & 0x03,
+      priorityHint: (message.flags ?? 0) & 0x03,
       contextId: contextId && contextId.length > 0 ? contextId : undefined,
       nullifier: nullifier && nullifier.length > 0 ? nullifier : undefined,
     },

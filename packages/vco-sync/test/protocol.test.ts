@@ -153,4 +153,44 @@ describe("SyncRangeProofProtocol", () => {
       reason: "queue saturation",
     });
   });
+
+  it("sends and receives InterestVector control messages", async () => {
+    const [leftChannel, rightChannel] = linkedChannels();
+    const left = new SyncRangeProofProtocol(leftChannel);
+    const right = new SyncRangeProofProtocol(rightChannel);
+
+    const targetCids = [new Uint8Array([1, 1, 1]), new Uint8Array([2, 2, 2])];
+    const sendFromLeft = left.sendInterestVector(targetCids);
+
+    const receivedByRight = await right.receiveInterestVector();
+    await sendFromLeft;
+
+    expect(receivedByRight.targetCids).toEqual(targetCids);
+  });
+
+  it("auto-handles InterestVector messages before receiving range proofs", async () => {
+    const [leftChannel, rightChannel] = linkedChannels();
+    const seenVectors: any[] = [];
+    const left = new SyncRangeProofProtocol(leftChannel);
+    const right = new SyncRangeProofProtocol(rightChannel, {
+      onInterestVector: (vector) => {
+        seenVectors.push(vector);
+      },
+    });
+
+    const targetCids = [new Uint8Array([0xaa]), new Uint8Array([0xbb])];
+    await left.sendInterestVector(targetCids);
+    await left.sendRangeProofs([
+      {
+        range: { start: 0x00, end: 0xff },
+        merkleRoot: new Uint8Array([1]),
+      },
+    ]);
+
+    const receivedByRight = await right.receiveRangeProofs();
+
+    expect(receivedByRight.length).toBe(1);
+    expect(seenVectors.length).toBe(1);
+    expect(seenVectors[0].targetCids).toEqual(targetCids);
+  });
 });

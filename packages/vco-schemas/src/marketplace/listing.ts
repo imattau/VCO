@@ -6,5 +6,13 @@ export function encodeListing(d: ListingData): Uint8Array {
 }
 export function decodeListing(bytes: Uint8Array): ListingData {
   const m = Listing.decode(bytes);
-  return { schema: m.schema, title: m.title, description: m.description, priceSats: BigInt(m.priceSats as number), mediaCids: m.mediaCids.map(c => new Uint8Array(c)), expiryMs: BigInt(m.expiryMs as number), previousCid: new Uint8Array(m.previousCid) };
+  return {
+    schema: m.schema ?? "",
+    title: m.title ?? "",
+    description: m.description ?? "",
+    priceSats: BigInt(m.priceSats?.toString() ?? "0"),
+    mediaCids: (m.mediaCids ?? []).map(c => new Uint8Array(c ?? [])),
+    expiryMs: BigInt(m.expiryMs?.toString() ?? "0"),
+    previousCid: new Uint8Array(m.previousCid ?? [])
+  };
 }

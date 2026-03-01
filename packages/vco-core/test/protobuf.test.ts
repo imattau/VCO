@@ -70,7 +70,7 @@ describe("protobuf envelope codec", () => {
       header: {
         version: PROTOCOL_VERSION,
         flags: FLAG_ZKP_AUTH,
-        nullifier: filled(32),
+        nullifier: filled(32, 0),
         payloadType: MULTICODEC_PROTOBUF,
         creatorId: new Uint8Array(),
         payloadHash: encodeBlake3Multihash(filled(32, 3)),

@@ -2261,17 +2261,17 @@ export const vco = $root.vco = (() => {
          * PriorityLevel enum.
          * @name vco.v3.PriorityLevel
          * @enum {number}
-         * @property {number} PRIORITY_CRITICAL=0 PRIORITY_CRITICAL value
-         * @property {number} PRIORITY_HIGH=1 PRIORITY_HIGH value
-         * @property {number} PRIORITY_NORMAL=2 PRIORITY_NORMAL value
-         * @property {number} PRIORITY_LOW=3 PRIORITY_LOW value
+         * @property {number} PRIORITY_LOW=0 PRIORITY_LOW value
+         * @property {number} PRIORITY_NORMAL=1 PRIORITY_NORMAL value
+         * @property {number} PRIORITY_HIGH=2 PRIORITY_HIGH value
+         * @property {number} PRIORITY_CRITICAL=3 PRIORITY_CRITICAL value
          */
         v3.PriorityLevel = (function() {
             const valuesById = {}, values = Object.create(valuesById);
-            values[valuesById[0] = "PRIORITY_CRITICAL"] = 0;
-            values[valuesById[1] = "PRIORITY_HIGH"] = 1;
-            values[valuesById[2] = "PRIORITY_NORMAL"] = 2;
-            values[valuesById[3] = "PRIORITY_LOW"] = 3;
+            values[valuesById[0] = "PRIORITY_LOW"] = 0;
+            values[valuesById[1] = "PRIORITY_NORMAL"] = 1;
+            values[valuesById[2] = "PRIORITY_HIGH"] = 2;
+            values[valuesById[3] = "PRIORITY_CRITICAL"] = 3;
             return values;
         })();
 
@@ -2476,19 +2476,19 @@ export const vco = $root.vco = (() => {
                         break;
                     }
                     break;
-                case "PRIORITY_CRITICAL":
+                case "PRIORITY_LOW":
                 case 0:
                     message.priority = 0;
                     break;
-                case "PRIORITY_HIGH":
+                case "PRIORITY_NORMAL":
                 case 1:
                     message.priority = 1;
                     break;
-                case "PRIORITY_NORMAL":
+                case "PRIORITY_HIGH":
                 case 2:
                     message.priority = 2;
                     break;
-                case "PRIORITY_LOW":
+                case "PRIORITY_CRITICAL":
                 case 3:
                     message.priority = 3;
                     break;
@@ -2512,7 +2512,7 @@ export const vco = $root.vco = (() => {
                 if (options.arrays || options.defaults)
                     object.targetCids = [];
                 if (options.defaults)
-                    object.priority = options.enums === String ? "PRIORITY_CRITICAL" : 0;
+                    object.priority = options.enums === String ? "PRIORITY_LOW" : 0;
                 if (message.targetCids && message.targetCids.length) {
                     object.targetCids = [];
                     for (let j = 0; j < message.targetCids.length; ++j)

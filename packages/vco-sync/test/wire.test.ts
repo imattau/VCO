@@ -6,8 +6,11 @@ import {
   encodePowChallenge,
   encodeRangeProofs,
   encodeSyncWireMessage,
+  encodeInterestVector,
+  decodeInterestVector,
   type SyncWireRange,
 } from "../src/index.js";
+import { vco } from "../src/generated/vco.pb.js";
 
 describe("sync wire protobuf adapter", () => {
   it("encodes and decodes raw sync ranges through protobuf", () => {
@@ -100,5 +103,14 @@ describe("sync wire protobuf adapter", () => {
         ttlSeconds: 60,
       }),
     ).toThrow(/minDifficulty/i);
+  });
+
+  it("encodes and decodes InterestVector messages", () => {
+    const targetCids = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])];
+    const encoded = encodeInterestVector(targetCids, vco.v3.PriorityLevel.PRIORITY_HIGH);
+    const decoded = decodeInterestVector(encoded);
+
+    expect(decoded.targetCids).toEqual(targetCids);
+    expect(decoded.priority).toBe(vco.v3.PriorityLevel.PRIORITY_HIGH);
   });
 });

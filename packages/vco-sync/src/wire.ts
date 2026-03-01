@@ -29,6 +29,7 @@ interface ProtoPowChallenge {
 interface ProtoSyncControl {
   syncMessage?: ProtoSyncMessage | null;
   powChallenge?: ProtoPowChallenge | null;
+  interestVector?: vco.v3.IInterestVector | null;
 }
 
 export interface PowChallenge {
@@ -37,12 +38,13 @@ export interface PowChallenge {
   reason?: string;
 }
 
-export type SyncControlKind = "range_proofs" | "pow_challenge";
+export type SyncControlKind = "range_proofs" | "pow_challenge" | "interest_vector";
 
 interface DecodedSyncControl {
   kind: SyncControlKind;
   syncMessage?: vco.v3.ISyncMessage | null;
   powChallenge?: vco.v3.IPowChallenge | null;
+  interestVector?: vco.v3.IInterestVector | null;
 }
 
 function toUint8Array(value: Uint8Array | number[] | null | undefined): Uint8Array {
@@ -125,8 +127,11 @@ function decodeSyncControl(encoded: Uint8Array): DecodedSyncControl {
   const control = vco.v3.SyncControl.decode(encoded);
   const hasSyncMessage = control.syncMessage != null;
   const hasPowChallenge = control.powChallenge != null;
+  const hasInterestVector = control.interestVector != null;
 
-  if (hasSyncMessage === hasPowChallenge) {
+  const count = (hasSyncMessage ? 1 : 0) + (hasPowChallenge ? 1 : 0) + (hasInterestVector ? 1 : 0);
+
+  if (count !== 1) {
     throw new Error("SyncControl must contain exactly one message type.");
   }
 
@@ -137,9 +142,16 @@ function decodeSyncControl(encoded: Uint8Array): DecodedSyncControl {
     };
   }
 
+  if (hasPowChallenge) {
+    return {
+      kind: "pow_challenge",
+      powChallenge: control.powChallenge,
+    };
+  }
+
   return {
-    kind: "pow_challenge",
-    powChallenge: control.powChallenge,
+    kind: "interest_vector",
+    interestVector: control.interestVector,
   };
 }
 
@@ -190,6 +202,43 @@ export function decodePowChallenge(encoded: Uint8Array): PowChallenge {
     minDifficulty,
     ttlSeconds,
     reason: decoded.reason ?? "",
+  };
+}
+
+/**
+ * Encodes an interest vector into a SyncControl protobuf message.
+ * An interest vector signals the client's desire for objects matching specific context IDs
+ * and having at least the specified priority level.
+ *
+ * @param targetCids The list of 32-byte blind context IDs the client is interested in.
+ * @param priority The minimum priority level to synchronize.
+ * @returns The encoded SyncControl message as a Uint8Array.
+ */
+export function encodeInterestVector(targetCids: readonly Uint8Array[], priority?: vco.v3.PriorityLevel): Uint8Array {
+  return encodeSyncControl({
+    interestVector: {
+      targetCids: targetCids.map((cid) => Uint8Array.from(cid)),
+      priority: priority ?? vco.v3.PriorityLevel.PRIORITY_NORMAL,
+    },
+  });
+}
+
+/**
+ * Decodes a SyncControl message containing an interest vector.
+ *
+ * @param encoded The encoded SyncControl message.
+ * @returns The decoded interest vector properties.
+ * @throws {Error} If the message is not an interest vector.
+ */
+export function decodeInterestVector(encoded: Uint8Array): vco.v3.IInterestVector {
+  const control = decodeSyncControl(encoded);
+  if (control.kind !== "interest_vector" || !control.interestVector) {
+    throw new Error("Expected SyncControl.interest_vector payload.");
+  }
+
+  return {
+    targetCids: (control.interestVector.targetCids ?? []).map((cid) => toUint8Array(cid)),
+    priority: control.interestVector.priority ?? vco.v3.PriorityLevel.PRIORITY_NORMAL,
   };
 }
 

@@ -5,8 +5,11 @@ import {
   decodeRangeProofs,
   encodePowChallenge,
   encodeRangeProofs,
+  encodeInterestVector,
+  decodeInterestVector,
   type PowChallenge,
 } from "./wire.js";
+import { vco } from "./generated/vco.pb.js";
 
 export interface SyncMessageChannel {
   send(payload: Uint8Array): Promise<void>;
@@ -15,6 +18,7 @@ export interface SyncMessageChannel {
 
 export interface SyncRangeProofProtocolOptions {
   onPowChallenge?: (challenge: PowChallenge) => Promise<void> | void;
+  onInterestVector?: (vector: vco.v3.IInterestVector) => Promise<void> | void;
 }
 
 export class SyncRangeProofProtocol {
@@ -43,6 +47,14 @@ export class SyncRangeProofProtocol {
         continue;
       }
 
+      if (kind === "interest_vector") {
+        const vector = decodeInterestVector(encoded);
+        if (this.options.onInterestVector) {
+          await this.options.onInterestVector(vector);
+        }
+        continue;
+      }
+
       return decodeRangeProofs(encoded);
     }
   }
@@ -60,6 +72,28 @@ export class SyncRangeProofProtocol {
       await this.options.onPowChallenge({ ...challenge });
     }
     return challenge;
+  }
+
+  /**
+   * Sends an interest vector to the peer, signaling interest in objects
+   * matching specific context IDs and priority thresholds.
+   *
+   * @param targetCids The context IDs the client is interested in.
+   * @param priority Minimum priority level desired.
+   */
+  async sendInterestVector(targetCids: readonly Uint8Array[], priority?: vco.v3.PriorityLevel): Promise<void> {
+    const encoded = encodeInterestVector(targetCids, priority);
+    await this.channel.send(encoded);
+  }
+
+  /**
+   * Receives an interest vector from the peer.
+   *
+   * @returns The decoded interest vector.
+   */
+  async receiveInterestVector(): Promise<vco.v3.IInterestVector> {
+    const encoded = await this.channel.receive();
+    return decodeInterestVector(encoded);
   }
 
   async requestRangeProofs(proofs: readonly RangeProof[]): Promise<RangeProof[]> {

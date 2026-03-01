@@ -54,14 +54,20 @@ export async function handleSyncSession(
       if (!await store.hasEnvelope(envelope.headerHash)) {
         await store.put(envelope);
 
-        // Evict lowest PoW envelope if store size limit exceeded
+        // Evict lowest priority/work envelope if store size limit exceeded
         if (config.maxStoreSizeMb > 0) {
-          const lowestHash = await store.lowestPowScoreHash();
-          if (lowestHash) {
-            const lowestScore = await store.powScore(lowestHash);
-            const thisScore = getPowScore(envelope.headerHash);
-            if (lowestScore < thisScore) {
-              await store.evict(lowestHash);
+          const worstHash = await store.worstEnvelopeHash();
+          if (worstHash) {
+            const worstEnv = await store.get(worstHash);
+            if (worstEnv) {
+              const worstScore = getPowScore(worstHash);
+              const worstPriority = worstEnv.header.priorityHint ?? 1;
+              const thisScore = getPowScore(envelope.headerHash);
+              const thisPriority = envelope.header.priorityHint ?? 1;
+
+              if (worstPriority < thisPriority || (worstPriority === thisPriority && worstScore < thisScore)) {
+                await store.evict(worstHash);
+              }
             }
           }
         }
