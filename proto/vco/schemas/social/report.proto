@@ -1,0 +1,31 @@
+syntax = "proto3";
+package vco.schemas;
+
+// Report — payload type MULTICODEC_PROTOBUF (0x50)
+// Envelope schema URI: vco://schemas/social/report/v1
+//
+// Used for decentralized content flagging and moderation signaling.
+message Report {
+  // URI identifying the schema version, e.g. "vco://schemas/social/report/v1"
+  string schema = 1;
+  // CID of the object being reported (e.g. a Post, Profile, or Listing)
+  bytes target_cid = 2;
+  // The primary reason for flagging the content
+  ReportReason reason = 3;
+  // Optional textual context or description
+  string detail = 4;
+  // Optional CID pointing to supporting evidence or proof of harm
+  bytes proof_of_harm_cid = 5;
+  // Unix epoch milliseconds
+  int64 timestamp_ms = 6;
+}
+
+enum ReportReason {
+  OTHER = 0;
+  SPAM = 1;
+  VIOLENCE = 2;
+  HARASSMENT = 3;
+  MALWARE = 4;
+  INTELLECTUAL_PROPERTY = 5;
+  MISINFORMATION = 6;
+}

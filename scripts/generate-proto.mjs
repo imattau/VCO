@@ -93,7 +93,7 @@ console.log(`Generated ${path.relative(projectRoot, syncOutDtsPath)}`);
 const schemasOutDir = path.join(projectRoot, "packages/vco-schemas/src/generated");
 await fs.mkdir(schemasOutDir, { recursive: true });
 
-for (const domain of ["social", "marketplace", "files", "coordination"]) {
+for (const domain of ["social", "marketplace", "files", "coordination", "network"]) {
   await fs.mkdir(path.join(schemasOutDir, domain), { recursive: true });
 }
 
@@ -112,6 +112,19 @@ const schemaTargets = [
     protoFile: "proto/vco/schemas/manifest.proto",
     outBase: "manifest",
     reExports: ["export const SequenceManifest: typeof vco.schemas.SequenceManifest;"],
+  },
+  {
+    protoFile: "proto/vco/schemas/index.proto",
+    outBase: "index",
+    reExports: ["export const KeywordIndex: typeof vco.schemas.KeywordIndex;"],
+  },
+  {
+    protoFile: "proto/vco/schemas/social/report.proto",
+    outBase: "social/report",
+    reExports: [
+      "export const Report: typeof vco.schemas.Report;",
+      "export const ReportReason: typeof vco.schemas.ReportReason;"
+    ],
   },
   {
     protoFile: "proto/vco/schemas/social/reaction.proto",
@@ -157,6 +170,11 @@ const schemaTargets = [
     reExports: ["export const Receipt: typeof vco.schemas.Receipt;"],
   },
   {
+    protoFile: "proto/vco/schemas/marketplace/subscription.proto",
+    outBase: "marketplace/subscription",
+    reExports: ["export const SubscriptionManifest: typeof vco.schemas.SubscriptionManifest;"],
+  },
+  {
     protoFile: "proto/vco/schemas/files/file-descriptor.proto",
     outBase: "files/file-descriptor",
     reExports: ["export const FileDescriptor: typeof vco.schemas.FileDescriptor;"],
@@ -193,6 +211,11 @@ const schemaTargets = [
     protoFile: "proto/vco/schemas/coordination/announcement.proto",
     outBase: "coordination/announcement",
     reExports: ["export const Announcement: typeof vco.schemas.Announcement;"],
+  },
+  {
+    protoFile: "proto/vco/schemas/network/policy.proto",
+    outBase: "network/policy",
+    reExports: ["export const RelayAdmissionPolicy: typeof vco.schemas.RelayAdmissionPolicy;"],
   },
 ];
 

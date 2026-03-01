@@ -1,0 +1,27 @@
+syntax = "proto3";
+package vco.schemas;
+
+// SubscriptionManifest — payload type MULTICODEC_PROTOBUF (0x50)
+// Envelope schema URI: vco://schemas/marketplace/subscription/v1
+//
+// Links restricted content to specific authorization or payment requirements.
+message SubscriptionManifest {
+  // URI identifying the schema version, e.g. "vco://schemas/marketplace/subscription/v1"
+  string schema = 1;
+  // Root CID of the restricted content (e.g. a SequenceManifest or Directory)
+  bytes content_cid = 2;
+  // Human-readable subscription tier name, e.g. "Gold", "Supporter"
+  string tier_name = 3;
+  
+  message Requirement {
+    // Requirement type: 1 = ZKP Proof, 2 = Payment Receipt CID, 3 = External Oracle
+    uint32 type = 1;
+    // Optional: reference to a smart contract, policy URI, or description
+    bytes contract_ref = 2;
+    // For ZKP: which circuit ID must be satisfied
+    uint32 zkp_circuit_id = 3;
+  }
+  
+  // List of requirements that must be met to access the content
+  repeated Requirement requirements = 4;
+}

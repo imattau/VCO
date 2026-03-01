@@ -29,11 +29,13 @@ The package organizes schemas into logical domains to support diverse applicatio
 - **Follow**: Cryptographically verifiable relationship graphs.
 - **Thread**: Collection-based management for long-form content or discussions.
 - **Tombstone**: Standardized "soft-delete" notifications for content revocation.
+- **Report**: Decentralized content flagging and moderation signaling.
 
 ### 🛒 Marketplace
 - **Listing**: Product/Service descriptions with price, category, and availability.
 - **Offer**: Intent to purchase or negotiate on a listing.
 - **Receipt**: Verifiable proof of transaction or interaction.
+- **SubscriptionManifest**: Links restricted content to specific authorization or payment requirements (e.g., ZKP).
 
 ### 📂 Files
 - **FileDescriptor**: Metadata for individual files (name, size, MIME type, hash).
@@ -49,6 +51,10 @@ The package organizes schemas into logical domains to support diverse applicatio
 ### 🧩 Base
 - **Manifest**: Sequential or collection-based indices for large content (e.g., video chunks, large datasets).
 - **Assembly**: Instructions for reassembling fragmented payloads.
+- **KeywordIndex**: Decentralized search indexing mapping keywords to CIDs.
+
+### 🌐 Network
+- **RelayAdmissionPolicy**: Defines the rules, PoW difficulty, and accepted types for a specific relay node.
 
 ## Usage
 

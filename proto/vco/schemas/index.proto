@@ -1,0 +1,28 @@
+syntax = "proto3";
+package vco.schemas;
+
+// KeywordIndex — payload type MULTICODEC_PROTOBUF (0x50)
+// Envelope schema URI: vco://schemas/index/keyword/v1
+//
+// Used for decentralized search indexing. Nodes broadcast these indices
+// to link human-readable keywords to object CIDs.
+message KeywordIndex {
+  // URI identifying the schema version, e.g. "vco://schemas/index/keyword/v1"
+  string schema = 1;
+  // The normalized keyword (e.g., "p2p", "vco")
+  string keyword = 2;
+  
+  message Entry {
+    // Multihash of the target object
+    bytes cid = 1;
+    // Optional weight/relevance score (0-1000)
+    uint32 weight = 2;
+    // Unix epoch milliseconds when the entry was first indexed
+    int64 indexed_at_ms = 3;
+  }
+  
+  // List of CIDs associated with the keyword
+  repeated Entry entries = 3;
+  // Optional CID of the next KeywordIndex for pagination/continuation
+  bytes next_page_cid = 4;
+}

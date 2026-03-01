@@ -1,0 +1,23 @@
+syntax = "proto3";
+package vco.schemas;
+
+// RelayAdmissionPolicy — payload type MULTICODEC_PROTOBUF (0x50)
+// Envelope schema URI: vco://schemas/network/policy/v1
+//
+// Defines the rules and limits for a specific relay node.
+message RelayAdmissionPolicy {
+  // URI identifying the schema version, e.g. "vco://schemas/network/policy/v1"
+  string schema = 1;
+  // Minimum Proof-of-Work difficulty (number of leading zero bits in header hash)
+  uint32 min_pow_difficulty = 2;
+  // Multicodec codes for payload types this relay accepts
+  repeated uint32 accepted_payload_types = 3;
+  // Maximum envelope size (in bytes) accepted by this relay
+  uint32 max_envelope_size = 4;
+  // Time-to-Live (in seconds) for stored envelopes
+  uint32 storage_ttl_seconds = 5;
+  // If true, the relay only accepts envelopes with ZKP authentication
+  bool requires_zkp_auth = 6;
+  // If true, the relay supports Blind Context Routing (ADR 0004)
+  bool supports_blind_routing = 7;
+}
