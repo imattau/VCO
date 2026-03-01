@@ -88,18 +88,21 @@ export interface EnvelopeCryptoProvider {
   verify(message: Uint8Array, signature: Uint8Array, publicKey: Uint8Array): boolean;
 }
 
+/**
+ * Constant-time byte comparison to mitigate timing attacks.
+ * Iterates through the entire length of the arrays regardless of when a mismatch occurs.
+ */
 function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
   if (left.length !== right.length) {
     return false;
   }
 
+  let result = 0;
   for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) {
-      return false;
-    }
+    result |= left[index] ^ right[index];
   }
 
-  return true;
+  return result === 0;
 }
 
 function encodeSigningMaterial(material: EnvelopeSigningMaterial): Uint8Array {

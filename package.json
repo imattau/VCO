@@ -28,6 +28,7 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
+    "lru-cache": "^11.2.6",
     "multiformats": "^13.4.2"
   }
 }

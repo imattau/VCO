@@ -49,7 +49,7 @@ export class RelayServer {
     await node.start();
     this.node = node;
 
-    if (this.config.httpPort) {
+    if (this.config.httpPort !== undefined) {
       this.httpServer = http.createServer((req, res) => {
         if (req.url === "/health") {
           res.writeHead(200, { "Content-Type": "text/plain" });

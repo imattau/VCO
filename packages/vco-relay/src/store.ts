@@ -1,6 +1,7 @@
 import { ClassicLevel } from "classic-level";
 import { encodeEnvelopeProto, decodeEnvelopeProto, getPowScore, type NullifierStore } from "@vco/vco-core";
 import type { VcoEnvelope } from "@vco/vco-core";
+import { LRUCache } from "lru-cache";
 
 export interface IRelayStore extends NullifierStore {
   /** Opens the underlying database. */
@@ -39,13 +40,38 @@ function priorityScoreKey(priority: number, score: number, hashHex: string): str
 
 export class LevelDBRelayStore implements IRelayStore {
   private db: ClassicLevel<string, Uint8Array>;
+  private readonly existenceCache: LRUCache<string, boolean>;
+  private readonly envelopeCache: LRUCache<string, VcoEnvelope>;
+  private readonly pendingNullifiers = new Set<string>();
 
   constructor(dataDir: string) {
     this.db = new ClassicLevel(dataDir, { valueEncoding: "buffer" });
+    this.existenceCache = new LRUCache({ max: 10000 }); // Cache 10k existence checks
+    this.envelopeCache = new LRUCache({ max: 1000 });   // Cache 1k full envelopes
   }
 
   async open(): Promise<void> {
     await this.db.open();
+  }
+
+  async testAndSet(nullifierHex: string): Promise<boolean> {
+    if (this.pendingNullifiers.has(nullifierHex)) {
+      return false;
+    }
+
+    // Synchronously reserve the nullifier to prevent concurrent async yields from entering.
+    this.pendingNullifiers.add(nullifierHex);
+
+    try {
+      if (await this.has(nullifierHex)) {
+        return false;
+      }
+
+      await this.add(nullifierHex);
+      return true;
+    } finally {
+      this.pendingNullifiers.delete(nullifierHex);
+    }
   }
 
   async has(nullifierHex: string): Promise<boolean> {
@@ -75,21 +101,35 @@ export class LevelDBRelayStore implements IRelayStore {
     }
     
     await batch.write();
+    
+    this.existenceCache.set(hashHex, true);
+    this.envelopeCache.set(hashHex, envelope);
   }
 
   async get(headerHash: Uint8Array): Promise<VcoEnvelope | undefined> {
+    const hashHex = toHex(headerHash);
+    const cached = this.envelopeCache.get(hashHex);
+    if (cached) return cached;
+
     try {
-      const encoded = await this.db.get(`env:${toHex(headerHash)}`);
+      const encoded = await this.db.get(`env:${hashHex}`);
       const env = decodeEnvelopeProto(Uint8Array.from(encoded));
-      return { ...env, payload: new Uint8Array(env.payload) };
+      const envelope = { ...env, payload: new Uint8Array(env.payload) };
+      this.envelopeCache.set(hashHex, envelope);
+      this.existenceCache.set(hashHex, true);
+      return envelope;
     } catch {
       return undefined;
     }
   }
 
   async hasEnvelope(headerHash: Uint8Array): Promise<boolean> {
+    const hashHex = toHex(headerHash);
+    if (this.existenceCache.has(hashHex)) return true;
+
     try {
-      await this.db.get(`env:${toHex(headerHash)}`);
+      await this.db.get(`env:${hashHex}`);
+      this.existenceCache.set(hashHex, true);
       return true;
     } catch {
       return false;
@@ -98,7 +138,9 @@ export class LevelDBRelayStore implements IRelayStore {
 
   async *allHeaderHashes(): AsyncIterable<Uint8Array> {
     for await (const key of this.db.keys({ gte: "env:", lte: "env:~" })) {
-      yield fromHex(key.slice(4));
+      const hashHex = key.slice(4);
+      this.existenceCache.set(hashHex, true);
+      yield fromHex(hashHex);
     }
   }
 
@@ -106,7 +148,9 @@ export class LevelDBRelayStore implements IRelayStore {
     const ctxHex = toHex(contextId);
     for await (const key of this.db.keys({ gte: `ctx:${ctxHex}:`, lte: `ctx:${ctxHex}:~` })) {
       const parts = key.split(":");
-      yield fromHex(parts[2]);
+      const hashHex = parts[2];
+      this.existenceCache.set(hashHex, true);
+      yield fromHex(hashHex);
     }
   }
 
@@ -123,10 +167,10 @@ export class LevelDBRelayStore implements IRelayStore {
   }
 
   async evict(headerHash: Uint8Array): Promise<void> {
+    const hashHex = toHex(headerHash);
     const env = await this.get(headerHash);
     if (!env) return;
 
-    const hashHex = toHex(headerHash);
     const score = getPowScore(headerHash);
     const priority = env.header.priorityHint ?? 1;
     const batch = this.db.batch();
@@ -138,6 +182,8 @@ export class LevelDBRelayStore implements IRelayStore {
     }
     
     await batch.write();
+    this.existenceCache.delete(hashHex);
+    this.envelopeCache.delete(hashHex);
   }
 
   async close(): Promise<void> {

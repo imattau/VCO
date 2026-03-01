@@ -55,18 +55,25 @@ export async function handleSyncSession(
         await store.put(envelope);
 
         // Evict lowest priority/work envelope if store size limit exceeded
+        // Optimization: In a real relay, we'd track bytes. Here we trigger QoS-aware eviction
+        // to maintain a high-quality cache if a limit is set.
         if (config.maxStoreSizeMb > 0) {
           const worstHash = await store.worstEnvelopeHash();
           if (worstHash) {
             const worstEnv = await store.get(worstHash);
             if (worstEnv) {
-              const worstScore = getPowScore(worstHash);
               const worstPriority = worstEnv.header.priorityHint ?? 1;
-              const thisScore = getPowScore(envelope.headerHash);
               const thisPriority = envelope.header.priorityHint ?? 1;
 
-              if (worstPriority < thisPriority || (worstPriority === thisPriority && worstScore < thisScore)) {
+              // Compare priority first, then PoW score
+              if (worstPriority < thisPriority) {
                 await store.evict(worstHash);
+              } else if (worstPriority === thisPriority) {
+                const worstScore = getPowScore(worstHash);
+                const thisScore = getPowScore(envelope.headerHash);
+                if (worstScore < thisScore) {
+                  await store.evict(worstHash);
+                }
               }
             }
           }

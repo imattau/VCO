@@ -13,12 +13,29 @@ export interface IZKPVerifier {
 }
 
 export interface NullifierStore {
+  /**
+   * Checks if a nullifier exists and adds it if missing, atomically.
+   * @param nullifierHex The hex-encoded nullifier.
+   * @returns True if the nullifier was NOT present and was successfully added; False if it already existed.
+   */
+  testAndSet(nullifierHex: string): Promise<boolean> | boolean;
+
+  /** Deprecated: use testAndSet for atomic operations. */
   has(nullifierHex: string): Promise<boolean> | boolean;
+  /** Deprecated: use testAndSet for atomic operations. */
   add(nullifierHex: string): Promise<void> | void;
 }
 
 export class InMemoryNullifierStore implements NullifierStore {
   private readonly seen = new Set<string>();
+
+  testAndSet(nullifierHex: string): boolean {
+    if (this.seen.has(nullifierHex)) {
+      return false;
+    }
+    this.seen.add(nullifierHex);
+    return true;
+  }
 
   has(nullifierHex: string): boolean {
     return this.seen.has(nullifierHex);
@@ -116,7 +133,10 @@ export class VCOCore {
     }
 
     const nullifierHex = toHex(envelope.header.nullifier);
-    if (await this.nullifierStore.has(nullifierHex)) {
+    
+    // ATOMIC TEST AND SET: Prevent race condition between checking and adding nullifier.
+    // If the verifier fails later, the nullifier remains recorded (conservative behavior).
+    if (!await this.nullifierStore.testAndSet(nullifierHex)) {
       return false;
     }
 
@@ -132,10 +152,11 @@ export class VCOCore {
     }
 
     if (!isProofValid) {
+      // NOTE: We do NOT remove the nullifier if verification fails to prevent 
+      // brute-force/fuzzing of ZKP proofs using the same nullifier.
       return false;
     }
 
-    await this.nullifierStore.add(nullifierHex);
     return true;
   }
 }
