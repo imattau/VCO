@@ -111,7 +111,11 @@ export class VCOCore {
       return false;
     }
 
-    const nullifierHex = toHex(envelope.zkpExtension.nullifier);
+    if (!envelope.header.nullifier) {
+      return false; // Should not happen if validation passed, but for safety
+    }
+
+    const nullifierHex = toHex(envelope.header.nullifier);
     if (await this.nullifierStore.has(nullifierHex)) {
       return false;
     }

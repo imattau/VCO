@@ -10,6 +10,7 @@ import {
   solvePoWNonce,
   type EnvelopeCryptoProvider,
   verifyPoW,
+  compareEnvelopesByPriorityAndPoW,
 } from "../src/index.js";
 
 class DeterministicCryptoProvider implements EnvelopeCryptoProvider {
@@ -136,5 +137,22 @@ describe("PoW integration", () => {
     const core = new VCOCore(crypto, { minPowDifficulty: 3 });
     await expect(core.validateEnvelope(envelope)).resolves.toBe(true);
     await expect(core.validateEnvelope(envelope, { powDifficulty: 12 })).resolves.toBe(false);
+  });
+
+  describe("compareEnvelopesByPriorityAndPoW", () => {
+    it("sorts primarily by priority and secondarily by PoW score", () => {
+      const envCriticalLowPow = { header: { priorityHint: 3 }, headerHash: new Uint8Array(32).fill(0x80) } as any; // score 0
+      const envCriticalHighPow = { header: { priorityHint: 3 }, headerHash: new Uint8Array(32).fill(0x00) } as any; // score 256
+      const envNormalHighPow = { header: { priorityHint: 1 }, headerHash: new Uint8Array(32).fill(0x00) } as any; // score 256
+
+      // Higher priority comes first (negative value)
+      expect(compareEnvelopesByPriorityAndPoW(envCriticalLowPow, envNormalHighPow)).toBeLessThan(0);
+      
+      // Same priority, higher PoW comes first
+      expect(compareEnvelopesByPriorityAndPoW(envCriticalHighPow, envCriticalLowPow)).toBeLessThan(0);
+      
+      // Lower priority comes last, even with higher PoW
+      expect(compareEnvelopesByPriorityAndPoW(envNormalHighPow, envCriticalLowPow)).toBeGreaterThan(0);
+    });
   });
 });

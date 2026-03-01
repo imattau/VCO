@@ -6,7 +6,8 @@ import {
   decodeEnvelopeProto,
   getPowScore,
   MULTICODEC_PROTOBUF,
-  deriveContextId
+  deriveContextId,
+  PriorityLevel
 } from "@vco/vco-core";
 import { 
   LISTING_SCHEMA_URI,
@@ -56,7 +57,7 @@ const POW_DIFFICULTY = 4;
 const FLAG_ZKP_AUTH = 1 << 4;
 
 export async function buildListing(
-  data: { title: string; description: string; priceSats: bigint; mediaCids?: string[]; contextId?: Uint8Array },
+  data: { title: string; description: string; priceSats: bigint; mediaCids?: string[]; contextId?: Uint8Array; priorityHint?: PriorityLevel },
   identity: Identity,
 ): Promise<any> {
   const mediaCidsBytes = (data.mediaCids ?? []).map(cid => hexToUint8Array(cid));
@@ -79,6 +80,7 @@ export async function buildListing(
       privateKey: identity.privateKey,
       powDifficulty: POW_DIFFICULTY,
       contextId: data.contextId,
+      priorityHint: data.priorityHint ?? PriorityLevel.NORMAL,
     },
     crypto,
   );
@@ -97,11 +99,12 @@ export async function buildListing(
     powScore: getPowScore(envelope.headerHash),
     timestamp: Date.now(),
     contextId: data.contextId ? uint8ArrayToHex(data.contextId) : undefined,
+    priorityHint: envelope.header.priorityHint,
   };
 }
 
 export async function buildZkpListing(
-  data: { title: string; description: string; priceSats: bigint; contextId?: Uint8Array },
+  data: { title: string; description: string; priceSats: bigint; contextId?: Uint8Array; priorityHint?: PriorityLevel },
 ): Promise<any> {
   const payload = encodeListing({
     schema: LISTING_SCHEMA_URI,
@@ -121,25 +124,21 @@ export async function buildZkpListing(
     {
       payload,
       payloadType: MULTICODEC_PROTOBUF,
-      // In ZKP mode, creatorId and privateKey are not used for signing the header
-      creatorId: new Uint8Array(32), 
-      privateKey: new Uint8Array(32), 
+      flags: FLAG_ZKP_AUTH,
       powDifficulty: POW_DIFFICULTY,
       contextId: data.contextId,
+      nullifier,
+      priorityHint: data.priorityHint ?? PriorityLevel.NORMAL,
       zkpExtension: {
         circuitId: 1, // "Membership"
         proof,
         proofLength: proof.length,
         publicInputs: new Uint8Array(32),
         inputsLength: 32,
-        nullifier,
       }
     },
     crypto,
   );
-
-  // Manually set the ZKP_AUTH flag
-  envelope.header.flags |= FLAG_ZKP_AUTH;
 
   return {
     id: uint8ArrayToHex(envelope.headerHash),
@@ -155,6 +154,7 @@ export async function buildZkpListing(
     isZkp: true,
     nullifier: uint8ArrayToHex(nullifier),
     contextId: data.contextId ? uint8ArrayToHex(data.contextId) : undefined,
+    priorityHint: envelope.header.priorityHint,
   };
 }
 

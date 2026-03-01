@@ -14,6 +14,7 @@ export namespace vco {
       zkpExtension?: IZKPExtension | null;
       nonce?: number | null;
       contextId?: Uint8Array | null;
+      nullifier?: Uint8Array | null;
     }
 
     class Envelope implements IEnvelope {
@@ -29,6 +30,7 @@ export namespace vco {
       public zkpExtension?: ZKPExtension | null;
       public nonce: number;
       public contextId: Uint8Array;
+      public nullifier: Uint8Array;
       public static create(properties?: IEnvelope): Envelope;
       public static encode(message: IEnvelope, writer?: $protobuf.Writer): $protobuf.Writer;
       public static decode(reader: $protobuf.Reader | Uint8Array, length?: number): Envelope;
@@ -41,7 +43,6 @@ export namespace vco {
       proof?: Uint8Array | null;
       inputsLength?: number | null;
       publicInputs?: Uint8Array | null;
-      nullifier?: Uint8Array | null;
     }
 
     class ZKPExtension implements IZKPExtension {
@@ -51,7 +52,6 @@ export namespace vco {
       public proof: Uint8Array;
       public inputsLength: number;
       public publicInputs: Uint8Array;
-      public nullifier: Uint8Array;
       public static create(properties?: IZKPExtension): ZKPExtension;
       public static encode(message: IZKPExtension, writer?: $protobuf.Writer): $protobuf.Writer;
       public static decode(reader: $protobuf.Reader | Uint8Array, length?: number): ZKPExtension;
@@ -97,6 +97,7 @@ export namespace vco {
       creatorId?: Uint8Array | null;
       payloadHash?: Uint8Array | null;
       contextId?: Uint8Array | null;
+      nullifier?: Uint8Array | null;
     }
 
     class EnvelopeSigningMaterial implements IEnvelopeSigningMaterial {
@@ -107,6 +108,7 @@ export namespace vco {
       public creatorId: Uint8Array;
       public payloadHash: Uint8Array;
       public contextId: Uint8Array;
+      public nullifier: Uint8Array;
       public static create(properties?: IEnvelopeSigningMaterial): EnvelopeSigningMaterial;
       public static encode(
         message: IEnvelopeSigningMaterial,
@@ -128,6 +130,7 @@ export namespace vco {
       signature?: Uint8Array | null;
       nonce?: number | null;
       contextId?: Uint8Array | null;
+      nullifier?: Uint8Array | null;
     }
 
     class EnvelopeHeaderHashMaterial implements IEnvelopeHeaderHashMaterial {
@@ -140,6 +143,7 @@ export namespace vco {
       public signature: Uint8Array;
       public nonce: number;
       public contextId: Uint8Array;
+      public nullifier: Uint8Array;
       public static create(properties?: IEnvelopeHeaderHashMaterial): EnvelopeHeaderHashMaterial;
       public static encode(
         message: IEnvelopeHeaderHashMaterial,

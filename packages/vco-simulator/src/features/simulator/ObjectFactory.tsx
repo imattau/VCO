@@ -5,12 +5,14 @@ import { buildListing, buildZkpListing, deriveSimulatorContextId, uint8ArrayToHe
 import { globalWire, log } from "../../lib/simulator.js";
 import { Badge } from "../../components/ui/Badge.js";
 import { Activity, Shield, Cpu, Trash2, Users, Ghost, Repeat, Hash } from "lucide-react";
+import { PriorityLevel } from "@vco/vco-core";
 
 export function ObjectFactory() {
   const { identity } = useIdentity();
   const [busy, setBusy] = useState(false);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [topic, setTopic] = useState("vco-dev");
+  const [priority, setPriority] = useState<PriorityLevel>(PriorityLevel.NORMAL);
   const [lastObject, setLastObject] = useState<any>(null);
 
   const createDummyObject = async () => {
@@ -23,16 +25,12 @@ export function ObjectFactory() {
 
     try {
       const listing = isAnonymous 
-        ? await buildZkpListing({ title: "Anonymous Item", description: "Identity hidden by ZKP", priceSats: 500n, contextId })
-        : await buildListing({ title: "Simulated Item", description: "Created in the protocol simulator", priceSats: 1000n, contextId }, identity);
+        ? await buildZkpListing({ title: "Anonymous Item", description: "Identity hidden by ZKP", priceSats: 500n, contextId, priorityHint: priority })
+        : await buildListing({ title: "Simulated Item", description: "Created in the protocol simulator", priceSats: 1000n, contextId, priorityHint: priority }, identity);
       
       setLastObject(listing);
-      log("object", `New ${isAnonymous ? 'Anonymous ' : ''}Listing created: ${listing.id.slice(0, 16)}...`, listing);
-      
-      if (isAnonymous) {
-        log("transport", "Relay: Received anonymous envelope. Verifying ZKP (Circuit: 0x01)...", null, 400);
-        log("transport", "Relay: Nullifier check (Unique). ZKP Valid. Admitting object.", null, 800);
-      }
+      const priorityName = ["LOW", "NORMAL", "HIGH", "CRITICAL"][priority] || "NORMAL";
+      log("object", `[${priorityName}] New ${isAnonymous ? 'Anonymous ' : ''}Listing created: ${listing.id.slice(0, 16)}...`, listing);
       
       globalWire.broadcast(listing);
     } finally {
@@ -91,6 +89,17 @@ export function ObjectFactory() {
                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-2.5 pl-9 pr-4 text-xs focus:outline-none focus:border-indigo-500 transition-all text-white"
              />
            </div>
+
+           <select 
+             value={priority} 
+             onChange={(e) => setPriority(Number(e.target.value))}
+             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg py-2.5 px-3 text-xs focus:outline-none focus:border-indigo-500 transition-all text-white appearance-none"
+           >
+             <option value={PriorityLevel.LOW}>LOW Priority</option>
+             <option value={PriorityLevel.NORMAL}>NORMAL Priority</option>
+             <option value={PriorityLevel.HIGH}>HIGH Priority</option>
+             <option value={PriorityLevel.CRITICAL}>CRITICAL Priority</option>
+           </select>
 
            <button 
              onClick={() => setIsAnonymous(!isAnonymous)}
@@ -158,17 +167,26 @@ export function ObjectFactory() {
                 <span className="text-purple-400">creator_id:</span>
                 <span className={`break-all ml-2 ${lastObject.isZkp ? 'text-zinc-700' : 'text-zinc-300'}`}>{lastObject.authorId}</span>
               </div>
+              <div>
+                <span className="text-yellow-500">priority_hint:</span>
+                <span className="text-zinc-300 ml-2">{lastObject.priorityHint ?? 1}</span>
+              </div>
               {lastObject.contextId && (
                 <div>
                   <span className="text-blue-500">context_id:</span>
                   <span className="text-zinc-300 ml-2">0x{lastObject.contextId}</span>
                 </div>
               )}
+              {lastObject.nullifier && (
+                <div>
+                  <span className="text-orange-500">nullifier:</span>
+                  <span className="text-zinc-300 break-all ml-2">{lastObject.nullifier}</span>
+                </div>
+              )}
               {lastObject.isZkp && (
                 <div className="pt-2 mt-2 border-t border-zinc-900">
                   <div className="text-orange-400 mb-1">zkp_extension: {'{'}</div>
                   <div className="ml-4"><span className="text-zinc-500">circuit_id:</span> <span className="text-zinc-300">1 (Membership)</span></div>
-                  <div className="ml-4"><span className="text-zinc-500">nullifier:</span> <span className="text-zinc-300 break-all">{lastObject.nullifier}</span></div>
                   <div className="text-orange-400">{'}'}</div>
                 </div>
               )}

@@ -9,7 +9,7 @@ message ZKPExtension {
   bytes proof = 3;           // zk-SNARK/STARK proof bytes
   uint32 inputs_length = 4;  // uint16 mirror of public inputs byte length
   bytes public_inputs = 5;   // public inputs used for verification
-  bytes nullifier = 6;       // 32-byte replay-prevention nullifier
+  reserved 6;                // nullifier moved to top-level Envelope
 }
 
 // The core data container
@@ -25,6 +25,7 @@ message Envelope {
   ZKPExtension zkp_extension = 9; // Present when FLAGS bit 4 (ZKP_AUTH) is set
   uint32 nonce = 10;       // PoW nonce; 32-bit unsigned integer
   bytes context_id = 11;   // Optional 8-byte blind context identifier
+  bytes nullifier = 12;    // 32-byte uniqueness nullifier (mandatory for ZKP)
 }
 
 // Deterministic signing material (not transmitted directly).
@@ -35,6 +36,7 @@ message EnvelopeSigningMaterial {
   bytes creator_id = 4;
   bytes payload_hash = 5;
   bytes context_id = 6;
+  bytes nullifier = 7;
 }
 
 // Deterministic header-hash material (not transmitted directly).
@@ -47,6 +49,7 @@ message EnvelopeHeaderHashMaterial {
   bytes signature = 6;
   uint32 nonce = 7;
   bytes context_id = 8;
+  bytes nullifier = 9;
 }
 
 // Canonical payload fragmentation record for envelopes.

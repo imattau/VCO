@@ -8,9 +8,12 @@ export function NetworkMonitor() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    globalWire.addListener((event) => {
+    const listener = (event: NetworkEvent) => {
       setEvents((prev) => [...prev, event].slice(-50)); // Keep last 50
-    });
+    };
+
+    globalWire.addListener(listener);
+    return () => globalWire.removeListener(listener);
   }, []);
 
   useEffect(() => {

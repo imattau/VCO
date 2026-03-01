@@ -79,11 +79,11 @@ describe("createEnvelope", () => {
           payloadType: MULTICODEC_PROTOBUF,
           creatorId,
           privateKey,
-          flags: 0x01,
+          flags: 0x04,
         },
         crypto,
       ),
-    ).toThrow(/reserve bits 0-3/i);
+    ).toThrow(/reserve bits 2-3/i);
   });
 
   it("creates a valid ZKP-auth envelope with empty creator/signature", () => {
@@ -94,6 +94,7 @@ describe("createEnvelope", () => {
         payload: new Uint8Array([10, 20, 30]),
         payloadType: MULTICODEC_PROTOBUF,
         flags: FLAG_ZKP_AUTH,
+        nullifier: new Uint8Array(32).fill(1),
         zkpExtension: {
           circuitId: 7,
           proofLength: 3,

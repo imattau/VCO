@@ -16,6 +16,10 @@ export class SimulatedWire {
     this.listeners.push(fn);
   }
 
+  public removeListener(fn: (event: NetworkEvent) => void) {
+    this.listeners = this.listeners.filter(l => l !== fn);
+  }
+
   public setObfuscation(enabled: boolean) {
     this.isObfuscated = enabled;
     this.emit("system", `TOL Mode ${enabled ? "ENABLED" : "DISABLED"}`);
@@ -46,11 +50,22 @@ export class SimulatedWire {
 
   public broadcast(object: any) {
     this.emit("transport", `Relay: Received envelope ${object.id.slice(0, 8)}`, object);
+    
+    if (object.isZkp) {
+      this.emit("transport", "Relay: Received anonymous envelope. Verifying ZKP (Circuit: 0x01)...", null, 400);
+      this.emit("transport", `Relay: Nullifier check (Unique: ${object.nullifier.slice(0, 8)}...). ZKP Valid. Admitting object.`, null, 800);
+    }
+
     if (object.contextId) {
       this.emit("transport", `Relay: Routing by Blind Context ID (0x${object.contextId})`, null, 200);
     }
+    
     this.emit("transport", `Relay: Verifying PoW score (${object.powScore})...`, null, 400);
-    this.emit("transport", `Relay: Signature valid. Propagating to 5 peers.`, null, 800);
+    
+    if (!object.isZkp) {
+      this.emit("transport", `Relay: Signature valid. Propagating to 5 peers.`, null, 800);
+    }
+    
     this.emit("sync", `Peer 0xed...f2: Requested range sync for /social/posts`, null, 1200);
     this.emit("sync", `Peer 0xed...f2: Reconciliation complete. 1 new object received.`, null, 1800);
   }

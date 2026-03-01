@@ -2,6 +2,8 @@ import {
   FLAG_POW_ACTIVE,
   FLAG_ZKP_AUTH,
   MULTIHASH_BLAKE3_256,
+  PRIORITY_HINT_MASK,
+  PriorityLevel,
   PROTOCOL_VERSION,
 } from "./constants.js";
 import { EnvelopeValidationError } from "./errors.js";
@@ -24,6 +26,7 @@ interface EnvelopeSigningMaterial {
   creatorId: Uint8Array;
   payloadHash: Uint8Array;
   contextId?: Uint8Array;
+  nullifier?: Uint8Array;
 }
 
 interface EnvelopeHeaderHashMaterial extends EnvelopeSigningMaterial {
@@ -39,6 +42,8 @@ interface CreateEnvelopeInputBase {
   nonce?: number;
   powDifficulty?: number;
   contextId?: Uint8Array;
+  nullifier?: Uint8Array;
+  priorityHint?: PriorityLevel;
 }
 
 /**
@@ -116,6 +121,7 @@ function toEnvelopeSigningMaterial(envelope: VcoEnvelope): EnvelopeSigningMateri
     creatorId: envelope.header.creatorId,
     payloadHash: envelope.header.payloadHash,
     contextId: envelope.header.contextId,
+    nullifier: envelope.header.nullifier,
   };
 }
 
@@ -147,8 +153,16 @@ function cloneZkpExtension(extension: VcoZkpExtension): VcoZkpExtension {
     proof: Uint8Array.from(extension.proof),
     inputsLength: extension.inputsLength,
     publicInputs: Uint8Array.from(extension.publicInputs),
-    nullifier: Uint8Array.from(extension.nullifier),
   };
+}
+
+/**
+ * Extracts the priority level from a given flags bitmask.
+ * @param flags The envelope header flags.
+ * @returns The priority level.
+ */
+export function getPriority(flags: number): PriorityLevel {
+  return (flags & PRIORITY_HINT_MASK) as PriorityLevel;
 }
 
 /**
@@ -166,7 +180,13 @@ export function createEnvelope(
 ): VcoEnvelope {
   const requestedDifficulty = input.powDifficulty ?? 0;
   const powRequested = requestedDifficulty > 0;
-  const flags = (input.flags ?? 0) | (powRequested ? FLAG_POW_ACTIVE : 0);
+  let flags = (input.flags ?? 0) | (powRequested ? FLAG_POW_ACTIVE : 0);
+
+  // Pack priority hint into lower 2 bits
+  if (input.priorityHint !== undefined) {
+    flags = (flags & ~PRIORITY_HINT_MASK) | (input.priorityHint & PRIORITY_HINT_MASK);
+  }
+
   const isZkpAuth = (flags & FLAG_ZKP_AUTH) !== 0;
   const payload = Uint8Array.from(input.payload);
   let creatorId = new Uint8Array();
@@ -202,6 +222,7 @@ export function createEnvelope(
     creatorId,
     payloadHash,
     contextId: input.contextId ? Uint8Array.from(input.contextId) : undefined,
+    nullifier: input.nullifier ? Uint8Array.from(input.nullifier) : undefined,
   };
 
   if (!isZkpAuth) {
@@ -243,9 +264,12 @@ export function createEnvelope(
       signature,
       nonce,
       contextId: material.contextId,
+      nullifier: material.nullifier,
+      priorityHint: material.flags & PRIORITY_HINT_MASK,
     },
     payload,
     zkpExtension,
+    nullifier: material.nullifier,
   };
 
   validateEnvelope(envelope);

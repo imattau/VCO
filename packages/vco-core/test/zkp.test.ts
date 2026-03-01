@@ -65,6 +65,7 @@ describe("VCOCore", () => {
         payload: new Uint8Array([1, 2, 3]),
         payloadType: MULTICODEC_PROTOBUF,
         flags: FLAG_ZKP_AUTH,
+        nullifier: new Uint8Array(32).fill(1),
         zkpExtension: {
           circuitId: 77,
           proofLength: 3,
@@ -88,6 +89,7 @@ describe("VCOCore", () => {
         payload: new Uint8Array([1, 2, 3]),
         payloadType: MULTICODEC_PROTOBUF,
         flags: FLAG_ZKP_AUTH,
+        nullifier: new Uint8Array(32).fill(1),
         zkpExtension: {
           circuitId: 91,
           proofLength: 3,
@@ -121,6 +123,7 @@ describe("VCOCore", () => {
         payload: new Uint8Array([1, 2, 3]),
         payloadType: MULTICODEC_PROTOBUF,
         flags: FLAG_ZKP_AUTH,
+        nullifier: new Uint8Array(32).fill(1),
         zkpExtension: {
           circuitId: 11,
           proofLength: 3,
@@ -143,6 +146,44 @@ describe("VCOCore", () => {
     const core = new VCOCore(crypto);
     core.registerVerifier(verifier);
 
+    await expect(core.validateEnvelope(envelope)).resolves.toBe(false);
+  });
+
+  it("fails verification if the nullifier is tampered with after creation", async () => {
+    const crypto = new DeterministicCryptoProvider();
+    const verifier: IZKPVerifier = {
+      circuitId: 77,
+      async verify() {
+        return true;
+      },
+    };
+
+    const envelope = createEnvelope(
+      {
+        payload: new Uint8Array([1, 2, 3]),
+        payloadType: MULTICODEC_PROTOBUF,
+        flags: FLAG_ZKP_AUTH,
+        nullifier: new Uint8Array(32).fill(1),
+        zkpExtension: {
+          circuitId: 77,
+          proofLength: 3,
+          proof: new Uint8Array([9, 8, 7]),
+          inputsLength: 0,
+          publicInputs: new Uint8Array(0),
+        },
+      },
+      crypto,
+    );
+
+    // Tamper with the nullifier
+    if (envelope.header.nullifier) {
+      envelope.header.nullifier[0] ^= 0xff;
+    }
+
+    const core = new VCOCore(crypto);
+    core.registerVerifier(verifier);
+
+    // Should fail because the headerHash (integrity) no longer matches the tampered header
     await expect(core.validateEnvelope(envelope)).resolves.toBe(false);
   });
 });

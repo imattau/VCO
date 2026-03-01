@@ -31,6 +31,7 @@ describe("protobuf envelope codec", () => {
         payloadHash: encodeBlake3Multihash(filled(32, 3)),
         signature: filled(64, 4),
         nonce: 0,
+        priorityHint: 0,
       },
       payload: new Uint8Array([9, 8, 7]),
     };
@@ -56,6 +57,7 @@ describe("protobuf envelope codec", () => {
           payloadHash: encodeBlake3Multihash(filled(32, 3)),
           signature: filled(64, 4),
           nonce: 0,
+        priorityHint: 0,
         },
         payload: new Uint8Array([1]),
       }),
@@ -68,11 +70,13 @@ describe("protobuf envelope codec", () => {
       header: {
         version: PROTOCOL_VERSION,
         flags: FLAG_ZKP_AUTH,
+        nullifier: filled(32),
         payloadType: MULTICODEC_PROTOBUF,
         creatorId: new Uint8Array(),
         payloadHash: encodeBlake3Multihash(filled(32, 3)),
         signature: new Uint8Array(),
         nonce: 0,
+        priorityHint: 0,
       },
       payload: new Uint8Array([9, 8, 7]),
       zkpExtension: {

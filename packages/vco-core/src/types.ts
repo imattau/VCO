@@ -19,6 +19,10 @@ export interface VcoHeader {
   nonce: number;
   /** Optional 8-byte blind context identifier for efficient routing without decryption. */
   contextId?: Uint8Array;
+  /** Optional 32-byte uniqueness nullifier (mandatory for ZKP auth). */
+  nullifier?: Uint8Array;
+  /** Semantic priority hint (0-3) for traffic management. */
+  priorityHint: number;
 }
 
 /**
@@ -36,8 +40,6 @@ export interface VcoZkpExtension {
   inputsLength: number;
   /** The public inputs for the ZKP circuit. */
   publicInputs: Uint8Array;
-  /** Nullifier to prevent replay attacks in ZKP auth. */
-  nullifier: Uint8Array;
 }
 
 /**
@@ -53,4 +55,6 @@ export interface VcoEnvelope {
   payload: Uint8Array;
   /** Optional ZKP extension for privacy-preserving authentication. */
   zkpExtension?: VcoZkpExtension;
+  /** Canonical 32-byte nullifier for replay protection. */
+  nullifier?: Uint8Array;
 }

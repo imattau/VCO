@@ -11,10 +11,22 @@ export const FLAG_EPHEMERAL = 1 << 7;
 export const FLAG_OBFUSCATED = 1 << 6;
 export const FLAG_POW_ACTIVE = 1 << 5;
 export const FLAG_ZKP_AUTH = 1 << 4;
+
+/** Semantic priority hint levels for network traffic management. */
+export enum PriorityLevel {
+  LOW = 0,
+  NORMAL = 1,
+  HIGH = 2,
+  CRITICAL = 3,
+}
+
+/** Mask for extracting priority hint from flags (lower 2 bits). */
+export const PRIORITY_HINT_MASK = 0x03;
+
 // Deprecated alias maintained for compatibility with pre-v3.2 callers.
 export const FLAG_FRAGMENTED = FLAG_POW_ACTIVE;
 
-export const RESERVED_FLAG_MASK = 0x0f;
+export const RESERVED_FLAG_MASK = 0x0c;
 
 // Multicodec values (https://github.com/multiformats/multicodec)
 export const MULTICODEC_ED25519_PUB = 0xed;

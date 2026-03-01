@@ -36,7 +36,6 @@ export const vco = $root.vco = (() => {
              * @property {Uint8Array|null} [proof] ZKPExtension proof
              * @property {number|null} [inputsLength] ZKPExtension inputsLength
              * @property {Uint8Array|null} [publicInputs] ZKPExtension publicInputs
-             * @property {Uint8Array|null} [nullifier] ZKPExtension nullifier
              */
 
             /**
@@ -95,14 +94,6 @@ export const vco = $root.vco = (() => {
             ZKPExtension.prototype.publicInputs = $util.newBuffer([]);
 
             /**
-             * ZKPExtension nullifier.
-             * @member {Uint8Array} nullifier
-             * @memberof vco.v3.ZKPExtension
-             * @instance
-             */
-            ZKPExtension.prototype.nullifier = $util.newBuffer([]);
-
-            /**
              * Creates a new ZKPExtension instance using the specified properties.
              * @function create
              * @memberof vco.v3.ZKPExtension
@@ -136,8 +127,6 @@ export const vco = $root.vco = (() => {
                     writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.inputsLength);
                 if (message.publicInputs != null && Object.hasOwnProperty.call(message, "publicInputs"))
                     writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.publicInputs);
-                if (message.nullifier != null && Object.hasOwnProperty.call(message, "nullifier"))
-                    writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.nullifier);
                 return writer;
             };
 
@@ -194,10 +183,6 @@ export const vco = $root.vco = (() => {
                             message.publicInputs = reader.bytes();
                             break;
                         }
-                    case 6: {
-                            message.nullifier = reader.bytes();
-                            break;
-                        }
                     default:
                         reader.skipType(tag & 7);
                         break;
@@ -248,9 +233,6 @@ export const vco = $root.vco = (() => {
                 if (message.publicInputs != null && message.hasOwnProperty("publicInputs"))
                     if (!(message.publicInputs && typeof message.publicInputs.length === "number" || $util.isString(message.publicInputs)))
                         return "publicInputs: buffer expected";
-                if (message.nullifier != null && message.hasOwnProperty("nullifier"))
-                    if (!(message.nullifier && typeof message.nullifier.length === "number" || $util.isString(message.nullifier)))
-                        return "nullifier: buffer expected";
                 return null;
             };
 
@@ -282,11 +264,6 @@ export const vco = $root.vco = (() => {
                         $util.base64.decode(object.publicInputs, message.publicInputs = $util.newBuffer($util.base64.length(object.publicInputs)), 0);
                     else if (object.publicInputs.length >= 0)
                         message.publicInputs = object.publicInputs;
-                if (object.nullifier != null)
-                    if (typeof object.nullifier === "string")
-                        $util.base64.decode(object.nullifier, message.nullifier = $util.newBuffer($util.base64.length(object.nullifier)), 0);
-                    else if (object.nullifier.length >= 0)
-                        message.nullifier = object.nullifier;
                 return message;
             };
 
@@ -321,13 +298,6 @@ export const vco = $root.vco = (() => {
                         if (options.bytes !== Array)
                             object.publicInputs = $util.newBuffer(object.publicInputs);
                     }
-                    if (options.bytes === String)
-                        object.nullifier = "";
-                    else {
-                        object.nullifier = [];
-                        if (options.bytes !== Array)
-                            object.nullifier = $util.newBuffer(object.nullifier);
-                    }
                 }
                 if (message.circuitId != null && message.hasOwnProperty("circuitId"))
                     object.circuitId = message.circuitId;
@@ -339,8 +309,6 @@ export const vco = $root.vco = (() => {
                     object.inputsLength = message.inputsLength;
                 if (message.publicInputs != null && message.hasOwnProperty("publicInputs"))
                     object.publicInputs = options.bytes === String ? $util.base64.encode(message.publicInputs, 0, message.publicInputs.length) : options.bytes === Array ? Array.prototype.slice.call(message.publicInputs) : message.publicInputs;
-                if (message.nullifier != null && message.hasOwnProperty("nullifier"))
-                    object.nullifier = options.bytes === String ? $util.base64.encode(message.nullifier, 0, message.nullifier.length) : options.bytes === Array ? Array.prototype.slice.call(message.nullifier) : message.nullifier;
                 return object;
             };
 
@@ -390,6 +358,7 @@ export const vco = $root.vco = (() => {
              * @property {vco.v3.IZKPExtension|null} [zkpExtension] Envelope zkpExtension
              * @property {number|null} [nonce] Envelope nonce
              * @property {Uint8Array|null} [contextId] Envelope contextId
+             * @property {Uint8Array|null} [nullifier] Envelope nullifier
              */
 
             /**
@@ -496,6 +465,14 @@ export const vco = $root.vco = (() => {
             Envelope.prototype.contextId = $util.newBuffer([]);
 
             /**
+             * Envelope nullifier.
+             * @member {Uint8Array} nullifier
+             * @memberof vco.v3.Envelope
+             * @instance
+             */
+            Envelope.prototype.nullifier = $util.newBuffer([]);
+
+            /**
              * Creates a new Envelope instance using the specified properties.
              * @function create
              * @memberof vco.v3.Envelope
@@ -541,6 +518,8 @@ export const vco = $root.vco = (() => {
                     writer.uint32(/* id 10, wireType 0 =*/80).uint32(message.nonce);
                 if (message.contextId != null && Object.hasOwnProperty.call(message, "contextId"))
                     writer.uint32(/* id 11, wireType 2 =*/90).bytes(message.contextId);
+                if (message.nullifier != null && Object.hasOwnProperty.call(message, "nullifier"))
+                    writer.uint32(/* id 12, wireType 2 =*/98).bytes(message.nullifier);
                 return writer;
             };
 
@@ -621,6 +600,10 @@ export const vco = $root.vco = (() => {
                             message.contextId = reader.bytes();
                             break;
                         }
+                    case 12: {
+                            message.nullifier = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7);
                         break;
@@ -691,6 +674,9 @@ export const vco = $root.vco = (() => {
                 if (message.contextId != null && message.hasOwnProperty("contextId"))
                     if (!(message.contextId && typeof message.contextId.length === "number" || $util.isString(message.contextId)))
                         return "contextId: buffer expected";
+                if (message.nullifier != null && message.hasOwnProperty("nullifier"))
+                    if (!(message.nullifier && typeof message.nullifier.length === "number" || $util.isString(message.nullifier)))
+                        return "nullifier: buffer expected";
                 return null;
             };
 
@@ -749,6 +735,11 @@ export const vco = $root.vco = (() => {
                         $util.base64.decode(object.contextId, message.contextId = $util.newBuffer($util.base64.length(object.contextId)), 0);
                     else if (object.contextId.length >= 0)
                         message.contextId = object.contextId;
+                if (object.nullifier != null)
+                    if (typeof object.nullifier === "string")
+                        $util.base64.decode(object.nullifier, message.nullifier = $util.newBuffer($util.base64.length(object.nullifier)), 0);
+                    else if (object.nullifier.length >= 0)
+                        message.nullifier = object.nullifier;
                 return message;
             };
 
@@ -813,6 +804,13 @@ export const vco = $root.vco = (() => {
                         if (options.bytes !== Array)
                             object.contextId = $util.newBuffer(object.contextId);
                     }
+                    if (options.bytes === String)
+                        object.nullifier = "";
+                    else {
+                        object.nullifier = [];
+                        if (options.bytes !== Array)
+                            object.nullifier = $util.newBuffer(object.nullifier);
+                    }
                 }
                 if (message.headerHash != null && message.hasOwnProperty("headerHash"))
                     object.headerHash = options.bytes === String ? $util.base64.encode(message.headerHash, 0, message.headerHash.length) : options.bytes === Array ? Array.prototype.slice.call(message.headerHash) : message.headerHash;
@@ -836,6 +834,8 @@ export const vco = $root.vco = (() => {
                     object.nonce = message.nonce;
                 if (message.contextId != null && message.hasOwnProperty("contextId"))
                     object.contextId = options.bytes === String ? $util.base64.encode(message.contextId, 0, message.contextId.length) : options.bytes === Array ? Array.prototype.slice.call(message.contextId) : message.contextId;
+                if (message.nullifier != null && message.hasOwnProperty("nullifier"))
+                    object.nullifier = options.bytes === String ? $util.base64.encode(message.nullifier, 0, message.nullifier.length) : options.bytes === Array ? Array.prototype.slice.call(message.nullifier) : message.nullifier;
                 return object;
             };
 
@@ -880,6 +880,7 @@ export const vco = $root.vco = (() => {
              * @property {Uint8Array|null} [creatorId] EnvelopeSigningMaterial creatorId
              * @property {Uint8Array|null} [payloadHash] EnvelopeSigningMaterial payloadHash
              * @property {Uint8Array|null} [contextId] EnvelopeSigningMaterial contextId
+             * @property {Uint8Array|null} [nullifier] EnvelopeSigningMaterial nullifier
              */
 
             /**
@@ -946,6 +947,14 @@ export const vco = $root.vco = (() => {
             EnvelopeSigningMaterial.prototype.contextId = $util.newBuffer([]);
 
             /**
+             * EnvelopeSigningMaterial nullifier.
+             * @member {Uint8Array} nullifier
+             * @memberof vco.v3.EnvelopeSigningMaterial
+             * @instance
+             */
+            EnvelopeSigningMaterial.prototype.nullifier = $util.newBuffer([]);
+
+            /**
              * Creates a new EnvelopeSigningMaterial instance using the specified properties.
              * @function create
              * @memberof vco.v3.EnvelopeSigningMaterial
@@ -981,6 +990,8 @@ export const vco = $root.vco = (() => {
                     writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.payloadHash);
                 if (message.contextId != null && Object.hasOwnProperty.call(message, "contextId"))
                     writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.contextId);
+                if (message.nullifier != null && Object.hasOwnProperty.call(message, "nullifier"))
+                    writer.uint32(/* id 7, wireType 2 =*/58).bytes(message.nullifier);
                 return writer;
             };
 
@@ -1041,6 +1052,10 @@ export const vco = $root.vco = (() => {
                             message.contextId = reader.bytes();
                             break;
                         }
+                    case 7: {
+                            message.nullifier = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7);
                         break;
@@ -1094,6 +1109,9 @@ export const vco = $root.vco = (() => {
                 if (message.contextId != null && message.hasOwnProperty("contextId"))
                     if (!(message.contextId && typeof message.contextId.length === "number" || $util.isString(message.contextId)))
                         return "contextId: buffer expected";
+                if (message.nullifier != null && message.hasOwnProperty("nullifier"))
+                    if (!(message.nullifier && typeof message.nullifier.length === "number" || $util.isString(message.nullifier)))
+                        return "nullifier: buffer expected";
                 return null;
             };
 
@@ -1130,6 +1148,11 @@ export const vco = $root.vco = (() => {
                         $util.base64.decode(object.contextId, message.contextId = $util.newBuffer($util.base64.length(object.contextId)), 0);
                     else if (object.contextId.length >= 0)
                         message.contextId = object.contextId;
+                if (object.nullifier != null)
+                    if (typeof object.nullifier === "string")
+                        $util.base64.decode(object.nullifier, message.nullifier = $util.newBuffer($util.base64.length(object.nullifier)), 0);
+                    else if (object.nullifier.length >= 0)
+                        message.nullifier = object.nullifier;
                 return message;
             };
 
@@ -1171,6 +1194,13 @@ export const vco = $root.vco = (() => {
                         if (options.bytes !== Array)
                             object.contextId = $util.newBuffer(object.contextId);
                     }
+                    if (options.bytes === String)
+                        object.nullifier = "";
+                    else {
+                        object.nullifier = [];
+                        if (options.bytes !== Array)
+                            object.nullifier = $util.newBuffer(object.nullifier);
+                    }
                 }
                 if (message.version != null && message.hasOwnProperty("version"))
                     object.version = message.version;
@@ -1184,6 +1214,8 @@ export const vco = $root.vco = (() => {
                     object.payloadHash = options.bytes === String ? $util.base64.encode(message.payloadHash, 0, message.payloadHash.length) : options.bytes === Array ? Array.prototype.slice.call(message.payloadHash) : message.payloadHash;
                 if (message.contextId != null && message.hasOwnProperty("contextId"))
                     object.contextId = options.bytes === String ? $util.base64.encode(message.contextId, 0, message.contextId.length) : options.bytes === Array ? Array.prototype.slice.call(message.contextId) : message.contextId;
+                if (message.nullifier != null && message.hasOwnProperty("nullifier"))
+                    object.nullifier = options.bytes === String ? $util.base64.encode(message.nullifier, 0, message.nullifier.length) : options.bytes === Array ? Array.prototype.slice.call(message.nullifier) : message.nullifier;
                 return object;
             };
 
@@ -1230,6 +1262,7 @@ export const vco = $root.vco = (() => {
              * @property {Uint8Array|null} [signature] EnvelopeHeaderHashMaterial signature
              * @property {number|null} [nonce] EnvelopeHeaderHashMaterial nonce
              * @property {Uint8Array|null} [contextId] EnvelopeHeaderHashMaterial contextId
+             * @property {Uint8Array|null} [nullifier] EnvelopeHeaderHashMaterial nullifier
              */
 
             /**
@@ -1312,6 +1345,14 @@ export const vco = $root.vco = (() => {
             EnvelopeHeaderHashMaterial.prototype.contextId = $util.newBuffer([]);
 
             /**
+             * EnvelopeHeaderHashMaterial nullifier.
+             * @member {Uint8Array} nullifier
+             * @memberof vco.v3.EnvelopeHeaderHashMaterial
+             * @instance
+             */
+            EnvelopeHeaderHashMaterial.prototype.nullifier = $util.newBuffer([]);
+
+            /**
              * Creates a new EnvelopeHeaderHashMaterial instance using the specified properties.
              * @function create
              * @memberof vco.v3.EnvelopeHeaderHashMaterial
@@ -1351,6 +1392,8 @@ export const vco = $root.vco = (() => {
                     writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.nonce);
                 if (message.contextId != null && Object.hasOwnProperty.call(message, "contextId"))
                     writer.uint32(/* id 8, wireType 2 =*/66).bytes(message.contextId);
+                if (message.nullifier != null && Object.hasOwnProperty.call(message, "nullifier"))
+                    writer.uint32(/* id 9, wireType 2 =*/74).bytes(message.nullifier);
                 return writer;
             };
 
@@ -1419,6 +1462,10 @@ export const vco = $root.vco = (() => {
                             message.contextId = reader.bytes();
                             break;
                         }
+                    case 9: {
+                            message.nullifier = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7);
                         break;
@@ -1478,6 +1525,9 @@ export const vco = $root.vco = (() => {
                 if (message.contextId != null && message.hasOwnProperty("contextId"))
                     if (!(message.contextId && typeof message.contextId.length === "number" || $util.isString(message.contextId)))
                         return "contextId: buffer expected";
+                if (message.nullifier != null && message.hasOwnProperty("nullifier"))
+                    if (!(message.nullifier && typeof message.nullifier.length === "number" || $util.isString(message.nullifier)))
+                        return "nullifier: buffer expected";
                 return null;
             };
 
@@ -1521,6 +1571,11 @@ export const vco = $root.vco = (() => {
                         $util.base64.decode(object.contextId, message.contextId = $util.newBuffer($util.base64.length(object.contextId)), 0);
                     else if (object.contextId.length >= 0)
                         message.contextId = object.contextId;
+                if (object.nullifier != null)
+                    if (typeof object.nullifier === "string")
+                        $util.base64.decode(object.nullifier, message.nullifier = $util.newBuffer($util.base64.length(object.nullifier)), 0);
+                    else if (object.nullifier.length >= 0)
+                        message.nullifier = object.nullifier;
                 return message;
             };
 
@@ -1570,6 +1625,13 @@ export const vco = $root.vco = (() => {
                         if (options.bytes !== Array)
                             object.contextId = $util.newBuffer(object.contextId);
                     }
+                    if (options.bytes === String)
+                        object.nullifier = "";
+                    else {
+                        object.nullifier = [];
+                        if (options.bytes !== Array)
+                            object.nullifier = $util.newBuffer(object.nullifier);
+                    }
                 }
                 if (message.version != null && message.hasOwnProperty("version"))
                     object.version = message.version;
@@ -1587,6 +1649,8 @@ export const vco = $root.vco = (() => {
                     object.nonce = message.nonce;
                 if (message.contextId != null && message.hasOwnProperty("contextId"))
                     object.contextId = options.bytes === String ? $util.base64.encode(message.contextId, 0, message.contextId.length) : options.bytes === Array ? Array.prototype.slice.call(message.contextId) : message.contextId;
+                if (message.nullifier != null && message.hasOwnProperty("nullifier"))
+                    object.nullifier = options.bytes === String ? $util.base64.encode(message.nullifier, 0, message.nullifier.length) : options.bytes === Array ? Array.prototype.slice.call(message.nullifier) : message.nullifier;
                 return object;
             };
 

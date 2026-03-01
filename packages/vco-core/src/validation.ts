@@ -60,8 +60,6 @@ function validateZkpExtension(envelope: VcoEnvelope): void {
       "zkpExtension.inputsLength must match zkpExtension.publicInputs.length.",
     );
   }
-
-  assertLength("zkpExtension.nullifier", extension.nullifier, NULLIFIER_LENGTH);
 }
 
 export function validateEnvelope(envelope: VcoEnvelope): void {
@@ -89,7 +87,7 @@ export function validateEnvelope(envelope: VcoEnvelope): void {
   }
 
   if ((envelope.header.flags & RESERVED_FLAG_MASK) !== 0) {
-    throw new EnvelopeValidationError("flags reserve bits 0-3; they must be zero.");
+    throw new EnvelopeValidationError("flags reserve bits 2-3; they must be zero.");
   }
 
   if (
@@ -104,8 +102,20 @@ export function validateEnvelope(envelope: VcoEnvelope): void {
     assertLength("contextId", envelope.header.contextId, 8);
   }
 
+  if (envelope.header.nullifier) {
+    assertLength("nullifier", envelope.header.nullifier, 32);
+  }
+
+  if (envelope.header.priorityHint !== (envelope.header.flags & 0x03)) {
+    throw new EnvelopeValidationError("priorityHint must match the lower bits of flags.");
+  }
+
   const isZkpAuth = (envelope.header.flags & FLAG_ZKP_AUTH) !== 0;
   if (isZkpAuth) {
+    if (!envelope.header.nullifier) {
+      throw new EnvelopeValidationError("nullifier is mandatory when FLAG_ZKP_AUTH is set.");
+    }
+
     if (envelope.header.creatorId.length > 0 && !isZeroed(envelope.header.creatorId)) {
       throw new EnvelopeValidationError(
         "creatorId must be empty or zeroed when FLAG_ZKP_AUTH is set.",

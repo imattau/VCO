@@ -19,6 +19,8 @@ interface ProtoEnvelope {
   payload: Uint8Array;
   nonce: number;
   zkpExtension?: ProtoZkpExtension | null;
+  contextId?: Uint8Array | null;
+  nullifier?: Uint8Array | null;
 }
 
 interface ProtoZkpExtension {
@@ -27,7 +29,6 @@ interface ProtoZkpExtension {
   proof: Uint8Array;
   inputsLength: number;
   publicInputs: Uint8Array;
-  nullifier: Uint8Array;
 }
 
 interface ProtoSyncRange {
@@ -82,6 +83,8 @@ function toProtoEnvelope(envelope: VcoEnvelope): ProtoEnvelope {
     signature: envelope.header.signature,
     payload: envelope.payload,
     nonce: envelope.header.nonce,
+    contextId: envelope.header.contextId,
+    nullifier: envelope.header.nullifier,
     zkpExtension: envelope.zkpExtension
       ? {
           circuitId: envelope.zkpExtension.circuitId,
@@ -89,7 +92,6 @@ function toProtoEnvelope(envelope: VcoEnvelope): ProtoEnvelope {
           proof: envelope.zkpExtension.proof,
           inputsLength: envelope.zkpExtension.inputsLength,
           publicInputs: envelope.zkpExtension.publicInputs,
-          nullifier: envelope.zkpExtension.nullifier,
         }
       : null,
   };
@@ -103,9 +105,11 @@ function fromProtoEnvelope(message: ProtoEnvelope): VcoEnvelope {
         proof: toUint8Array(message.zkpExtension.proof),
         inputsLength: message.zkpExtension.inputsLength ?? 0,
         publicInputs: toUint8Array(message.zkpExtension.publicInputs),
-        nullifier: toUint8Array(message.zkpExtension.nullifier),
       }
     : undefined;
+
+  const contextId = message.contextId ? toUint8Array(message.contextId) : undefined;
+  const nullifier = message.nullifier ? toUint8Array(message.nullifier) : undefined;
 
   return {
     headerHash: toUint8Array(message.headerHash),
@@ -117,9 +121,13 @@ function fromProtoEnvelope(message: ProtoEnvelope): VcoEnvelope {
       payloadHash: toUint8Array(message.payloadHash),
       signature: toUint8Array(message.signature),
       nonce: message.nonce ?? 0,
+      priorityHint: message.flags & 0x03,
+      contextId: contextId && contextId.length > 0 ? contextId : undefined,
+      nullifier: nullifier && nullifier.length > 0 ? nullifier : undefined,
     },
     payload: toUint8Array(message.payload),
     zkpExtension,
+    nullifier: nullifier && nullifier.length > 0 ? nullifier : undefined,
   };
 }
 
