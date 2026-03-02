@@ -17,12 +17,13 @@ import { FeedView } from './features/feed/FeedView';
 import { MessageView } from './features/messaging/MessageView';
 import { NotificationView } from './features/notifications/NotificationView';
 import { ProfileView } from './features/profile/ProfileView';
+import { SettingsView } from './features/settings/SettingsView';
 import { MobileNav } from './components/MobileNav';
 import { SearchOverlay } from './features/search/SearchOverlay';
 import { NavItem } from '@vco/vco-ui';
 import { ToastProvider } from './components/ToastProvider';
 
-export type SocialTab = 'feed' | 'messaging' | 'notifications' | 'profile';
+export type SocialTab = 'feed' | 'messaging' | 'notifications' | 'profile' | 'settings';
 
 function MainContent() {
   const { profile, isLoading } = useSocial();
@@ -32,7 +33,7 @@ function MainContent() {
     return (
       <div className="flex-1 flex flex-col items-center justify-center animate-pulse">
         <Shield className="text-zinc-800 w-16 h-16 mb-4" />
-        <p className="text-zinc-600 font-black uppercase tracking-widest text-xs tracking-tighter italic">Initializing Secure Identity...</p>
+        <p className="text-zinc-600 font-black uppercase tracking-widest text-xs tracking-tighter italic uppercase">Initializing Secure Identity...</p>
       </div>
     );
   }
@@ -40,7 +41,7 @@ function MainContent() {
   if (!profile) return null;
 
   return (
-    <div className="flex h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
+    <div className="flex h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans text-sm md:text-base">
       {/* Sidebar Navigation - Hidden on mobile */}
       <aside className="hidden md:flex w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col flex-shrink-0 z-10">
         <div className="p-6 border-b border-zinc-800 flex items-center gap-3">
@@ -80,7 +81,13 @@ function MainContent() {
         </nav>
         
         <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-all">
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={twMerge(
+              "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all",
+              activeTab === 'settings' ? "bg-zinc-800 text-white" : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            )}
+          >
             <Settings size={16} />
             <span className="hidden md:inline">Settings</span>
           </button>
@@ -106,7 +113,10 @@ function MainContent() {
                 <Plus size={18} />
                 <span className="hidden md:inline">New Post</span>
              </button>
-             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-800 border border-zinc-700 flex items-center justify-center text-[10px] font-black text-white italic shadow-lg shadow-blue-600/10 cursor-pointer hover:scale-105 transition-all active:scale-95">
+             <div 
+               onClick={() => setActiveTab('profile')}
+               className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-800 border border-zinc-700 flex items-center justify-center text-[10px] font-black text-white italic shadow-lg shadow-blue-600/10 cursor-pointer hover:scale-105 transition-all active:scale-95"
+             >
                 {profile.displayName.slice(0, 1)}
              </div>
           </div>
@@ -118,6 +128,7 @@ function MainContent() {
               {activeTab === 'messaging' && <MessageView />}
               {activeTab === 'notifications' && <NotificationView />}
               {activeTab === 'profile' && <ProfileView />}
+              {activeTab === 'settings' && <SettingsView />}
            </div>
         </div>
 

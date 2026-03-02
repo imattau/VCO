@@ -6,17 +6,28 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 export function MessageView() {
-  const { messages, profile } = useSocial();
-  const [selectedChannel, setSelectedChannel] = useState<number | null>(null);
+  const { conversations, profile, sendDM } = useSocial();
+  const [selectedConversationIndex, setSelectedConversationIndex] = useState<number | null>(null);
+  const [inputText, setInputText] = useState('');
 
   if (!profile) return null;
+
+  const activeConversation = selectedConversationIndex !== null ? conversations[selectedConversationIndex] : null;
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputText.trim() || !activeConversation) return;
+
+    await sendDM(activeConversation.peerProfile, inputText);
+    setInputText('');
+  };
 
   return (
     <div className="flex h-[calc(100vh-180px)] md:h-[calc(100vh-144px)] bg-zinc-900 border border-zinc-800 rounded-[2rem] md:rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-700 relative">
       {/* Conversation List */}
       <aside className={twMerge(
         "w-full md:w-80 border-r border-zinc-800 flex flex-col bg-zinc-900/50 transition-all duration-300",
-        selectedChannel !== null ? "hidden md:flex" : "flex"
+        selectedConversationIndex !== null ? "hidden md:flex" : "flex"
       )}>
         <div className="p-4 md:p-6 border-b border-zinc-800 space-y-4">
            <h2 className="text-xl md:text-2xl font-black text-white tracking-tighter italic uppercase">Messages</h2>
@@ -31,40 +42,38 @@ export function MessageView() {
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
-           <ConversationItem 
-             name="Verifiable Bob" 
-             did="did:vco:bob...223" 
-             lastMsg="Sounds good, Alice. E2EE DMs are live." 
-             active={selectedChannel === 1}
-             onClick={() => setSelectedChannel(1)}
-           />
-           <ConversationItem 
-             name="Dev Team" 
-             did="vco://group/main" 
-             lastMsg="VCO v3.2 is looking solid." 
-             active={selectedChannel === 2}
-             onClick={() => setSelectedChannel(2)}
-             badge={2}
-           />
+           {conversations.map((conv, idx) => (
+             <ConversationItem 
+               key={conv.peerProfile.displayName}
+               name={conv.peerProfile.displayName} 
+               did={conv.peerProfile.bio.substring(0, 30) + "..."} 
+               lastMsg={conv.lastMessage.payload.content} 
+               active={selectedConversationIndex === idx}
+               onClick={() => setSelectedConversationIndex(idx)}
+               badge={conv.unread || undefined}
+             />
+           ))}
         </div>
       </aside>
 
       {/* Chat Area */}
       <main className={twMerge(
         "flex-1 flex flex-col bg-zinc-950/20 absolute inset-0 md:relative md:flex transition-transform duration-300",
-        selectedChannel === null ? "translate-x-full md:translate-x-0 hidden" : "translate-x-0"
+        selectedConversationIndex === null ? "translate-x-full md:translate-x-0 hidden" : "translate-x-0"
       )}>
-        {selectedChannel ? (
+        {activeConversation ? (
           <div className="flex-1 flex flex-col h-full">
              {/* Chat Header */}
              <header className="h-16 md:h-20 border-b border-zinc-800 px-4 md:px-6 flex items-center justify-between bg-zinc-900/40">
                 <div className="flex items-center gap-3 md:gap-4">
-                   <button onClick={() => setSelectedChannel(null)} className="md:hidden p-2 text-zinc-400 active:scale-90 transition-transform" aria-label="Back to conversations">
+                   <button onClick={() => setSelectedConversationIndex(null)} className="md:hidden p-2 text-zinc-400 active:scale-90 transition-transform" aria-label="Back to conversations">
                       <ArrowLeft size={20} />
                    </button>
-                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-black shadow-inner flex-shrink-0">VB</div>
+                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-xs font-black text-blue-400 shadow-inner flex-shrink-0">
+                      {activeConversation.peerProfile.displayName[0]}
+                   </div>
                    <div className="min-w-0">
-                      <h3 className="text-xs md:text-sm font-black text-white tracking-tight italic truncate">Verifiable Bob</h3>
+                      <h3 className="text-xs md:text-sm font-black text-white tracking-tight italic truncate">{activeConversation.peerProfile.displayName}</h3>
                       <div className="flex items-center gap-1.5 md:gap-2">
                          <ShieldCheck size={10} className="text-blue-500" />
                          <span className="text-[8px] md:text-[10px] font-black text-blue-500 uppercase tracking-widest truncate">E2EE SECURE</span>
@@ -78,24 +87,18 @@ export function MessageView() {
 
              {/* Messages Area */}
              <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6 custom-scrollbar bg-zinc-950/40">
-                <MessageBubble 
-                  content="Hey Bob, did you see the new vco-social schemas?" 
-                  isOwn 
-                  timestamp="10:42 AM" 
-                />
-                <MessageBubble 
-                  content="Yeah, Alice! The DirectMessage schema is sleek. I love the ephemeral key exchange part." 
-                  timestamp="10:45 AM" 
-                />
-                <MessageBubble 
-                  content="Exactly! Ephemeral-static Diffie-Hellman ensures forward secrecy for every message." 
-                  isOwn 
-                  timestamp="10:46 AM" 
-                />
+                {activeConversation.messages.map((msg) => (
+                  <MessageBubble 
+                    key={msg.cid.toString()}
+                    content={msg.payload.content} 
+                    isOwn={msg.isOwn} 
+                    timestamp={new Date(Number(msg.data.timestampMs)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} 
+                  />
+                ))}
              </div>
 
              {/* Input Area */}
-             <div className="p-4 md:p-6 border-t border-zinc-800 bg-zinc-900/40">
+             <form onSubmit={handleSend} className="p-4 md:p-6 border-t border-zinc-800 bg-zinc-900/40">
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-[2rem] p-3 md:p-4 flex items-center gap-2 md:gap-4 shadow-xl">
                    <div className="flex items-center gap-0.5 md:gap-1">
                       <ToolButton icon={<Image size={18} />} label="Add Image" />
@@ -103,14 +106,21 @@ export function MessageView() {
                    </div>
                    <input 
                      type="text" 
+                     value={inputText}
+                     onChange={e => setInputText(e.target.value)}
                      placeholder="Type a secure message..."
                      className="flex-1 bg-transparent border-none text-[11px] md:text-sm font-medium text-white focus:ring-0 placeholder:text-zinc-600"
                    />
-                   <button className="bg-blue-600 p-2 md:p-2.5 rounded-xl md:rounded-2xl text-white shadow-lg shadow-blue-600/20 active:translate-y-0.5 transition-all flex-shrink-0" aria-label="Send secure message">
+                   <button 
+                     type="submit"
+                     disabled={!inputText.trim()}
+                     className="bg-blue-600 p-2 md:p-2.5 rounded-xl md:rounded-2xl text-white shadow-lg shadow-blue-600/20 active:translate-y-0.5 transition-all flex-shrink-0 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none" 
+                     aria-label="Send secure message"
+                   >
                       <Send size={16} />
                    </button>
                 </div>
-             </div>
+             </form>
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center space-y-6 animate-in fade-in zoom-in-95 duration-1000 p-8 text-center">

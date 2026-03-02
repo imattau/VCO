@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Play } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { toHex } from '@vco/vco-testing';
+import { socialBlobStore } from '../../lib/MockSocialService';
 
 interface MediaGalleryProps {
   mediaCids: Uint8Array[];
@@ -11,8 +13,15 @@ export function MediaGallery({ mediaCids }: MediaGalleryProps) {
 
   if (!mediaCids || mediaCids.length === 0) return null;
 
-  // Mocking images based on array length for UI testing
-  const mockImages = mediaCids.map((_, i) => `https://picsum.photos/seed/vco${i}/800/600`);
+  // Resolve mock images from store, or fallback to placeholder
+  const mediaUrls = mediaCids.map((cid, i) => {
+    const hex = toHex(cid);
+    const blob = socialBlobStore.get(hex);
+    if (blob) {
+      return URL.createObjectURL(blob);
+    }
+    return `https://picsum.photos/seed/vco${i}/800/600`;
+  });
   
   // Layout logic
   const getGridClass = (count: number) => {
@@ -33,13 +42,13 @@ export function MediaGallery({ mediaCids }: MediaGalleryProps) {
   return (
     <>
       <div 
-        className={twMerge("grid gap-1 rounded-2xl overflow-hidden border border-zinc-800", getGridClass(mockImages.length))}
+        className={twMerge("grid gap-1 rounded-2xl overflow-hidden border border-zinc-800", getGridClass(mediaUrls.length))}
         onClick={(e) => e.stopPropagation()} // Prevent opening ThreadView when clicking media
       >
-        {mockImages.slice(0, 4).map((src, index) => (
+        {mediaUrls.slice(0, 4).map((src, index) => (
           <div 
             key={index}
-            className={twMerge("relative group cursor-pointer bg-zinc-950", getItemClass(mockImages.length, index))}
+            className={twMerge("relative group cursor-pointer bg-zinc-950", getItemClass(mediaUrls.length, index))}
             onClick={() => setExpandedIndex(index)}
           >
             <img 
@@ -47,9 +56,9 @@ export function MediaGallery({ mediaCids }: MediaGalleryProps) {
               alt={`Decentralized media ${index}`} 
               className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
             />
-            {index === 3 && mockImages.length > 4 && (
+            {index === 3 && mediaUrls.length > 4 && (
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
-                 <span className="text-white font-black text-2xl">+{mockImages.length - 4}</span>
+                 <span className="text-white font-black text-2xl">+{mediaUrls.length - 4}</span>
               </div>
             )}
           </div>
@@ -73,14 +82,14 @@ export function MediaGallery({ mediaCids }: MediaGalleryProps) {
            </button>
            
            <img 
-             src={mockImages[expandedIndex]} 
+             src={mediaUrls[expandedIndex]} 
              alt="Expanded media" 
              className="max-w-[95vw] max-h-[85vh] object-contain rounded-xl shadow-2xl animate-in zoom-in-95 duration-500"
              onClick={(e) => e.stopPropagation()}
            />
            
            <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-2">
-              {mockImages.map((_, idx) => (
+              {mediaUrls.map((_, idx) => (
                 <button 
                   key={idx}
                   onClick={(e) => {

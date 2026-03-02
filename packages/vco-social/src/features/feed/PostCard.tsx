@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PostData } from '@vco/vco-schemas';
-import { MessageSquare, Repeat2, Heart, Share, MoreHorizontal } from 'lucide-react';
+import { MessageSquare, Repeat2, Heart, Share, MoreHorizontal, Trash2, ShieldAlert } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { twMerge } from 'tailwind-merge';
 import { MediaGallery } from './MediaGallery';
+import { useSocial } from '../SocialContext';
 
 interface PostCardProps {
   data: PostData;
@@ -11,7 +12,9 @@ interface PostCardProps {
   onOpenThread?: () => void;
 }
 
-export function PostCard({ data, onOpenThread }: PostCardProps) {
+export function PostCard({ data, onOpenThread, cid }: PostCardProps) {
+  const { reactToPost, repost, deletePost } = useSocial();
+  const [showMenu, setShowMenu] = useState(false);
   const relativeTime = new Intl.RelativeTimeFormat('en', { style: 'short' });
   const timeStr = relativeTime.format(
     Math.round((Number(data.timestampMs) - Date.now()) / 60000), 
@@ -19,7 +22,7 @@ export function PostCard({ data, onOpenThread }: PostCardProps) {
   );
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 space-y-4 hover:border-zinc-700 transition-all group shadow-xl shadow-black/20 cursor-pointer" onClick={onOpenThread}>
+    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 space-y-4 hover:border-zinc-700 transition-all group shadow-xl shadow-black/20 cursor-pointer relative" onClick={onOpenThread}>
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-xs font-black text-blue-400">
@@ -36,9 +39,45 @@ export function PostCard({ data, onOpenThread }: PostCardProps) {
             <div className="text-[10px] text-zinc-600 font-mono">did:vco:1234...5678</div>
           </div>
         </div>
-        <button className="text-zinc-500 hover:text-white transition-colors" aria-label="More options">
-          <MoreHorizontal size={20} />
-        </button>
+        
+        <div className="relative">
+          <button 
+            className={twMerge(
+              "p-2 rounded-full text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all",
+              showMenu && "text-white bg-zinc-800"
+            )}
+            aria-label="More options"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu(!showMenu);
+            }}
+          >
+            <MoreHorizontal size={20} />
+          </button>
+
+          {showMenu && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-20 py-2 animate-in fade-in zoom-in-95 duration-200">
+               <button 
+                 onClick={(e) => { e.stopPropagation(); setShowMenu(false); }}
+                 className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all"
+               >
+                  <ShieldAlert size={16} />
+                  Report Post
+               </button>
+               <button 
+                 onClick={(e) => { 
+                   e.stopPropagation(); 
+                   deletePost(cid);
+                   setShowMenu(false);
+                 }}
+                 className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/10 transition-all"
+               >
+                  <Trash2 size={16} />
+                  Delete (Tombstone)
+               </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="prose prose-invert prose-zinc max-w-none text-zinc-200 leading-relaxed font-medium">
@@ -55,18 +94,41 @@ export function PostCard({ data, onOpenThread }: PostCardProps) {
       <MediaGallery mediaCids={data.mediaCids} />
 
       <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
-        <ActionButton icon={<MessageSquare size={18} />} count={12} color="group-hover:text-blue-500" label="Reply to post" />
-        <ActionButton icon={<Repeat2 size={18} />} count={5} color="group-hover:text-emerald-500" label="Repost" />
-        <ActionButton icon={<Heart size={18} />} count={42} color="group-hover:text-rose-500" label="Like post" />
-        <ActionButton icon={<Share size={18} />} color="group-hover:text-blue-500" label="Share post" />
+        <ActionButton 
+          icon={<MessageSquare size={18} />} 
+          count={12} 
+          color="group-hover:text-blue-500" 
+          label="Reply to post" 
+          onClick={(e) => { e.stopPropagation(); onOpenThread?.(); }}
+        />
+        <ActionButton 
+          icon={<Repeat2 size={18} />} 
+          count={5} 
+          color="group-hover:text-emerald-500" 
+          label="Repost" 
+          onClick={(e) => { e.stopPropagation(); repost(cid); }}
+        />
+        <ActionButton 
+          icon={<Heart size={18} />} 
+          count={42} 
+          color="group-hover:text-rose-500" 
+          label="Like post" 
+          onClick={(e) => { e.stopPropagation(); reactToPost(cid); }}
+        />
+        <ActionButton 
+          icon={<Share size={18} />} 
+          color="group-hover:text-blue-500" 
+          label="Share post" 
+          onClick={(e) => e.stopPropagation()}
+        />
       </div>
     </div>
   );
 }
 
-function ActionButton({ icon, count, color, label }: { icon: React.ReactNode, count?: number, color: string, label: string }) {
+function ActionButton({ icon, count, color, label, onClick }: { icon: React.ReactNode, count?: number, color: string, label: string, onClick?: (e: React.MouseEvent) => void }) {
   return (
-    <button className={twMerge("flex items-center gap-2 text-zinc-500 transition-all", color)} aria-label={label}>
+    <button className={twMerge("flex items-center gap-2 text-zinc-500 transition-all", color)} aria-label={label} onClick={onClick}>
       <div className="p-2 rounded-full hover:bg-zinc-800 transition-all">
         {icon}
       </div>

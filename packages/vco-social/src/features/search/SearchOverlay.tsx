@@ -1,11 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, Hash, Users, Activity, X } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { useSocial } from '../SocialContext';
+import { useToast } from '../../components/ToastProvider';
 
 export function SearchOverlay() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const overlayRef = useRef<HTMLDivElement>(null);
+  const { setFilter } = useSocial();
+  const { toast } = useToast();
 
   // Close overlay on click outside
   useEffect(() => {
@@ -17,6 +21,20 @@ export function SearchOverlay() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [overlayRef]);
+
+  const handleTagClick = (tag: string) => {
+    setFilter({ type: 'tag', value: tag });
+    toast(`Filtering swarm feed for ${tag}`, "info");
+    setIsOpen(false);
+    setQuery('');
+  };
+
+  const handlePeerClick = (name: string) => {
+    setFilter({ type: 'peer', value: name });
+    toast(`Requesting latest manifest for ${name}...`, "info");
+    setIsOpen(false);
+    setQuery('');
+  };
 
   const mockUsers = [
     { name: 'Crypto Charlie', did: 'did:vco:char...991' },
@@ -57,7 +75,11 @@ export function SearchOverlay() {
                 <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 px-2">Trending in the Swarm</div>
                 <div className="space-y-1">
                    {mockTags.map(tag => (
-                     <button key={tag} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 rounded-xl transition-colors text-left group">
+                     <button 
+                       key={tag} 
+                       onClick={() => handleTagClick(tag)}
+                       className="w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 rounded-xl transition-colors text-left group"
+                     >
                         <div className="w-8 h-8 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-center text-blue-500 group-hover:border-blue-500/30">
                            <Activity size={14} />
                         </div>
@@ -77,7 +99,11 @@ export function SearchOverlay() {
                       <Users size={12} /> Peers
                    </div>
                    {mockUsers.filter(u => u.name.toLowerCase().includes(query.toLowerCase())).map(user => (
-                     <button key={user.did} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 rounded-xl transition-colors text-left">
+                     <button 
+                       key={user.did} 
+                       onClick={() => handlePeerClick(user.name)}
+                       className="w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 rounded-xl transition-colors text-left"
+                     >
                         <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-black text-white shrink-0">
                            {user.name[0]}
                         </div>
@@ -94,7 +120,10 @@ export function SearchOverlay() {
                    <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2 px-2">
                       <Hash size={12} /> Topics
                    </div>
-                   <button className="w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 rounded-xl transition-colors text-left group">
+                   <button 
+                     onClick={() => handleTagClick(query)}
+                     className="w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 rounded-xl transition-colors text-left group"
+                   >
                       <div className="w-8 h-8 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-blue-500">
                          <Hash size={14} />
                       </div>

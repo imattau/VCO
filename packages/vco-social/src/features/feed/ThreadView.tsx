@@ -10,26 +10,18 @@ interface ThreadViewProps {
 }
 
 export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
+  const { feed } = useSocial();
   if (!parentPost) return null;
 
-  const mockReplies = [
-    {
-      id: 'reply-1',
-      author: 'Verifiable Bob',
-      did: 'did:vco:bob...223',
-      content: 'Absolutely! The swarm architecture makes this so much more resilient.',
-      time: '12m ago',
-      likes: 5
-    },
-    {
-      id: 'reply-2',
-      author: 'Crypto Charlie',
-      did: 'did:vco:char...991',
-      content: 'What hash algorithm are we using for these manifests? Is it Blake3?',
-      time: '5m ago',
-      likes: 2
-    }
-  ];
+  // Dynamically find replies in the feed
+  // For this prototype, we'll consider any post that isn't the parent but shares similar tags 
+  // or logic as a "reply" for demonstration, OR check a hypothetical parentCid field.
+  const replies = feed.filter(item => {
+    // In real app, check item.data.parentCid === parentPost.cid
+    // For prototype simulation, we'll show some related posts
+    return item.cid.toString() !== parentPost.cid.toString() && 
+           (item.data.tags || []).some(tag => (parentPost.data.tags || []).includes(tag));
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-zinc-950/80 backdrop-blur-sm">
@@ -70,8 +62,10 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
                  </ReactMarkdown>
               </div>
 
-              <div className="flex items-center gap-4 text-xs font-black text-zinc-500 uppercase tracking-widest border-t border-zinc-800/50 pt-4 mb-4">
-                 <span>12 Replies</span>
+              <MediaGallery mediaCids={parentPost.data.mediaCids} />
+
+              <div className="flex items-center gap-4 text-xs font-black text-zinc-500 uppercase tracking-widest border-t border-zinc-800/50 pt-4 mb-4 mt-6">
+                 <span>{replies.length} Replies</span>
                  <span>5 Reposts</span>
                  <span>42 Likes</span>
               </div>
@@ -85,32 +79,37 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
            </div>
 
            {/* Replies Area */}
-           <div className="p-6 space-y-6">
-              {mockReplies.map(reply => (
-                 <div key={reply.id} className="flex gap-4">
+           <div className="p-6 space-y-8">
+              {replies.length > 0 ? replies.map(reply => (
+                 <div key={reply.cid.toString()} className="flex gap-4 group">
                     <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-black text-zinc-400 shrink-0">
-                       {reply.author[0]}
+                       S
                     </div>
                     <div className="flex-1 space-y-1.5">
                        <div className="flex items-center gap-2">
-                          <span className="font-black text-white text-sm tracking-tight">{reply.author}</span>
-                          <span className="text-zinc-600 text-xs font-bold uppercase tracking-widest">{reply.time}</span>
+                          <span className="font-black text-white text-sm tracking-tight italic">Swarm Peer</span>
+                          <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Just Now</span>
                        </div>
-                       <p className="text-zinc-300 text-sm leading-relaxed font-medium">
-                          {reply.content}
-                       </p>
+                       <div className="prose prose-invert prose-zinc prose-sm text-zinc-300 leading-relaxed font-medium">
+                          <ReactMarkdown>{reply.data.content}</ReactMarkdown>
+                       </div>
                        <div className="flex items-center gap-6 pt-2">
                           <button className="flex items-center gap-1.5 text-zinc-500 hover:text-blue-500 transition-colors" aria-label="Reply">
                              <MessageSquare size={14} />
                           </button>
                           <button className="flex items-center gap-1.5 text-zinc-500 hover:text-rose-500 transition-colors" aria-label="Like">
                              <Heart size={14} />
-                             <span className="text-[10px] font-black">{reply.likes}</span>
+                             <span className="text-[10px] font-black">0</span>
                           </button>
                        </div>
                     </div>
                  </div>
-              ))}
+              )) : (
+                <div className="py-10 text-center space-y-2">
+                   <p className="text-zinc-600 font-black uppercase tracking-widest text-xs">No replies found in swarm</p>
+                   <p className="text-zinc-700 text-[10px] italic">Replies to decentralized objects may take time to reconcile.</p>
+                </div>
+              )}
            </div>
         </div>
 
@@ -126,6 +125,9 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
     </div>
   );
 }
+
+import { useSocial } from '../SocialContext';
+import { MediaGallery } from './MediaGallery';
 
 function ActionButton({ icon, color, label }: { icon: React.ReactNode, color: string, label: string }) {
   return (

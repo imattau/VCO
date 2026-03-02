@@ -14,6 +14,7 @@ export * from "./social/thread.js";
 export * from "./social/report.js";
 export * from "./social/direct-message.js";
 export * from "./social/notification.js";
+export * from "./social/repost.js";
 
 // Marketplace
 export * from "./marketplace/listing.js";

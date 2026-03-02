@@ -181,6 +181,11 @@ const schemaTargets = [
     ],
   },
   {
+    protoFile: "proto/vco/schemas/social/repost.proto",
+    outBase: "social/repost",
+    reExports: ["export const Repost: typeof vco.schemas.Repost;"],
+  },
+  {
     protoFile: "proto/vco/schemas/social/notification.proto",
     outBase: "social/notification",
     reExports: ["export const Notification: typeof vco.schemas.Notification;"],

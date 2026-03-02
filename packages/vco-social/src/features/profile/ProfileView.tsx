@@ -5,7 +5,8 @@ import { twMerge } from 'tailwind-merge';
 import { FollowButton } from './FollowButton';
 
 export function ProfileView() {
-  const { profile, updateProfile } = useSocial();
+  const { profile, updateProfile, feed, conversations, notifications } = useSocial();
+  const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     displayName: profile?.displayName || '',
@@ -19,10 +20,17 @@ export function ProfileView() {
     setIsEditing(false);
   };
 
+  const handleRotateKeys = () => {
+    toast("Rotating identity keys... Broadcasting new manifest to swarm.", "info");
+    setTimeout(() => {
+      toast("Identity rotated successfully. Previous keys revoked.", "success");
+    }, 1500);
+  };
+
   return (
-    <div className="space-y-12 animate-in fade-in duration-1000">
+    <div className="space-y-12 animate-in fade-in duration-1000 pb-20">
       <div className="space-y-2 mb-10">
-        <h2 className="text-5xl font-black text-white tracking-tighter italic">Identity Center</h2>
+        <h2 className="text-5xl font-black text-white tracking-tighter italic uppercase">Identity Center</h2>
         <p className="text-zinc-500 text-xl font-medium">Verifiable social profile and E2EE key management.</p>
       </div>
 
@@ -34,6 +42,7 @@ export function ProfileView() {
                   <button 
                     onClick={() => isEditing ? handleSave() : setIsEditing(true)}
                     className="p-3 bg-zinc-950 border border-zinc-800 rounded-2xl text-zinc-400 hover:text-white hover:border-zinc-600 transition-all shadow-xl"
+                    aria-label={isEditing ? "Save profile" : "Edit profile"}
                   >
                     {isEditing ? <CheckCircle2 className="text-emerald-500" size={24} /> : <Edit2 size={24} />}
                   </button>
@@ -76,7 +85,7 @@ export function ProfileView() {
             {/* Peer Graph */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-10 space-y-8 shadow-2xl">
                <div className="flex items-center justify-between">
-                  <h4 className="text-2xl font-black text-white tracking-tighter italic flex items-center gap-3">
+                  <h4 className="text-2xl font-black text-white tracking-tighter italic flex items-center gap-3 uppercase">
                      <Users size={24} className="text-blue-500" />
                      Swarm Graph
                   </h4>
@@ -103,15 +112,15 @@ export function ProfileView() {
             </div>
 
             <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-10 space-y-8 shadow-2xl">
-               <h4 className="text-2xl font-black text-white tracking-tighter italic flex items-center gap-3">
+               <h4 className="text-2xl font-black text-white tracking-tighter italic flex items-center gap-3 uppercase">
                   <Zap size={24} className="text-amber-500" />
                   Swarm Activity
                </h4>
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <StatCard label="Followers" value="1,242" subValue="+12 today" />
-                  <StatCard label="Posts Published" value="156" subValue="Synced to 42 nodes" />
-                  <StatCard label="Reactions Given" value="3,109" subValue="Verifiable attestations" />
-                  <StatCard label="E2EE Sessions" value="12" subValue="Active secure channels" />
+                  <StatCard label="Posts Published" value={feed.length.toString()} subValue="Verifiable objects" />
+                  <StatCard label="Inbound Syncs" value={notifications.length.toString()} subValue="Recent events" />
+                  <StatCard label="E2EE Sessions" value={conversations.length.toString()} subValue="Active secure channels" />
                </div>
             </div>
          </div>
@@ -129,7 +138,7 @@ export function ProfileView() {
                         <Key size={14} className="text-zinc-500" />
                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Signing Key (Ed25519)</span>
                      </div>
-                     <code className="text-[10px] text-zinc-300 font-mono break-all line-clamp-2">
+                     <code className="text-[10px] text-zinc-300 font-mono break-all line-clamp-2 uppercase">
                         ed25519:did:vco:7X9hJ2p5N...m4LqR8sW
                      </code>
                   </div>
@@ -139,7 +148,7 @@ export function ProfileView() {
                         <Zap size={14} className="text-blue-500" />
                         <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Encryption Key (X25519)</span>
                      </div>
-                     <code className="text-[10px] text-zinc-300 font-mono break-all line-clamp-2">
+                     <code className="text-[10px] text-zinc-300 font-mono break-all line-clamp-2 uppercase">
                         x25519:0x8f2d...e1c4b9
                      </code>
                   </div>
@@ -149,7 +158,10 @@ export function ProfileView() {
                </p>
             </div>
 
-            <button className="w-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 p-6 rounded-[2rem] text-zinc-500 hover:text-white text-xs font-black uppercase tracking-widest transition-all shadow-xl active:translate-y-1">
+            <button 
+              onClick={handleRotateKeys}
+              className="w-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 p-6 rounded-[2rem] text-zinc-500 hover:text-white text-xs font-black uppercase tracking-widest transition-all shadow-xl active:translate-y-1"
+            >
                Revoke & Rotate Keys
             </button>
          </div>
@@ -157,6 +169,8 @@ export function ProfileView() {
     </div>
   );
 }
+
+import { useToast } from '../../components/ToastProvider';
 
 function Badge({ icon, label, color }: any) {
   return (

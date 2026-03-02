@@ -1,6 +1,8 @@
 import { ProfileData, PostData, POST_V3_SCHEMA_URI, PROFILE_SCHEMA_URI } from '@vco/vco-schemas';
 import { mockCid } from '@vco/vco-testing';
 
+export const socialBlobStore = new Map<string, Blob>();
+
 export class MockSocialService {
   static getMockProfile(): ProfileData {
     return {
