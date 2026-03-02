@@ -38,12 +38,14 @@ interface Conversation {
 
 interface FeedItem {
   cid: Uint8Array;
+  authorId: Uint8Array;
   data: PostData;
   authorProfile: ProfileData;
 }
 
 interface ReplyItem {
   cid: Uint8Array;
+  authorId: Uint8Array;
   data: ReplyData;
   authorProfile: ProfileData;
 }
@@ -169,11 +171,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
         toast(`New Secure Message from ${authorProfile.displayName}`, "info");
       } else if (channelId === GLOBAL_SOCIAL_CHANNEL) {
-        const { decodePost, decodeReply } = await import('@vco/vco-schemas');
+        const { decodePost, decodeReply, decodeTombstone, decodeReaction } = await import('@vco/vco-schemas');
         
         if (base64.includes("reply")) {
            const replyData = decodeReply(envelope.payload);
-           setReplies(prev => [{ cid: hash, data: replyData, authorProfile: authorProfile! }, ...prev]);
+           setReplies(prev => [{ cid: hash, authorId: envelope.header.creatorId, data: replyData, authorProfile: authorProfile! }, ...prev]);
            
            if (feed.some(f => toHex(f.cid) === toHex(replyData.parentCid))) {
               const notif = NotificationService.generateNotification(
@@ -184,9 +186,27 @@ export function SocialProvider({ children }: { children: ReactNode }) {
               );
               setNotifications(prev => [notif, ...prev]);
            }
+        } else if (base64.includes("tombstone")) {
+           const tombstoneData = decodeTombstone(envelope.payload);
+           setTombstones(prev => new Set(prev).add(toHex(tombstoneData.targetCid)));
+           console.log(`Global Tombstone processed for ${toHex(tombstoneData.targetCid)}`);
+        } else if (base64.includes("reaction")) {
+           const reactionData = decodeReaction(envelope.payload);
+           console.log(`Global Reaction received for ${toHex(reactionData.targetCid)}: ${reactionData.emoji}`);
+           
+           // If reaction is to one of our posts, notify
+           if (feed.some(f => toHex(f.cid) === toHex(reactionData.targetCid))) {
+              const notif = NotificationService.generateNotification(
+                NotificationType.REACTION,
+                envelope.header.creatorId,
+                reactionData.targetCid,
+                `${authorProfile.displayName} liked your post`
+              );
+              setNotifications(prev => [notif, ...prev]);
+           }
         } else {
            const postData = decodePost(envelope.payload);
-           setFeed(prev => [{ cid: hash, data: postData, authorProfile: authorProfile! }, ...prev]);
+           setFeed(prev => [{ cid: hash, authorId: envelope.header.creatorId, data: postData, authorProfile: authorProfile! }, ...prev]);
         }
       } else if (channelId.startsWith("vco://objects/")) {
         const { decodeProfile } = await import('@vco/vco-schemas');
@@ -269,9 +289,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
               if (e.channelId === GLOBAL_SOCIAL_CHANNEL) {
                 if (e.payload.includes("reply")) {
-                  rItems.push({ cid, data: decodeReply(coreEnvelope.payload), authorProfile });
+                  rItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: decodeReply(coreEnvelope.payload), authorProfile });
                 } else {
-                  fItems.push({ cid, data: decodePost(coreEnvelope.payload), authorProfile });
+                  fItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: decodePost(coreEnvelope.payload), authorProfile });
                 }
               } else if (e.channelId.startsWith("vco://channels/dm/")) {
                 const dmData = decodeDirectMessage(coreEnvelope.payload);
@@ -393,7 +413,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       timestamp: Date.now()
     });
 
-    setFeed(prev => [{ cid: hash, data: postData, authorProfile: profile }, ...prev]);
+    setFeed(prev => [{ cid: hash, authorId: identity.creatorId, data: postData, authorProfile: profile }, ...prev]);
     toast("Post broadcast to swarm", "success");
   };
 
@@ -434,7 +454,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       timestamp: Date.now()
     });
 
-    setReplies(prev => [{ cid: hash, data: replyData, authorProfile: profile }, ...prev]);
+    setReplies(prev => [{ cid: hash, authorId: identity.creatorId, data: replyData, authorProfile: profile }, ...prev]);
     toast("Reply broadcast to swarm", "success");
   };
 
@@ -520,17 +540,92 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const setFilterAction = (f: { type: 'tag' | 'peer' | 'all'; value?: string } | null) => setFilter(f);
 
   const deletePost = async (cid: Uint8Array) => {
-    const hex = toHex(cid);
-    setTombstones(prev => new Set(prev).add(hex));
-    toast("Tombstone published", "info");
+    if (!identity) return;
+    const { encodeTombstone, TOMBSTONE_SCHEMA_URI } = await import('@vco/vco-schemas');
+    const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
+    const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
+    const crypto = createNobleCryptoProvider();
+
+    const tombstoneData = {
+      schema: TOMBSTONE_SCHEMA_URI,
+      targetCid: cid,
+      reason: "User requested deletion",
+      timestampMs: BigInt(Date.now())
+    };
+    
+    const envelope = createEnvelope({
+      payload: encodeTombstone(tombstoneData),
+      payloadType: 0x50,
+      creatorId: identity.creatorId,
+      privateKey: identity.signingPrivateKey,
+      powDifficulty: 1
+    }, crypto);
+
+    const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+    NodeClient.getInstance().publish(GLOBAL_SOCIAL_CHANNEL, base64);
+    
+    setTombstones(prev => new Set(prev).add(toHex(cid)));
+    toast("Tombstone published to swarm", "info");
   };
 
   const reactToPost = async (cid: Uint8Array) => {
-    toast(`Reaction manifest published for ${toHex(cid).substring(0, 8)}`, "success");
+    if (!identity) return;
+    const { encodeReaction, REACTION_SCHEMA_URI } = await import('@vco/vco-schemas');
+    const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
+    const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
+    const crypto = createNobleCryptoProvider();
+
+    const reactionData = {
+      schema: REACTION_SCHEMA_URI,
+      targetCid: cid,
+      emoji: "❤️",
+      timestampMs: BigInt(Date.now())
+    };
+    
+    const envelope = createEnvelope({
+      payload: encodeReaction(reactionData),
+      payloadType: 0x50,
+      creatorId: identity.creatorId,
+      privateKey: identity.signingPrivateKey,
+      powDifficulty: 1
+    }, crypto);
+
+    const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+    NodeClient.getInstance().publish(GLOBAL_SOCIAL_CHANNEL, base64);
+    
+    toast("Reaction published", "success");
   };
 
-  const repost = async (cid: Uint8Array, commentary?: string) => {
-    toast(`Repost manifest published for ${toHex(cid).substring(0, 8)}`, "success");
+  const repost = async (cid: Uint8Array, commentary: string = "") => {
+    if (!identity) return;
+    const { encodeRepost, REPOST_SCHEMA_URI } = await import('@vco/vco-schemas');
+    const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
+    const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
+    const crypto = createNobleCryptoProvider();
+
+    const originalPost = feed.find(f => toHex(f.cid) === toHex(cid));
+    if (!originalPost) return;
+
+    const repostData = {
+      schema: REPOST_SCHEMA_URI,
+      originalPostCid: cid,
+      originalAuthorCid: originalPost.authorId,
+      commentary,
+      timestampMs: BigInt(Date.now())
+    };
+    
+    const envelope = createEnvelope({
+      payload: encodeRepost(repostData),
+      payloadType: 0x50,
+      creatorId: identity.creatorId,
+      privateKey: identity.signingPrivateKey,
+      powDifficulty: 1
+    }, crypto);
+
+    const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+    NodeClient.getInstance().publish(GLOBAL_SOCIAL_CHANNEL, base64);
+    
+    toast("Repost published to swarm", "success");
   };
 
   const publishReport = async (cid: Uint8Array, reason: number) => {
