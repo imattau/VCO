@@ -46,6 +46,8 @@ interface SocialContextType {
   tombstones: Set<string>; // Hex strings of deleted CIDs
   filter: { type: 'tag' | 'peer' | 'all'; value?: string } | null;
   isLoading: boolean;
+  isNodeReady: boolean;
+  peerId: string | null;
   activeTab: SocialTab;
   activeThread: FeedItem | null;
   selectedConversationIndex: number | null;
@@ -80,6 +82,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const [tombstones, setTombstones] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<{ type: 'tag' | 'peer' | 'all'; value?: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isNodeReady, setIsNodeReady] = useState(false);
+  const [peerId, setPeerId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SocialTab>('feed');
   const [activeThread, setActiveThread] = useState<FeedItem | null>(null);
   const [selectedConversationIndex, setSelectedConversationIndex] = useState<number | null>(null);
@@ -115,6 +119,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         if (event.type === 'envelope') {
           handleInboundEnvelope(event.envelope, event.channelId);
         } else if (event.type === 'ready') {
+          setIsNodeReady(true);
+          setPeerId(event.peerId);
           toast("Connected to VCO swarm", "success");
         } else if (event.type === 'error') {
           toast(`Node Error: ${event.message}`, "error");
@@ -357,6 +363,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       tombstones,
       filter,
       isLoading,
+      isNodeReady,
+      peerId,
       activeTab,
       activeThread,
       selectedConversationIndex,

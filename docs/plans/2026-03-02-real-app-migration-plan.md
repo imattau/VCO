@@ -17,10 +17,15 @@ Transition `vco-social` from a mocked prototype to a real decentralized applicat
     - Update `feed` and `conversations` states dynamically.
 - [x] Task 2.4: Wire `createPost` and `sendDM` to `NodeClient.publish` using real signing keys.
 
-## Phase 3: Deployment & Hardening (CURRENT)
-- [ ] Task 3.1: Build `vco-node` as a sidecar binary.
-- [ ] Task 3.2: Finalize Rust-side process management in `main.rs`.
-- [ ] Task 3.3: Implement "Network Status" indicators linked to `NodeClient.isReady`.
+## Phase 3: Deployment & Hardening [DONE]
+- [x] Task 3.1: Build `vco-node` as a sidecar binary (via wrapper script).
+- [x] Task 3.2: Finalize Rust-side process management in `main.rs` (enabled shell plugin).
+- [x] Task 3.3: Implement "Network Status" indicators linked to `NodeClient.isReady`.
+
+## Verification [DONE]
+- [x] Workspace build and typecheck passing.
+- [x] Sidecar configuration and permissions established.
+- [x] Real-time UI status wired.
 
 ## References
 - `packages/vco-node/README.md`
