@@ -15,7 +15,23 @@ export class MockSocialService {
     };
   }
 
-  static getMockFeed(): { cid: Uint8Array, data: PostData }[] {
+  static getMockFeed(): { cid: Uint8Array, data: PostData, authorProfile: ProfileData }[] {
+    const charlie: ProfileData = {
+      schema: PROFILE_SCHEMA_URI,
+      displayName: "Crypto Charlie",
+      bio: "Decentralized consensus researcher.",
+      avatarCid: mockCid("charlie-avatar"),
+      previousManifest: new Uint8Array(0),
+    };
+
+    const bob: ProfileData = {
+      schema: PROFILE_SCHEMA_URI,
+      displayName: "Verifiable Bob",
+      bio: "Core contributor. Swarm enthusiast.",
+      avatarCid: mockCid("bob-avatar"),
+      previousManifest: new Uint8Array(0),
+    };
+
     return [
       {
         cid: mockCid("post-1"),
@@ -25,7 +41,8 @@ export class MockSocialService {
           mediaCids: [mockCid("media-1"), mockCid("media-2"), mockCid("media-3")],
           timestampMs: BigInt(Date.now() - 3600000),
           tags: ["vco", "web3", "privacy"]
-        }
+        },
+        authorProfile: charlie
       },
       {
         cid: mockCid("post-2"),
@@ -35,7 +52,8 @@ export class MockSocialService {
           mediaCids: [],
           timestampMs: BigInt(Date.now() - 7200000),
           tags: ["cryptography"]
-        }
+        },
+        authorProfile: bob
       }
     ];
   }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PostData } from '@vco/vco-schemas';
+import { PostData, ProfileData } from '@vco/vco-schemas';
 import { MessageSquare, Repeat2, Heart, Share, MoreHorizontal, Trash2, ShieldAlert } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { twMerge } from 'tailwind-merge';
@@ -9,11 +9,12 @@ import { ReportDialog } from '../moderation/ReportDialog';
 
 interface PostCardProps {
   data: PostData;
+  authorProfile: ProfileData;
   cid: Uint8Array;
   onOpenThread?: () => void;
 }
 
-export function PostCard({ data, onOpenThread, cid }: PostCardProps) {
+export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardProps) {
   const { reactToPost, repost, deletePost, publishReport } = useSocial();
   const [showMenu, setShowMenu] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -28,17 +29,16 @@ export function PostCard({ data, onOpenThread, cid }: PostCardProps) {
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-xs font-black text-blue-400">
-            {/* Mock initial */}
-            A
+            {authorProfile.displayName[0]}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-black text-white tracking-tight">Alice</span>
-              <span className="text-zinc-500 text-xs font-bold">@alice.vco</span>
+              <span className="font-black text-white tracking-tight">{authorProfile.displayName}</span>
+              <span className="text-zinc-500 text-xs font-bold">@{authorProfile.displayName.split(' ')[0].toLowerCase()}.vco</span>
               <span className="text-zinc-600 text-xs">•</span>
               <span className="text-zinc-600 text-xs font-bold uppercase tracking-widest">{timeStr}</span>
             </div>
-            <div className="text-[10px] text-zinc-600 font-mono">did:vco:1234...5678</div>
+            <div className="text-[10px] text-zinc-600 font-mono">did:vco:{Array.from(authorProfile.encryptionPubkey || new Uint8Array(4)).map(b => b.toString(16).padStart(2,'0')).join('').substring(0,8)}...</div>
           </div>
         </div>
         

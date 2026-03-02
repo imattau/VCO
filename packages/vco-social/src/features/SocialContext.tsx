@@ -29,21 +29,27 @@ interface Conversation {
   unread: number;
 }
 
+interface FeedItem {
+  cid: Uint8Array;
+  data: PostData;
+  authorProfile: ProfileData;
+}
+
 interface SocialContextType {
   profile: ProfileData | null;
-  feed: { cid: Uint8Array, data: PostData }[];
+  feed: FeedItem[];
   conversations: Conversation[];
   notifications: NotificationData[];
   tombstones: Set<string>; // Hex strings of deleted CIDs
   filter: { type: 'tag' | 'peer' | 'all'; value?: string } | null;
   isLoading: boolean;
   activeTab: SocialTab;
-  activeThread: { data: PostData; cid: Uint8Array } | null;
+  activeThread: FeedItem | null;
   selectedConversationIndex: number | null;
   
   // Actions
   setActiveTab: (tab: SocialTab) => void;
-  setActiveThread: (thread: { data: PostData; cid: Uint8Array } | null) => void;
+  setActiveThread: (thread: FeedItem | null) => void;
   setSelectedConversationIndex: (index: number | null) => void;
   createPost: (content: string, mediaFiles?: File[]) => Promise<void>;
   sendDM: (recipientProfile: ProfileData, content: string, attachments?: File[]) => Promise<void>;
@@ -62,14 +68,14 @@ const SocialContext = createContext<SocialContextType | undefined>(undefined);
 
 export function SocialProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [feed, setFeed] = useState<{ cid: Uint8Array, data: PostData }[]>([]);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [tombstones, setTombstones] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<{ type: 'tag' | 'peer' | 'all'; value?: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<SocialTab>('feed');
-  const [activeThread, setActiveThread] = useState<{ data: PostData; cid: Uint8Array } | null>(null);
+  const [activeThread, setActiveThread] = useState<FeedItem | null>(null);
   const [selectedConversationIndex, setSelectedConversationIndex] = useState<number | null>(null);
   const { toast } = useToast();
 
@@ -131,7 +137,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     if (filter.type === 'tag') {
       return (item.data.tags || []).includes(filter.value?.replace('#', '').toLowerCase() || '');
     }
-    // TODO: peer filter logic when author CID is in feed
+    if (filter.type === 'peer') {
+      return item.authorProfile.displayName.toLowerCase() === filter.value?.toLowerCase();
+    }
     return true;
   });
 
@@ -157,12 +165,13 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   }, [isLoading, profile, toast]);
 
   const createPost = async (content: string, mediaFiles?: File[]) => {
+    if (!profile) return;
     const encoded = await FeedService.publishPost(content, mediaFiles);
     const mockCidStr = `post-${Math.random().toString(36).slice(2, 11)}`;
     const cid = mockCid(mockCidStr);
     const postData = await import('@vco/vco-schemas').then(m => m.decodePost(encoded));
     
-    setFeed([{ cid, data: postData }, ...feed]);
+    setFeed([{ cid, data: postData, authorProfile: profile }, ...feed]);
     toast("Post published to swarm", "success");
   };
 

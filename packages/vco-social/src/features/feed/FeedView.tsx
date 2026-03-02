@@ -48,6 +48,7 @@ export function FeedView() {
           <PostCard 
             key={item.cid.toString()} 
             data={item.data} 
+            authorProfile={item.authorProfile}
             cid={item.cid} 
             onOpenThread={() => setActiveThread(item)}
           />
