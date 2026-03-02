@@ -81,6 +81,20 @@ export class VcoStore {
   }
 
   /**
+   * Retrieves all envelopes from the store.
+   */
+  async getAllEnvelopes(): Promise<StoredEnvelope[]> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("envelopes", "readonly");
+      const store = tx.objectStore("envelopes");
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
    * Saves a peer profile to the store.
    */
   async putProfile(creatorId: string, profileData: any): Promise<void> {

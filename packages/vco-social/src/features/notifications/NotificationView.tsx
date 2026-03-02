@@ -2,23 +2,29 @@ import React from 'react';
 import { useSocial } from '../SocialContext';
 import { Bell, Heart, MessageSquare, UserPlus, Zap, SwatchBook } from 'lucide-react';
 import { NotificationType } from '@vco/vco-schemas';
+import { toHex } from '@vco/vco-testing';
 
 export function NotificationView() {
-  const { notifications, markNotificationAsRead, navigateToPost, navigateToPeer } = useSocial();
+  const { notifications, markNotificationAsRead, navigateToPost, navigateToPeer, peerProfiles, setActiveTab } = useSocial();
 
   const handleNotificationClick = (n: any) => {
     markNotificationAsRead(n.targetCid);
     
-    // Prototype mapping for deep-linking
     if (n.type === NotificationType.POST_REPLY || n.type === NotificationType.REACTION) {
-      // In real app, n.targetCid would be the post CID
-      // For mock, we'll open the first post if available
       navigateToPost(n.targetCid);
     } else if (n.type === NotificationType.DM) {
-      navigateToPeer("Verifiable Bob");
+      const creatorIdHex = toHex(n.actorCid);
+      const profile = peerProfiles.get(creatorIdHex);
+      navigateToPeer(profile?.displayName || creatorIdHex);
     } else if (n.type === NotificationType.FOLLOW) {
-      navigateToPeer("none"); // switches to profile
+      setActiveTab('profile');
     }
+  };
+
+  const getActorName = (actorCid: Uint8Array) => {
+    const hex = toHex(actorCid);
+    const profile = peerProfiles.get(hex);
+    return profile?.displayName || `Peer ${hex.substring(0, 6)}`;
   };
 
   return (
@@ -34,7 +40,7 @@ export function NotificationView() {
              <NotificationItem 
                key={i} 
                type={n.type} 
-               actor={n.summary.split(' ')[0]} // Mock parsing
+               actor={getActorName(n.actorCid)}
                content={n.summary.split(' ').slice(1).join(' ')} 
                time={new Date(Number(n.timestampMs)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                onClick={() => handleNotificationClick(n)}

@@ -171,7 +171,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       } else if (channelId === GLOBAL_SOCIAL_CHANNEL) {
         const { decodePost, decodeReply } = await import('@vco/vco-schemas');
         
-        // Differentiate Post vs Reply (simulated detection via base64 for now)
         if (base64.includes("reply")) {
            const replyData = decodeReply(envelope.payload);
            setReplies(prev => [{ cid: hash, data: replyData, authorProfile: authorProfile! }, ...prev]);
@@ -215,44 +214,122 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
         let myProfile = await vcoStore.getProfile(id.creatorIdHex);
         if (!myProfile) {
-          myProfile = MockSocialService.getMockProfile();
-          myProfile.displayName = id.creatorIdHex.substring(0, 12);
-          myProfile.encryptionPubkey = id.encryptionPublicKey;
+          const PROFILE_SCHEMA_URI = "vco://schemas/identity/profile/v1";
+          myProfile = {
+            schema: PROFILE_SCHEMA_URI,
+            displayName: id.creatorIdHex.substring(0, 12),
+            bio: "Establishing swarm identity...",
+            avatarCid: new Uint8Array(0),
+            previousManifest: new Uint8Array(0),
+            encryptionPubkey: id.encryptionPublicKey
+          };
           await vcoStore.putProfile(id.creatorIdHex, myProfile);
         }
         setProfile(myProfile);
 
+        // Load Seed Peers if store is empty
         const allProfiles = await vcoStore.getAllProfiles();
+        if (allProfiles.length <= 1) {
+          const seeds = MockSocialService.getSeedPeers();
+          for (const s of seeds) {
+            await vcoStore.putProfile(s.creatorId, s.profile);
+          }
+        }
+
+        const refreshedProfiles = await vcoStore.getAllProfiles();
         const profileMap = new Map<string, ProfileData>();
-        allProfiles.forEach(p => {
+        refreshedProfiles.forEach(p => {
           if (p.creatorId !== id!.creatorIdHex) profileMap.set(p.creatorId, p.data);
         });
         setPeerProfiles(profileMap);
 
-        const storedEnvelopes = await vcoStore.getEnvelopesByChannel(GLOBAL_SOCIAL_CHANNEL);
+        const storedEnvelopes = await vcoStore.getAllEnvelopes();
         if (storedEnvelopes.length > 0) {
-          const { decodePost, decodeReply } = await import('@vco/vco-schemas');
+          const { decodePost, decodeReply, decodeDirectMessage } = await import('@vco/vco-schemas');
+          const { decodeEnvelopeProto: decodeCore } = await import('@vco/vco-core');
+          
           const fItems: FeedItem[] = [];
           const rItems: ReplyItem[] = [];
+          const dmMap = new Map<string, MessageWithMetadata[]>();
           
           for (const e of storedEnvelopes) {
-            const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
-            const cid = Uint8Array.from(atob(e.cid), c => c.charCodeAt(0));
-            if (e.payload.includes("reply")) {
-              rItems.push({ cid, data: decodeReply(bytes), authorProfile: myProfile! });
-            } else {
-              fItems.push({ cid, data: decodePost(bytes), authorProfile: myProfile! });
+            try {
+              const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
+              const coreEnvelope = decodeCore(bytes);
+              const cid = Uint8Array.from(atob(e.cid), c => c.charCodeAt(0));
+              const creatorIdHex = toHex(coreEnvelope.header.creatorId);
+              
+              const authorProfile = creatorIdHex === id!.creatorIdHex ? myProfile : profileMap.get(creatorIdHex) || {
+                schema: "vco://schemas/identity/profile/v1",
+                displayName: `Peer ${creatorIdHex.substring(0, 6)}`,
+                avatarCid: new Uint8Array(0),
+                previousManifest: new Uint8Array(0),
+                bio: "Offline identity"
+              };
+
+              if (e.channelId === GLOBAL_SOCIAL_CHANNEL) {
+                if (e.payload.includes("reply")) {
+                  rItems.push({ cid, data: decodeReply(coreEnvelope.payload), authorProfile });
+                } else {
+                  fItems.push({ cid, data: decodePost(coreEnvelope.payload), authorProfile });
+                }
+              } else if (e.channelId.startsWith("vco://channels/dm/")) {
+                const dmData = decodeDirectMessage(coreEnvelope.payload);
+                let decrypted: any = { content: "[Encrypted Message]", mediaCids: [] };
+                
+                try {
+                  decrypted = await E2EEService.decryptMessage(
+                    id!.encryptionPrivateKey,
+                    dmData.ephemeralPubkey,
+                    dmData.nonce,
+                    dmData.encryptedPayload
+                  );
+                } catch(e) {}
+
+                const msg: MessageWithMetadata = {
+                  cid,
+                  data: dmData,
+                  payload: decrypted,
+                  isOwn: creatorIdHex === id!.creatorIdHex
+                };
+
+                const peerKey = e.channelId.replace("vco://channels/dm/", "");
+                if (!dmMap.has(peerKey)) dmMap.set(peerKey, []);
+                dmMap.get(peerKey)!.push(msg);
+              }
+            } catch (err) {
+              console.warn("Bootstrap: Failed to decode envelope", err);
             }
           }
-          setFeed(fItems);
+          setFeed(fItems.sort((a,b) => Number(b.data.timestampMs - a.data.timestampMs)));
           setReplies(rItems);
-        } else {
-          setFeed(MockSocialService.getMockFeed());
+          
+          const convs: Conversation[] = [];
+          for (const [peerKey, messages] of dmMap.entries()) {
+            const sortedMsgs = messages.sort((a,b) => Number(a.data.timestampMs - b.data.timestampMs));
+            const peerProfile = Array.from(profileMap.values()).find(p => p.encryptionPubkey && toHex(p.encryptionPubkey) === peerKey) || {
+              schema: "vco://schemas/identity/profile/v1",
+              displayName: `Peer ${peerKey.substring(0,6)}`,
+              avatarCid: new Uint8Array(0),
+              previousManifest: new Uint8Array(0),
+              bio: "E2EE contact",
+              encryptionPubkey: Uint8Array.from(peerKey.match(/.{1,2}/g)!.map(b => parseInt(b, 16)))
+            };
+            
+            convs.push({
+              peerProfile,
+              messages: sortedMsgs,
+              lastMessage: sortedMsgs[sortedMsgs.length - 1],
+              unread: 0
+            });
+          }
+          setConversations(convs);
         }
 
         const client = NodeClient.getInstance();
         await client.connect();
         client.subscribe(GLOBAL_SOCIAL_CHANNEL);
+        client.subscribe(`vco://channels/dm/${toHex(id!.encryptionPublicKey)}`);
 
         const eventCleanup = client.onEvent((event) => {
           if (event.type === 'envelope') {
@@ -458,35 +535,14 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   const publishReport = async (cid: Uint8Array, reason: number) => {
     if (!identity) return;
-    
     const { encodeReport, REPORT_SCHEMA_URI } = await import('@vco/vco-schemas');
     const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
     const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
     const crypto = createNobleCryptoProvider();
-
-    const reportData = {
-      schema: REPORT_SCHEMA_URI,
-      targetCid: cid,
-      reason: reason,
-      timestampMs: BigInt(Date.now())
-    };
-    
-    const reportEncoded = encodeReport(reportData);
-    
-    const envelope = createEnvelope({
-      payload: reportEncoded,
-      payloadType: 0x50,
-      creatorId: identity.creatorId,
-      privateKey: identity.signingPrivateKey,
-      powDifficulty: 1
-    }, crypto);
-
-    const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
-    // Publish to a dedicated moderation monitoring channel
-    NodeClient.getInstance().publish("vco://channels/moderation/reports", base64);
-    
+    const reportData = { schema: REPORT_SCHEMA_URI, targetCid: cid, reason: reason, timestampMs: BigInt(Date.now()) };
+    const envelope = createEnvelope({ payload: encodeReport(reportData), payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: 1 }, crypto);
+    NodeClient.getInstance().publish("vco://channels/moderation/reports", btoa(String.fromCharCode(...encodeEnvelopeProto(envelope))));
     toast("Verifiable report broadcast to network", "success");
-    console.log(`Report published for ${toHex(cid)} reason: ${reason}`);
   };
 
   const navigateToPost = (cid: Uint8Array) => {
