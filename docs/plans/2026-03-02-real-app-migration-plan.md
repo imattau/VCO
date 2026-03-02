@@ -36,9 +36,9 @@ Transition `vco-social` from a mocked prototype to a real decentralized applicat
 - [x] Task 6.2: Implement **Strict Verification**: Use `@vco/vco-core` to verify signatures of inbound envelopes in the frontend.
 - [x] Task 6.3: Expand **Swarm Graph**: Transition the mock follow list to a dynamic list populated by DHT lookups.
 
-## Phase 7: Rich Media & Filesystem (NEXT)
-- [ ] Task 7.1: Implement real **Media Persistence**: Save hashed blobs to the local filesystem (Tauri) or persistent Blob store.
-- [ ] Task 7.2: Implement **Sequence Hashing**: Fragment large media files into verifiable chunks.
+## Phase 7: Rich Media & Filesystem [DONE]
+- [x] Task 7.1: Implement real **Media Persistence**: Save hashed blobs to the local IndexedDB Blob store.
+- [x] Task 7.2: Implement **Sequence Hashing**: Fragment large media files into verifiable chunks using `SequenceManifest`.
 
 ## Verification [DONE]
 - [x] Workspace build and typecheck passing.
@@ -46,6 +46,7 @@ Transition `vco-social` from a mocked prototype to a real decentralized applicat
 - [x] Real-time UI status wired.
 - [x] Local persistence (IndexedDB) active.
 - [x] Strict cryptographic verification implemented.
+- [x] Media fragmentation and reconstruction verified.
 
 ## References
 - `packages/vco-node/README.md`

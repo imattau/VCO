@@ -19,6 +19,7 @@ import { SocialTab } from '@/App';
 import { KeyringService, IdentityKeys } from '@/lib/KeyringService';
 import { NodeClient } from '@/lib/NodeClient';
 import { vcoStore } from '@/lib/VcoStore';
+import { MediaService } from '@/lib/MediaService';
 
 interface MessageWithMetadata {
   cid: Uint8Array;
@@ -244,13 +245,27 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     bootstrap();
   }, []);
 
-  const createPost = async (content: string, mediaFiles?: File[]) => {
+  const createPost = async (content: string, mediaFiles: File[] = []) => {
     if (!profile || !identity) return;
     const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
     const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
     const crypto = createNobleCryptoProvider();
 
-    const postEncoded = await FeedService.publishPost(content, mediaFiles);
+    // 1. Process and store media
+    const mediaCids = await Promise.all(
+      mediaFiles.map(file => MediaService.processAndStore(file))
+    );
+
+    const { POST_V3_SCHEMA_URI, extractHashtags, encodePost } = await import('@vco/vco-schemas');
+    const postData: PostData = {
+      schema: POST_V3_SCHEMA_URI,
+      content,
+      mediaCids,
+      timestampMs: BigInt(Date.now()),
+      tags: extractHashtags(content)
+    };
+    const postEncoded = encodePost(postData);
+
     const envelope = createEnvelope({
       payload: postEncoded,
       payloadType: 0x50,
@@ -273,7 +288,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       timestamp: Date.now()
     });
 
-    const postData = await import('@vco/vco-schemas').then(m => m.decodePost(postEncoded));
     setFeed(prev => [{ cid: hash, data: postData, authorProfile: profile }, ...prev]);
     toast("Post broadcast to swarm", "success");
   };
@@ -281,11 +295,10 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const sendDM = async (recipientProfile: ProfileData, content: string, attachments: File[] = []) => {
     if (!recipientProfile.encryptionPubkey || !identity) return;
 
-    const mediaCids = await Promise.all(attachments.map(async (file) => {
-      const cid = mockCid(`dm-media-${file.name}-${Math.random()}`);
-      socialBlobStore.set(toHex(cid), file);
-      return cid;
-    }));
+    // 1. Process and store attachments
+    const mediaCids = await Promise.all(
+      attachments.map(file => MediaService.processAndStore(file))
+    );
 
     const { ephemeralPubkey, nonce, encryptedPayload } = await E2EEService.encryptMessage(
       recipientProfile.encryptionPubkey,

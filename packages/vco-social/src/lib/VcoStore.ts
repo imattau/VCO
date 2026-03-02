@@ -31,6 +31,10 @@ export class VcoStore {
         if (!db.objectStoreNames.contains("profiles")) {
           db.createObjectStore("profiles", { keyPath: "creatorId" });
         }
+        // Store for media blobs
+        if (!db.objectStoreNames.contains("blobs")) {
+          db.createObjectStore("blobs", { keyPath: "cid" });
+        }
       };
 
       request.onsuccess = () => {
@@ -100,6 +104,34 @@ export class VcoStore {
       const store = tx.objectStore("profiles");
       const request = store.get(creatorId);
       request.onsuccess = () => resolve(request.result?.data || null);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Saves a media blob to the store.
+   */
+  async putBlob(cid: string, blob: Blob): Promise<void> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("blobs", "readwrite");
+      const store = tx.objectStore("blobs");
+      const request = store.put({ cid, blob, updatedAt: Date.now() });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Retrieves a media blob by CID.
+   */
+  async getBlob(cid: string): Promise<Blob | null> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("blobs", "readonly");
+      const store = tx.objectStore("blobs");
+      const request = store.get(cid);
+      request.onsuccess = () => resolve(request.result?.blob || null);
       request.onerror = () => reject(request.error);
     });
   }

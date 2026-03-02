@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Play } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
-import { toHex } from '@vco/vco-testing';
-import { socialBlobStore } from '../../lib/MockSocialService';
+import { MediaService } from '../../lib/MediaService';
 
 interface MediaGalleryProps {
   mediaCids: Uint8Array[];
@@ -10,19 +9,34 @@ interface MediaGalleryProps {
 
 export function MediaGallery({ mediaCids }: MediaGalleryProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    let urls: string[] = [];
+    
+    const resolve = async () => {
+      const resolved = await Promise.all(
+        mediaCids.map(cid => MediaService.resolveToUrl(cid))
+      );
+      const filtered = resolved.filter((url): url is string => url !== null);
+      setMediaUrls(filtered);
+      urls = filtered;
+    };
+
+    resolve();
+
+    return () => {
+      // Revoke URLs to prevent memory leaks
+      urls.forEach(url => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, [mediaCids]);
 
   if (!mediaCids || mediaCids.length === 0) return null;
 
-  // Resolve mock images from store, or fallback to placeholder
-  const mediaUrls = mediaCids.map((cid, i) => {
-    const hex = toHex(cid);
-    const blob = socialBlobStore.get(hex);
-    if (blob) {
-      return URL.createObjectURL(blob);
-    }
-    return `https://picsum.photos/seed/vco${i}/800/600`;
-  });
-  
   // Layout logic
   const getGridClass = (count: number) => {
     switch (count) {
