@@ -3,6 +3,7 @@ import { Command, Child } from '@tauri-apps/plugin-shell';
 type NodeEvent = 
   | { type: 'ready', peerId: string, multiaddrs: string[] }
   | { type: 'envelope', channelId: string, envelope: string }
+  | { type: 'stats', peerId: string, multiaddrs: string[], peers: string[] }
   | { type: 'error', message: string };
 
 type EventListener = (event: NodeEvent) => void;
@@ -13,6 +14,8 @@ export class NodeClient {
   private listeners: Set<EventListener> = new Set();
   public isReady: boolean = false;
   public peerId: string | null = null;
+  public multiaddrs: string[] = [];
+  public peers: string[] = [];
 
   private constructor() {}
 
@@ -66,6 +69,10 @@ export class NodeClient {
     this.send({ type: 'publish', channelId, envelope: envelopeBase64 });
   }
 
+  public getStats() {
+    this.send({ type: 'get_stats' });
+  }
+
   public async shutdown() {
     this.send({ type: 'shutdown' });
     this.process = null;
@@ -89,6 +96,11 @@ export class NodeClient {
     if (event.type === 'ready') {
       this.isReady = true;
       this.peerId = event.peerId;
+      this.multiaddrs = event.multiaddrs;
+    } else if (event.type === 'stats') {
+      this.peerId = event.peerId;
+      this.multiaddrs = event.multiaddrs;
+      this.peers = event.peers;
     }
     this.listeners.forEach(l => l(event));
   }

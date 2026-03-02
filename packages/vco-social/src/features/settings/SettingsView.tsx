@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSocial } from '../SocialContext';
 import { 
   Server, 
@@ -14,16 +14,27 @@ import {
   ArrowRightLeft
 } from 'lucide-react';
 import { useToast } from '../../components/ToastProvider';
+import { twMerge } from 'tailwind-merge';
+import { NetworkService, NetworkStats } from '../../lib/NetworkService';
 
 export function SettingsView() {
   const { profile } = useSocial();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [stats, setStats] = useState<NetworkStats>({
+    peerId: null,
+    multiaddrs: [],
+    peers: [],
+    isReady: false
+  });
 
-  const mockPeerId = "12D3KooWPHSGoS6CcAc9vtdvsv9kv9kvsvsv9kv";
-  const mockMultiaddr = "/ip4/127.0.0.1/udp/4001/quic-v1";
+  useEffect(() => {
+    NetworkService.startPolling(setStats);
+    return () => NetworkService.stopPolling();
+  }, []);
 
   const copyToClipboard = (text: string) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
     setCopied(true);
     toast("Copied to clipboard", "info");
@@ -51,18 +62,18 @@ export function SettingsView() {
                <div className="space-y-3">
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Local Peer ID</label>
                   <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-blue-500/30 transition-all shadow-inner">
-                     <code className="text-xs text-zinc-400 font-mono truncate">{mockPeerId}</code>
-                     <button onClick={() => copyToClipboard(mockPeerId)} className="text-zinc-600 hover:text-blue-500 transition-colors">
+                     <code className="text-xs text-zinc-400 font-mono truncate">{stats.peerId || "Node not responding..."}</code>
+                     <button onClick={() => copyToClipboard(stats.peerId || "")} className="text-zinc-600 hover:text-blue-500 transition-colors">
                         {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
                      </button>
                   </div>
                </div>
 
                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Default Multiaddress</label>
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Observed Multiaddress</label>
                   <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-blue-500/30 transition-all shadow-inner">
-                     <code className="text-xs text-zinc-400 font-mono truncate">{mockMultiaddr}</code>
-                     <button onClick={() => copyToClipboard(mockMultiaddr)} className="text-zinc-600 hover:text-blue-500 transition-colors">
+                     <code className="text-xs text-zinc-400 font-mono truncate">{stats.multiaddrs[0] || "Identifying interfaces..."}</code>
+                     <button onClick={() => copyToClipboard(stats.multiaddrs[0] || "")} className="text-zinc-600 hover:text-blue-500 transition-colors">
                         {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
                      </button>
                   </div>
@@ -92,26 +103,28 @@ export function SettingsView() {
                   <div className="text-xl font-black text-emerald-500 italic">QUIC-v1</div>
                </div>
                <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-inner space-y-1">
-                  <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">DHT Nodes</span>
-                  <div className="text-xl font-black text-white italic">1,248</div>
+                  <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">DHT Peers</span>
+                  <div className="text-xl font-black text-white italic">{stats.peers.length}</div>
                </div>
             </div>
 
             <div className="space-y-4">
                <div className="flex items-center justify-between text-xs font-bold px-2">
-                  <span className="text-zinc-500 uppercase tracking-widest">Inbound Sync</span>
-                  <span className="text-emerald-500">42.5 KB/s</span>
+                  <span className="text-zinc-500 uppercase tracking-widest">Network Status</span>
+                  <span className={stats.isReady ? "text-emerald-500" : "text-amber-500"}>
+                    {stats.isReady ? "READY" : "CONNECTING"}
+                  </span>
                </div>
                <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
-                  <div className="h-full bg-emerald-500 w-[65%] animate-pulse" />
+                  <div className={twMerge("h-full transition-all duration-1000", stats.isReady ? "bg-emerald-500 w-full" : "bg-amber-500 w-1/3 animate-pulse")} />
                </div>
                
                <div className="flex items-center justify-between text-xs font-bold px-2 pt-2">
-                  <span className="text-zinc-500 uppercase tracking-widest">Outbound Mesh</span>
-                  <span className="text-blue-500">12.8 KB/s</span>
+                  <span className="text-zinc-500 uppercase tracking-widest">DHT Reachability</span>
+                  <span className="text-blue-500">{stats.peers.length > 0 ? "PUBLIC" : "LOCAL_ONLY"}</span>
                </div>
                <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
-                  <div className="h-full bg-blue-500 w-[30%]" />
+                  <div className={twMerge("h-full transition-all duration-1000 bg-blue-500", stats.peers.length > 0 ? "w-[80%]" : "w-[10%]")} />
                </div>
             </div>
          </div>

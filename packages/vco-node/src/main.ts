@@ -121,6 +121,13 @@ async function main() {
       if (listeners) {
         for (const fn of listeners) fn(encoded);
       }
+    } else if (msg.type === "get_stats") {
+      emit({
+        type: "stats",
+        peerId: node.peerId.toString(),
+        multiaddrs: node.getMultiaddrs().map((a) => a.toString()),
+        peers: node.getPeers().map(p => p.toString()),
+      });
     } else if (msg.type === "shutdown") {
       void Promise.resolve(node.stop()).then(() => process.exit(0)).catch(() => process.exit(1));
     }
