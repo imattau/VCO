@@ -8,14 +8,7 @@ import {
   MEDIA_MANIFEST_SCHEMA_URI,
   MediaManifestData
 } from "@vco/vco-schemas";
-
-// Helper to simulate a 32-byte CID (multihash part)
-const mockCid = (seed: string) => {
-  const bytes = new Uint8Array(32);
-  const seedBytes = new TextEncoder().encode(seed);
-  bytes.set(seedBytes.slice(0, 32));
-  return bytes;
-};
+import { mockCid, toHex, MockNetworkStore } from "@vco/vco-testing";
 
 // Mock Data
 const MOCK_CHANNEL_CID = mockCid("vco-daily-channel");
@@ -58,26 +51,21 @@ const mockEpisode2: MediaManifestData = {
   contentType: "audio/mpeg"
 };
 
-// Helper to convert Uint8Array to hex string for the map key
-const toHex = (bytes: Uint8Array) => 
-  Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-
 // Simulated Network Store for Schemas
-const networkStore = new Map<string, Uint8Array>();
+const networkStore = new MockNetworkStore<Uint8Array>();
 // Simulated Blob Store for Real Media
 const blobStore = new Map<string, Blob>();
 
-networkStore.set(toHex(MOCK_CHANNEL_CID), encodeMediaChannel(mockChannel));
-networkStore.set(toHex(MOCK_EP1_CID), encodeMediaManifest(mockEpisode1));
-networkStore.set(toHex(MOCK_EP2_CID), encodeMediaManifest(mockEpisode2));
+networkStore.set(MOCK_CHANNEL_CID, encodeMediaChannel(mockChannel));
+networkStore.set(MOCK_EP1_CID, encodeMediaManifest(mockEpisode1));
+networkStore.set(MOCK_EP2_CID, encodeMediaManifest(mockEpisode2));
 
 export const MockMediaService = {
   /**
    * Fetch and decode a MediaChannel by its CID
    */
   async getChannel(cidBytes: Uint8Array): Promise<MediaChannelData | null> {
-    const hex = toHex(cidBytes);
-    const encoded = networkStore.get(hex);
+    const encoded = networkStore.get(cidBytes);
     if (!encoded) return null;
     return decodeMediaChannel(encoded);
   },
@@ -87,15 +75,14 @@ export const MockMediaService = {
    */
   async updateChannel(cidBytes: Uint8Array, data: MediaChannelData): Promise<void> {
     const encoded = encodeMediaChannel(data);
-    networkStore.set(toHex(cidBytes), encoded);
+    networkStore.set(cidBytes, encoded);
   },
 
   /**
    * Fetch and decode a MediaManifest (Episode) by its CID
    */
   async getManifest(cidBytes: Uint8Array): Promise<MediaManifestData | null> {
-    const hex = toHex(cidBytes);
-    const encoded = networkStore.get(hex);
+    const encoded = networkStore.get(cidBytes);
     if (!encoded) return null;
     return decodeMediaManifest(encoded);
   },
@@ -114,8 +101,7 @@ export const MockMediaService = {
    * Retrieve a playable URL for a CID
    */
   async getMediaUrl(cidBytes: Uint8Array): Promise<string | null> {
-    const hex = toHex(cidBytes);
-    const blob = blobStore.get(hex);
+    const blob = blobStore.get(toHex(cidBytes));
     if (blob) {
       return URL.createObjectURL(blob);
     }
@@ -129,7 +115,7 @@ export const MockMediaService = {
   async publishManifest(data: MediaManifestData): Promise<Uint8Array> {
     const mockId = `manifest-${Math.random().toString(36).slice(2, 11)}`;
     const cid = mockCid(mockId);
-    networkStore.set(toHex(cid), encodeMediaManifest(data));
+    networkStore.set(cid, encodeMediaManifest(data));
     return cid;
   },
 
@@ -145,7 +131,7 @@ export const MockMediaService = {
       isLive: false
     };
     
-    networkStore.set(toHex(cid), encodeMediaChannel(channel));
+    networkStore.set(cid, encodeMediaChannel(channel));
     (this as any)._activeCid = cid;
     
     return { cid, channel };

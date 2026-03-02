@@ -8,6 +8,7 @@ import NetworkDocs from '@/features/docs/NetworkDocs';
 import BrowseNodes from '@/features/nodes/BrowseNodes';
 import { DiscoveryProvider } from '@/features/discovery/DiscoveryContext';
 import { Search, ShieldAlert, Activity, LayoutGrid, Settings, HelpCircle, Bell, ChevronRight, Hash, Database, Clock, Target, Info, MessageCircle, MoreVertical, Loader2, Save, ShieldCheck, Zap, Maximize, Lock, Globe, BookOpen, Share2, Layers, Code, CheckCircle2, Server, SignalHigh, SignalMedium, SignalLow, Fingerprint, BarChart3, AlertTriangle, CheckCircle } from 'lucide-react';
+import { NavItem, Card } from '@vco/vco-ui';
 
 export type AppTab = 'search' | 'moderation' | 'settings' | 'docs' | 'browse-nodes' | 'alerts';
 
@@ -22,84 +23,62 @@ function Layout() {
           <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-500/20">
             <Activity className="text-white w-5 h-5" />
           </div>
-          <h1 className="text-lg font-bold tracking-tight text-white">VCO Discovery</h1>
+          <h1 className="text-lg font-bold tracking-tight text-white italic uppercase">VCO Discovery</h1>
         </div>
         
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 px-2">Main Navigation</div>
           
-          <button
+          <NavItem
             onClick={() => setActiveTab('search')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
-              activeTab === 'search' 
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
-                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
-            }`}
-          >
-            <Search size={18} className={activeTab === 'search' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'} />
-            Search Network
-          </button>
+            active={activeTab === 'search'}
+            label="Search Network"
+            icon={<Search size={18} />}
+            className={activeTab === 'search' ? 'bg-blue-600 shadow-blue-600/20 text-white' : ''}
+            iconClassName={activeTab === 'search' ? 'text-white' : ''}
+          />
           
-          <button
+          <NavItem
             onClick={() => setActiveTab('moderation')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
-              activeTab === 'moderation' 
-                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
-                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
-            }`}
-          >
-            <ShieldAlert size={18} className={activeTab === 'moderation' ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'} />
-            Moderation Portal
-          </button>
+            active={activeTab === 'moderation'}
+            label="Moderation Portal"
+            icon={<ShieldAlert size={18} />}
+            className={activeTab === 'moderation' ? 'bg-red-600 shadow-red-600/20 text-white' : ''}
+            iconClassName={activeTab === 'moderation' ? 'text-white' : ''}
+          />
           
           <div className="pt-6 text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 px-2">Discovery Hub</div>
-          <button 
+          <NavItem 
             onClick={() => setActiveTab('browse-nodes')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
-              activeTab === 'browse-nodes' 
-                ? 'bg-zinc-800 text-white shadow-lg shadow-zinc-800/20' 
-                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
-            }`}
-          >
-            <LayoutGrid size={18} className={activeTab === 'browse-nodes' ? 'text-blue-500' : 'text-zinc-500 group-hover:text-zinc-300'} />
-            Browse Nodes
-          </button>
-          <button 
+            active={activeTab === 'browse-nodes'}
+            label="Browse Nodes"
+            icon={<LayoutGrid size={18} />}
+          />
+          <NavItem 
             onClick={() => setActiveTab('alerts')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
-              activeTab === 'alerts' 
-                ? 'bg-zinc-800 text-white shadow-lg shadow-zinc-800/20' 
-                : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
-            }`}
-          >
-            <Bell size={18} className={activeTab === 'alerts' ? 'text-red-500' : 'text-zinc-500 group-hover:text-zinc-300'} />
-            Alerts & Reports
-          </button>
+            active={activeTab === 'alerts'}
+            label="Alerts & Reports"
+            icon={<Bell size={18} />}
+            iconClassName={activeTab === 'alerts' ? 'text-red-500' : ''}
+          />
         </nav>
         
         <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 space-y-1">
-          <button 
+          <NavItem 
             onClick={() => setActiveTab('settings')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all group ${
-              activeTab === 'settings' 
-                ? 'bg-zinc-800 text-zinc-100' 
-                : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
-            }`}
-          >
-            <Settings size={14} className={activeTab === 'settings' ? 'text-blue-500' : ''} />
-            Node Settings
-          </button>
-          <button 
+            active={activeTab === 'settings'}
+            label="Node Settings"
+            icon={<Settings size={14} />}
+            className="py-2.5 text-xs"
+          />
+          <NavItem 
             onClick={() => setActiveTab('docs')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all group ${
-              activeTab === 'docs' 
-                ? 'bg-zinc-800 text-zinc-100' 
-                : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
-            }`}
-          >
-            <HelpCircle size={14} className={activeTab === 'docs' ? 'text-emerald-500' : ''} />
-            Network Documentation
-          </button>
+            active={activeTab === 'docs'}
+            label="Documentation"
+            icon={<HelpCircle size={14} />}
+            className="py-2.5 text-xs"
+            iconClassName={activeTab === 'docs' ? 'text-emerald-500' : ''}
+          />
         </div>
       </aside>
 
@@ -137,9 +116,9 @@ function Layout() {
                   </p>
                 </div>
                 
-                <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-3xl shadow-2xl backdrop-blur-md">
+                <Card className="p-8 backdrop-blur-md">
                    <SearchBar />
-                </div>
+                </Card>
                 
                 <SearchResults />
               </div>
@@ -147,18 +126,18 @@ function Layout() {
 
             {activeTab === 'moderation' && (
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 flex flex-col items-center justify-center py-10">
-                <div className="w-full max-w-xl space-y-8 bg-zinc-900/50 border border-zinc-800 p-10 rounded-3xl shadow-2xl backdrop-blur-md">
+                <Card className="w-full max-w-xl p-10 backdrop-blur-md">
                   <div className="text-center space-y-3">
                     <div className="inline-flex bg-red-600/10 p-4 rounded-2xl border border-red-600/20 mb-2">
                       <ShieldAlert className="text-red-500 w-8 h-8" />
                     </div>
                     <h3 className="text-3xl font-black text-white tracking-tight">Report Malicious Activity</h3>
-                    <p className="text-zinc-400 text-base max-w-md mx-auto leading-relaxed">
+                    <p className="text-zinc-400 text-base max-w-md mx-auto leading-relaxed mb-6">
                       Submit a signed, verifiable report to the network to flag content for moderation.
                     </p>
                   </div>
                   <ReportForm />
-                </div>
+                </Card>
               </div>
             )}
 

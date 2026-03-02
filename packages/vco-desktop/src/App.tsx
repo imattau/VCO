@@ -4,11 +4,12 @@ import remarkGfm from "remark-gfm";
 import {
   Activity, Shield, Zap, Database, Plus, Key, Copy,
   RefreshCw, CheckCircle2, X, Send, Server, Globe,
-  ArrowDownUp, Layers, ChevronRight, Eye, EyeOff,
+  ArrowDownUp, Layers, Eye, EyeOff,
   Lock, Clock, LayoutGrid, List, Wifi, Search, Radio
 } from "lucide-react";
 import { deriveEd25519Multikey, deriveEd25519PublicKey, createNobleCryptoProvider } from "@vco/vco-crypto";
 import { createEnvelope } from "@vco/vco-core";
+import { NavItem, Card } from "@vco/vco-ui";
 import "./App.css";
 
 // --- Types ---
@@ -132,14 +133,6 @@ function Badge({ children, variant = "default" }: { children: React.ReactNode, v
     <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-widest border ${styles[variant]}`}>
       {children}
     </span>
-  );
-}
-
-function Card({ children, className = "" }: { children: React.ReactNode, className?: string }) {
-  return (
-    <div className={`bg-slate-900 border border-slate-700/60 rounded-lg overflow-hidden shadow-lg ${className}`}>
-      {children}
-    </div>
   );
 }
 
@@ -1039,23 +1032,6 @@ function SyncVisualizer({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-function SidebarItem({ icon: Icon, label, active, onClick }: any) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center justify-between px-3 py-2.5 rounded transition-all duration-150 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${active ? 'bg-teal-500/10 border border-teal-500/15' : 'border border-transparent hover:bg-slate-800/50'}`}
-    >
-      <div className="flex items-center gap-3">
-        <div className={`transition-colors ${active ? 'text-teal-400' : 'text-slate-400 group-hover:text-slate-200'}`}>
-          <Icon size={16} strokeWidth={active ? 2 : 1.5} />
-        </div>
-        <span className={`text-xs font-bold uppercase tracking-widest transition-colors ${active ? 'text-slate-100' : 'text-slate-400 group-hover:text-slate-100'}`}>{label}</span>
-      </div>
-      {active && <ChevronRight size={12} className="text-teal-500" />}
-    </button>
-  );
-}
-
 // --- Main App Logic ---
 
 function AppContent() {
@@ -1255,15 +1231,15 @@ function AppContent() {
             <section>
               <h2 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] mb-3 px-3">Core Explorer</h2>
               <nav className="space-y-1">
-                <SidebarItem label="Activity Feed" icon={Activity} active={view === "feed"} onClick={() => setView("feed")} />
-                <SidebarItem label="Discovery Hub" icon={Globe} active={view === "network"} onClick={() => setView("network")} />
-                <SidebarItem label="Local Vault" icon={Database} active={view === "vault"} onClick={() => setView("vault")} />
+                <NavItem label="Activity Feed" icon={<Activity size={16} />} active={view === "feed"} onClick={() => setView("feed")} />
+                <NavItem label="Discovery Hub" icon={<Globe size={16} />} active={view === "network"} onClick={() => setView("network")} />
+                <NavItem label="Local Vault" icon={<Database size={16} />} active={view === "vault"} onClick={() => setView("vault")} />
               </nav>
             </section>
             <section>
               <h2 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] mb-3 px-3">Management</h2>
               <nav className="space-y-1">
-                <SidebarItem label="Identity Hub" icon={Shield} active={view === "identity"} onClick={() => setView("identity")} />
+                <NavItem label="Identity Hub" icon={<Shield size={16} />} active={view === "identity"} onClick={() => setView("identity")} />
               </nav>
             </section>
           </div>

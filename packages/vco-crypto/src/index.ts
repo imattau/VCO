@@ -1,4 +1,4 @@
-import { ed25519 } from "@noble/curves/ed25519";
+import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { blake3 } from "@noble/hashes/blake3";
 import { varint } from "multiformats";
 import { CryptoError } from "./errors.js";
@@ -8,6 +8,7 @@ import { CryptoError } from "./errors.js";
  */
 export type ByteArray = Uint8Array;
 const MULTICODEC_ED25519_PUB = 0xed;
+const MULTICODEC_X25519_PUB = 0xec;
 
 /**
  * Interface for hashing operations required by the VCO protocol.
@@ -98,6 +99,68 @@ export function deriveEd25519Multikey(privateKey: ByteArray): ByteArray {
 }
 
 /**
+ * E2EE (X25519 + AES-GCM) Helpers
+ */
+
+/**
+ * Generates an X25519 keypair for encryption.
+ */
+export function generateX25519KeyPair(): { privateKey: ByteArray, publicKey: ByteArray } {
+  const privateKey = x25519.utils.randomPrivateKey();
+  const publicKey = x25519.getPublicKey(privateKey);
+  return { privateKey, publicKey };
+}
+
+/**
+ * Derives an X25519 shared secret using a local private key and remote public key.
+ */
+export function deriveSharedSecret(privateKey: ByteArray, remotePublicKey: ByteArray): ByteArray {
+  return x25519.getSharedSecret(privateKey, remotePublicKey);
+}
+
+/**
+ * Encrypts a payload using AES-GCM.
+ * Note: In a production app, use crypto.subtle.encrypt. 
+ * This is a simplified wrapper for demonstration using the provided key.
+ */
+export async function encryptAesGcm(key: ByteArray, nonce: ByteArray, payload: ByteArray): Promise<ByteArray> {
+  const crypto = typeof window !== 'undefined' ? window.crypto : (await import('node:crypto')).webcrypto;
+  const cryptoKey = await (crypto.subtle as any).importKey(
+    'raw',
+    key,
+    'AES-GCM',
+    false,
+    ['encrypt']
+  );
+  const encrypted = await (crypto.subtle as any).encrypt(
+    { name: 'AES-GCM', iv: nonce },
+    cryptoKey,
+    payload
+  );
+  return new Uint8Array(encrypted);
+}
+
+/**
+ * Decrypts a payload using AES-GCM.
+ */
+export async function decryptAesGcm(key: ByteArray, nonce: ByteArray, encryptedPayload: ByteArray): Promise<ByteArray> {
+  const crypto = typeof window !== 'undefined' ? window.crypto : (await import('node:crypto')).webcrypto;
+  const cryptoKey = await (crypto.subtle as any).importKey(
+    'raw',
+    key,
+    'AES-GCM',
+    false,
+    ['decrypt']
+  );
+  const decrypted = await (crypto.subtle as any).decrypt(
+    { name: 'AES-GCM', iv: nonce },
+    cryptoKey,
+    encryptedPayload
+  );
+  return new Uint8Array(decrypted);
+}
+
+/**
  * Creates a standard NobleCryptoProvider instance.
  *
  * @returns A new instance of NobleCryptoProvider.
@@ -115,3 +178,4 @@ export function createNobleCryptoProvider(): CryptoProvider {
 export function createCryptoProvider(): CryptoProvider {
   return new UnconfiguredCryptoProvider();
 }
+

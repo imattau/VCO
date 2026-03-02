@@ -10,6 +10,7 @@ import {
   ReportReason,
   ReportData
 } from "@vco/vco-schemas";
+import { mockCid } from "@vco/vco-testing";
 
 /**
  * VCO Discovery Service
@@ -20,14 +21,6 @@ import {
 // Mock database for indices and reports
 const mockIndices = new Map<string, Uint8Array>();
 const mockReports: Uint8Array[] = [];
-
-// Helper to simulate a 32-byte CID (e.g., multihash part)
-const mockCid = (seed: string) => {
-  const bytes = new Uint8Array(32);
-  const seedBytes = new TextEncoder().encode(seed);
-  bytes.set(seedBytes.slice(0, 32));
-  return bytes;
-};
 
 // Seed initial data for multiple keywords
 const seedData = async () => {

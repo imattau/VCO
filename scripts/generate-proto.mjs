@@ -173,6 +173,19 @@ const schemaTargets = [
     ],
   },
   {
+    protoFile: "proto/vco/schemas/social/direct_message.proto",
+    outBase: "social/direct_message",
+    reExports: [
+      "export const DirectMessage: typeof vco.schemas.DirectMessage;",
+      "export const DirectMessagePayload: typeof vco.schemas.DirectMessagePayload;"
+    ],
+  },
+  {
+    protoFile: "proto/vco/schemas/social/notification.proto",
+    outBase: "social/notification",
+    reExports: ["export const Notification: typeof vco.schemas.Notification;"],
+  },
+  {
     protoFile: "proto/vco/schemas/marketplace/listing.proto",
     outBase: "marketplace/listing",
     reExports: ["export const Listing: typeof vco.schemas.Listing;"],

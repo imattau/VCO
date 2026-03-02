@@ -16,4 +16,7 @@ message Profile {
   bytes previous_manifest = 4;
   // Short biography or status string
   string bio = 5;
+  // Optional encryption public key: raw bytes of an X25519 public key.
+  // Required for E2EE Direct Messaging.
+  bytes encryption_pubkey = 6;
 }

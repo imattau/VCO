@@ -12,6 +12,8 @@
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
     "@vco/vco-schemas": "*",
+    "@vco/vco-ui": "*",
+    "@vco/vco-testing": "*",
     "clsx": "^2.1.1",
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",

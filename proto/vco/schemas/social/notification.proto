@@ -1,0 +1,28 @@
+syntax = "proto3";
+package vco.schemas;
+
+// Notification — payload type MULTICODEC_PROTOBUF (0x50)
+// Envelope schema URI: vco://schemas/social/notification/v1
+message Notification {
+  // URI identifying the schema version
+  string schema = 1;
+
+  enum Type {
+    UNKNOWN = 0;
+    DM = 1;
+    POST_REPLY = 2;
+    REACTION = 3;
+    FOLLOW = 4;
+  }
+
+  // Type of the notification.
+  Type type = 2;
+  // Profile CID of the actor performing the action.
+  bytes actor_cid = 3;
+  // Related object CID (Post CID, DM channel, etc).
+  bytes target_cid = 4;
+  // Brief human-readable notification text.
+  string summary = 5;
+  // Unix timestamp in milliseconds.
+  int64 timestamp_ms = 6;
+}

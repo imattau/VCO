@@ -1,0 +1,148 @@
+import React, { useState } from 'react';
+import { useSocial } from '../SocialContext';
+import { Edit2, Shield, Fingerprint, ShieldAlert, Key, Zap, CheckCircle2 } from 'lucide-react';
+import { twMerge } from 'tailwind-merge';
+
+export function ProfileView() {
+  const { profile, updateProfile } = useSocial();
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({
+    displayName: profile?.displayName || '',
+    bio: profile?.bio || ''
+  });
+
+  if (!profile) return null;
+
+  const handleSave = async () => {
+    await updateProfile(formData);
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="space-y-12 animate-in fade-in duration-1000">
+      <div className="space-y-2 mb-10">
+        <h2 className="text-5xl font-black text-white tracking-tighter italic">Identity Center</h2>
+        <p className="text-zinc-500 text-xl font-medium">Verifiable social profile and E2EE key management.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+         {/* Main Profile Info */}
+         <div className="md:col-span-2 space-y-8">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-10 space-y-8 shadow-2xl relative overflow-hidden group">
+               <div className="absolute top-0 right-0 p-8">
+                  <button 
+                    onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                    className="p-3 bg-zinc-950 border border-zinc-800 rounded-2xl text-zinc-400 hover:text-white hover:border-zinc-600 transition-all shadow-xl"
+                  >
+                    {isEditing ? <CheckCircle2 className="text-emerald-500" size={24} /> : <Edit2 size={24} />}
+                  </button>
+               </div>
+
+               <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+                  <div className="w-32 h-32 rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-800 border-4 border-zinc-800 shadow-2xl shadow-blue-600/20 flex items-center justify-center text-4xl font-black text-white italic">
+                    {formData.displayName.slice(0, 1)}
+                  </div>
+                  <div className="flex-1 text-center md:text-left space-y-4">
+                     {isEditing ? (
+                       <div className="space-y-4">
+                          <input 
+                            type="text" 
+                            value={formData.displayName} 
+                            onChange={e => setFormData({...formData, displayName: e.target.value})}
+                            className="bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-3 text-xl font-black text-white w-full focus:ring-2 focus:ring-blue-500/50 outline-none shadow-inner"
+                          />
+                          <textarea 
+                            value={formData.bio} 
+                            onChange={e => setFormData({...formData, bio: e.target.value})}
+                            className="bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-3 text-sm font-medium text-zinc-300 w-full focus:ring-2 focus:ring-blue-500/50 outline-none shadow-inner resize-none h-32 leading-relaxed"
+                          />
+                       </div>
+                     ) : (
+                       <div className="space-y-2">
+                          <h3 className="text-4xl font-black text-white tracking-tighter italic">{profile.displayName}</h3>
+                          <p className="text-zinc-500 text-lg font-medium leading-relaxed max-w-lg">{profile.bio}</p>
+                       </div>
+                     )}
+                     
+                     <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 pt-4">
+                        <Badge icon={<Shield size={14} />} label="VERIFIED DID" color="text-emerald-500 bg-emerald-500/10 border-emerald-500/20" />
+                        <Badge icon={<Fingerprint size={14} />} label="VCO CORE MEMBER" color="text-blue-500 bg-blue-500/10 border-blue-500/20" />
+                     </div>
+                  </div>
+               </div>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-10 space-y-8 shadow-2xl">
+               <h4 className="text-2xl font-black text-white tracking-tighter italic flex items-center gap-3">
+                  <Zap size={24} className="text-amber-500" />
+                  Swarm Activity
+               </h4>
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <StatCard label="Followers" value="1,242" subValue="+12 today" />
+                  <StatCard label="Posts Published" value="156" subValue="Synced to 42 nodes" />
+                  <StatCard label="Reactions Given" value="3,109" subValue="Verifiable attestations" />
+                  <StatCard label="E2EE Sessions" value="12" subValue="Active secure channels" />
+               </div>
+            </div>
+         </div>
+
+         {/* Sidebar Security Info */}
+         <div className="space-y-8">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-8 space-y-6 shadow-2xl">
+               <div className="flex items-center gap-3 mb-2">
+                  <ShieldAlert size={20} className="text-blue-500" />
+                  <h4 className="text-xs font-black text-white uppercase tracking-widest">Encryption Profile</h4>
+               </div>
+               <div className="space-y-4">
+                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2 shadow-inner group">
+                     <div className="flex items-center gap-2 mb-1">
+                        <Key size={14} className="text-zinc-500" />
+                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Signing Key (Ed25519)</span>
+                     </div>
+                     <code className="text-[10px] text-zinc-300 font-mono break-all line-clamp-2">
+                        ed25519:did:vco:7X9hJ2p5N...m4LqR8sW
+                     </code>
+                  </div>
+
+                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl space-y-2 shadow-inner group">
+                     <div className="flex items-center gap-2 mb-1">
+                        <Zap size={14} className="text-blue-500" />
+                        <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Encryption Key (X25519)</span>
+                     </div>
+                     <code className="text-[10px] text-zinc-300 font-mono break-all line-clamp-2">
+                        x25519:0x8f2d...e1c4b9
+                     </code>
+                  </div>
+               </div>
+               <p className="text-[10px] text-zinc-600 font-medium italic leading-relaxed">
+                  These keys are derived from your local seed and never leave your device. They are used to verify your identity and secure your private conversations across the swarm.
+               </p>
+            </div>
+
+            <button className="w-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 p-6 rounded-[2rem] text-zinc-500 hover:text-white text-xs font-black uppercase tracking-widest transition-all shadow-xl active:translate-y-1">
+               Revoke & Rotate Keys
+            </button>
+         </div>
+      </div>
+    </div>
+  );
+}
+
+function Badge({ icon, label, color }: any) {
+  return (
+    <div className={twMerge("flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase border transition-all", color)}>
+       {icon}
+       {label}
+    </div>
+  );
+}
+
+function StatCard({ label, value, subValue }: any) {
+  return (
+    <div className="bg-zinc-950/50 border border-zinc-800/50 rounded-3xl p-6 space-y-1 shadow-inner group hover:border-zinc-700 transition-all">
+       <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{label}</span>
+       <div className="text-3xl font-black text-white tracking-tighter italic">{value}</div>
+       <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{subValue}</div>
+    </div>
+  );
+}
