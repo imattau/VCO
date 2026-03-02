@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useSocial } from '../SocialContext';
 import { Edit2, Shield, Fingerprint, ShieldAlert, Key, Zap, CheckCircle2, Users } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { FollowButton } from './FollowButton';
+import { mockCid, toHex } from '@vco/vco-testing';
+import { socialBlobStore } from '../../lib/MockSocialService';
 
 export function ProfileView() {
   const { profile, updateProfile, feed, conversations, notifications } = useSocial();
@@ -10,15 +12,34 @@ export function ProfileView() {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     displayName: profile?.displayName || '',
-    bio: profile?.bio || ''
+    bio: profile?.bio || '',
+    avatarCid: profile?.avatarCid || new Uint8Array(32)
   });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!profile) return null;
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const cid = mockCid(`avatar-${file.name}-${Date.now()}`);
+      socialBlobStore.set(toHex(cid), file);
+      setFormData({ ...formData, avatarCid: cid });
+      toast("New avatar hashed and staged", "info");
+    }
+  };
 
   const handleSave = async () => {
     await updateProfile(formData);
     setIsEditing(false);
   };
+
+  const avatarUrl = useMemo(() => {
+    const hex = toHex(formData.avatarCid);
+    const blob = socialBlobStore.get(hex);
+    if (blob) return URL.createObjectURL(blob);
+    return `https://api.dicebear.com/9.x/identicon/svg?seed=${profile.displayName}`;
+  }, [formData.avatarCid, profile.displayName]);
 
   const handleRotateKeys = () => {
     toast("Rotating identity keys... Broadcasting new manifest to swarm.", "info");
@@ -49,8 +70,19 @@ export function ProfileView() {
                </div>
 
                <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
-                  <div className="w-32 h-32 rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-800 border-4 border-zinc-800 shadow-2xl shadow-blue-600/20 flex items-center justify-center text-4xl font-black text-white italic">
-                    {formData.displayName.slice(0, 1)}
+                  <div 
+                    onClick={() => isEditing && fileInputRef.current?.click()}
+                    className={twMerge(
+                      "w-32 h-32 rounded-[2.5rem] bg-gradient-to-br from-blue-600 to-indigo-800 border-4 border-zinc-800 shadow-2xl shadow-blue-600/20 flex items-center justify-center overflow-hidden transition-all",
+                      isEditing && "cursor-pointer hover:scale-105 active:scale-95"
+                    )}
+                  >
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-4xl font-black text-white italic">{profile.displayName.slice(0, 1)}</span>
+                    )}
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleAvatarChange} />
                   </div>
                   <div className="flex-1 text-center md:text-left space-y-4">
                      {isEditing ? (

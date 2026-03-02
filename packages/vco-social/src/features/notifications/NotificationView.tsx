@@ -4,7 +4,22 @@ import { Bell, Heart, MessageSquare, UserPlus, Zap, SwatchBook } from 'lucide-re
 import { NotificationType } from '@vco/vco-schemas';
 
 export function NotificationView() {
-  const { notifications, markNotificationAsRead } = useSocial();
+  const { notifications, markNotificationAsRead, navigateToPost, navigateToPeer } = useSocial();
+
+  const handleNotificationClick = (n: any) => {
+    markNotificationAsRead(n.targetCid);
+    
+    // Prototype mapping for deep-linking
+    if (n.type === NotificationType.POST_REPLY || n.type === NotificationType.REACTION) {
+      // In real app, n.targetCid would be the post CID
+      // For mock, we'll open the first post if available
+      navigateToPost(n.targetCid);
+    } else if (n.type === NotificationType.DM) {
+      navigateToPeer("Verifiable Bob");
+    } else if (n.type === NotificationType.FOLLOW) {
+      navigateToPeer("none"); // switches to profile
+    }
+  };
 
   return (
     <div className="space-y-12 animate-in fade-in duration-1000">
@@ -22,7 +37,7 @@ export function NotificationView() {
                actor={n.summary.split(' ')[0]} // Mock parsing
                content={n.summary.split(' ').slice(1).join(' ')} 
                time={new Date(Number(n.timestampMs)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-               onClick={() => markNotificationAsRead(n.targetCid)}
+               onClick={() => handleNotificationClick(n)}
              />
            ))}
         </div>

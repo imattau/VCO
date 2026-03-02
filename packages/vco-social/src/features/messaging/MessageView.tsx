@@ -1,25 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useSocial } from '../SocialContext';
-import { MessageSquare, ShieldCheck, Search, Users, Send, Image, Smile, ArrowLeft } from 'lucide-react';
+import { MessageSquare, ShieldCheck, Search, Users, Send, Image, Smile, ArrowLeft, X } from 'lucide-react';
 import { ProfileData } from '@vco/vco-schemas';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { MediaGallery } from '../feed/MediaGallery';
 
 export function MessageView() {
-  const { conversations, profile, sendDM } = useSocial();
-  const [selectedConversationIndex, setSelectedConversationIndex] = useState<number | null>(null);
+  const { conversations, profile, sendDM, selectedConversationIndex, setSelectedConversationIndex } = useSocial();
   const [inputText, setInputText] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!profile) return null;
 
   const activeConversation = selectedConversationIndex !== null ? conversations[selectedConversationIndex] : null;
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setAttachments(prev => [...prev, ...Array.from(e.target.files!)].slice(0, 4));
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !activeConversation) return;
+    if ((!inputText.trim() && attachments.length === 0) || !activeConversation) return;
 
-    await sendDM(activeConversation.peerProfile, inputText);
+    await sendDM(activeConversation.peerProfile, inputText, attachments);
     setInputText('');
+    setAttachments([]);
   };
 
   return (
@@ -62,7 +71,7 @@ export function MessageView() {
         selectedConversationIndex === null ? "translate-x-full md:translate-x-0 hidden" : "translate-x-0"
       )}>
         {activeConversation ? (
-          <div className="flex-1 flex flex-col h-full">
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
              {/* Chat Header */}
              <header className="h-16 md:h-20 border-b border-zinc-800 px-4 md:px-6 flex items-center justify-between bg-zinc-900/40">
                 <div className="flex items-center gap-3 md:gap-4">
@@ -91,6 +100,7 @@ export function MessageView() {
                   <MessageBubble 
                     key={msg.cid.toString()}
                     content={msg.payload.content} 
+                    mediaCids={msg.payload.mediaCids}
                     isOwn={msg.isOwn} 
                     timestamp={new Date(Number(msg.data.timestampMs)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} 
                   />
@@ -98,10 +108,28 @@ export function MessageView() {
              </div>
 
              {/* Input Area */}
-             <form onSubmit={handleSend} className="p-4 md:p-6 border-t border-zinc-800 bg-zinc-900/40">
+             <form onSubmit={handleSend} className="p-4 md:p-6 border-t border-zinc-800 bg-zinc-900/40 space-y-4">
+                {attachments.length > 0 && (
+                  <div className="flex gap-2 animate-in slide-in-from-bottom-2 duration-200 overflow-x-auto pb-2">
+                     {attachments.map((file, i) => (
+                       <div key={i} className="relative w-16 h-16 rounded-xl overflow-hidden border border-zinc-700 bg-zinc-950 shrink-0">
+                          <img src={URL.createObjectURL(file)} alt="Attachment" className="w-full h-full object-cover" />
+                          <button 
+                            type="button"
+                            onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                            className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white"
+                          >
+                             <X size={10} />
+                          </button>
+                       </div>
+                     ))}
+                  </div>
+                )}
+
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-[2rem] p-3 md:p-4 flex items-center gap-2 md:gap-4 shadow-xl">
                    <div className="flex items-center gap-0.5 md:gap-1">
-                      <ToolButton icon={<Image size={18} />} label="Add Image" />
+                      <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleFileSelect} />
+                      <ToolButton onClick={() => fileInputRef.current?.click()} icon={<Image size={18} />} label="Add Image" />
                       <ToolButton icon={<Smile size={18} />} label="Add Emoji" />
                    </div>
                    <input 
@@ -109,11 +137,11 @@ export function MessageView() {
                      value={inputText}
                      onChange={e => setInputText(e.target.value)}
                      placeholder="Type a secure message..."
-                     className="flex-1 bg-transparent border-none text-[11px] md:text-sm font-medium text-white focus:ring-0 placeholder:text-zinc-600"
+                     className="flex-1 bg-transparent border-none text-[11px] md:text-sm font-medium text-white focus:ring-0 placeholder:text-zinc-600 outline-none"
                    />
                    <button 
                      type="submit"
-                     disabled={!inputText.trim()}
+                     disabled={(!inputText.trim() && attachments.length === 0)}
                      className="bg-blue-600 p-2 md:p-2.5 rounded-xl md:rounded-2xl text-white shadow-lg shadow-blue-600/20 active:translate-y-0.5 transition-all flex-shrink-0 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none" 
                      aria-label="Send secure message"
                    >
@@ -162,26 +190,31 @@ function ConversationItem({ name, did, lastMsg, active, onClick, badge }: any) {
   );
 }
 
-function MessageBubble({ content, isOwn, timestamp }: any) {
+function MessageBubble({ content, mediaCids, isOwn, timestamp }: any) {
   return (
     <div className={twMerge(
       "flex flex-col gap-1 max-w-[80%] animate-in fade-in slide-in-from-bottom-2 duration-300",
       isOwn ? "self-end items-end" : "self-start items-start"
     )}>
       <div className={twMerge(
-        "p-4 text-sm font-medium rounded-3xl leading-relaxed shadow-lg",
+        "p-4 text-sm font-medium rounded-3xl leading-relaxed shadow-lg flex flex-col gap-3",
         isOwn ? "bg-blue-600 text-white rounded-tr-none" : "bg-zinc-800 text-zinc-100 rounded-tl-none"
       )}>
-        {content}
+        {mediaCids && mediaCids.length > 0 && (
+          <div className="w-48">
+             <MediaGallery mediaCids={mediaCids} />
+          </div>
+        )}
+        {content && <span>{content}</span>}
       </div>
       <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{timestamp}</span>
     </div>
   );
 }
 
-function ToolButton({ icon, label }: any) {
+function ToolButton({ icon, label, onClick }: any) {
   return (
-    <button aria-label={label} title={label} className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-xl transition-all">
+    <button onClick={onClick} aria-label={label} title={label} className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-xl transition-all">
       {icon}
     </button>
   );

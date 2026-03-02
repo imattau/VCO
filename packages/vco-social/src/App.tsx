@@ -23,11 +23,12 @@ import { SearchOverlay } from './features/search/SearchOverlay';
 import { NavItem } from '@vco/vco-ui';
 import { ToastProvider } from './components/ToastProvider';
 
+import { SwarmPulse } from './components/SwarmPulse';
+
 export type SocialTab = 'feed' | 'messaging' | 'notifications' | 'profile' | 'settings';
 
 function MainContent() {
-  const { profile, isLoading } = useSocial();
-  const [activeTab, setActiveTab] = useState<SocialTab>('feed');
+  const { profile, isLoading, activeTab, setActiveTab } = useSocial();
 
   if (isLoading) {
     return (
@@ -80,7 +81,7 @@ function MainContent() {
           />
         </nav>
         
-        <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
+        <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 space-y-6">
           <button 
             onClick={() => setActiveTab('settings')}
             className={twMerge(
@@ -91,6 +92,10 @@ function MainContent() {
             <Settings size={16} />
             <span className="hidden md:inline">Settings</span>
           </button>
+
+          <div className="hidden md:block">
+             <SwarmPulse />
+          </div>
         </div>
       </aside>
 

@@ -7,8 +7,7 @@ import { SwatchBook } from 'lucide-react';
 import { PostData } from '@vco/vco-schemas';
 
 export function FeedView() {
-  const { feed, isLoading, filter, setFilter } = useSocial();
-  const [activeThread, setActiveThread] = useState<{ data: PostData; cid: Uint8Array } | null>(null);
+  const { feed, isLoading, filter, setFilter, activeThread, setActiveThread } = useSocial();
 
   if (isLoading) {
     return (

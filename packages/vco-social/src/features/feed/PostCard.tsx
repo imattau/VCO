@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { twMerge } from 'tailwind-merge';
 import { MediaGallery } from './MediaGallery';
 import { useSocial } from '../SocialContext';
+import { ReportDialog } from '../moderation/ReportDialog';
 
 interface PostCardProps {
   data: PostData;
@@ -13,8 +14,9 @@ interface PostCardProps {
 }
 
 export function PostCard({ data, onOpenThread, cid }: PostCardProps) {
-  const { reactToPost, repost, deletePost } = useSocial();
+  const { reactToPost, repost, deletePost, publishReport } = useSocial();
   const [showMenu, setShowMenu] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const relativeTime = new Intl.RelativeTimeFormat('en', { style: 'short' });
   const timeStr = relativeTime.format(
     Math.round((Number(data.timestampMs) - Date.now()) / 60000), 
@@ -58,7 +60,7 @@ export function PostCard({ data, onOpenThread, cid }: PostCardProps) {
           {showMenu && (
             <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl z-20 py-2 animate-in fade-in zoom-in-95 duration-200">
                <button 
-                 onClick={(e) => { e.stopPropagation(); setShowMenu(false); }}
+                 onClick={(e) => { e.stopPropagation(); setShowMenu(false); setShowReport(true); }}
                  className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all"
                >
                   <ShieldAlert size={16} />
@@ -122,6 +124,14 @@ export function PostCard({ data, onOpenThread, cid }: PostCardProps) {
           onClick={(e) => e.stopPropagation()}
         />
       </div>
+
+      {showReport && (
+        <ReportDialog 
+          targetCid={cid} 
+          onClose={() => setShowReport(false)} 
+          onReportPublished={(reason) => publishReport(cid, reason)}
+        />
+      )}
     </div>
   );
 }

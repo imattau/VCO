@@ -6,13 +6,14 @@ import {
   NotificationData,
   NotificationType
 } from '@vco/vco-schemas';
-import { MockSocialService } from '@/lib/MockSocialService';
+import { MockSocialService, socialBlobStore } from '@/lib/MockSocialService';
 import { FeedService } from '@/lib/FeedService';
 import { E2EEService } from '@/lib/E2EEService';
 import { ProfileService } from '@/lib/ProfileService';
 import { NotificationService } from '@/lib/NotificationService';
 import { useToast } from '@/components/ToastProvider';
 import { mockCid, toHex } from '@vco/vco-testing';
+import { SocialTab } from '@/App';
 
 interface MessageWithMetadata {
   cid: Uint8Array;
@@ -36,16 +37,25 @@ interface SocialContextType {
   tombstones: Set<string>; // Hex strings of deleted CIDs
   filter: { type: 'tag' | 'peer' | 'all'; value?: string } | null;
   isLoading: boolean;
+  activeTab: SocialTab;
+  activeThread: { data: PostData; cid: Uint8Array } | null;
+  selectedConversationIndex: number | null;
   
   // Actions
+  setActiveTab: (tab: SocialTab) => void;
+  setActiveThread: (thread: { data: PostData; cid: Uint8Array } | null) => void;
+  setSelectedConversationIndex: (index: number | null) => void;
   createPost: (content: string, mediaFiles?: File[]) => Promise<void>;
-  sendDM: (recipientProfile: ProfileData, content: string) => Promise<void>;
+  sendDM: (recipientProfile: ProfileData, content: string, attachments?: File[]) => Promise<void>;
   updateProfile: (data: Partial<ProfileData>) => Promise<void>;
   markNotificationAsRead: (cid: Uint8Array) => void;
   setFilter: (filter: { type: 'tag' | 'peer' | 'all'; value?: string } | null) => void;
   deletePost: (cid: Uint8Array) => Promise<void>;
   reactToPost: (cid: Uint8Array) => Promise<void>;
   repost: (cid: Uint8Array, commentary?: string) => Promise<void>;
+  publishReport: (cid: Uint8Array, reason: number) => Promise<void>;
+  navigateToPost: (cid: Uint8Array) => void;
+  navigateToPeer: (displayName: string) => void;
 }
 
 const SocialContext = createContext<SocialContextType | undefined>(undefined);
@@ -58,6 +68,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const [tombstones, setTombstones] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<{ type: 'tag' | 'peer' | 'all'; value?: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<SocialTab>('feed');
+  const [activeThread, setActiveThread] = useState<{ data: PostData; cid: Uint8Array } | null>(null);
+  const [selectedConversationIndex, setSelectedConversationIndex] = useState<number | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -153,14 +166,22 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     toast("Post published to swarm", "success");
   };
 
-  const sendDM = async (recipientProfile: ProfileData, content: string) => {
+  const sendDM = async (recipientProfile: ProfileData, content: string, attachments: File[] = []) => {
     if (!recipientProfile.encryptionPubkey) {
       throw new Error("Recipient does not have an encryption key.");
     }
 
+    // Hash attachments
+    const mediaCids = await Promise.all(attachments.map(async (file) => {
+      const cid = mockCid(`dm-media-${file.name}-${Math.random()}`);
+      socialBlobStore.set(toHex(cid), file);
+      return cid;
+    }));
+
     const { ephemeralPubkey, nonce, encryptedPayload } = await E2EEService.encryptMessage(
       recipientProfile.encryptionPubkey,
-      content
+      content,
+      mediaCids
     );
 
     const msgData: DirectMessageData = {
@@ -176,7 +197,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     const msg: MessageWithMetadata = {
       cid: mockCid(`msg-${Math.random()}`),
       data: msgData,
-      payload: { content, mediaCids: [] },
+      payload: { content, mediaCids },
       isOwn: true
     };
 
@@ -229,6 +250,29 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     toast(`Repost manifest published for ${toHex(cid).substring(0, 8)}...`, "success");
   };
 
+  const publishReport = async (cid: Uint8Array, reason: number) => {
+    // In real app, encode Report manifest and publish to moderation channel
+    console.log(`Report published for ${toHex(cid)} with reason code: ${reason}`);
+  };
+
+  const navigateToPost = (cid: Uint8Array) => {
+    const post = feed.find(item => toHex(item.cid) === toHex(cid));
+    if (post) {
+      setActiveTab('feed');
+      setActiveThread(post);
+    }
+  };
+
+  const navigateToPeer = (displayName: string) => {
+    const convIndex = conversations.findIndex(c => c.peerProfile.displayName === displayName);
+    if (convIndex !== -1) {
+      setActiveTab('messaging');
+      setSelectedConversationIndex(convIndex);
+    } else {
+      setActiveTab('profile');
+    }
+  };
+
   return (
     <SocialContext.Provider value={{
       profile,
@@ -238,6 +282,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       tombstones,
       filter,
       isLoading,
+      activeTab,
+      activeThread,
+      selectedConversationIndex,
+      setActiveTab,
+      setActiveThread,
+      setSelectedConversationIndex,
       createPost,
       sendDM,
       updateProfile,
@@ -245,7 +295,10 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       setFilter,
       deletePost,
       reactToPost,
-      repost
+      repost,
+      publishReport,
+      navigateToPost,
+      navigateToPeer
     }}>
       {children}
     </SocialContext.Provider>
