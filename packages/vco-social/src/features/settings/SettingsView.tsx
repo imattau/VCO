@@ -11,20 +11,24 @@ import {
   RefreshCw,
   Settings as SettingsIcon,
   Database,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Plus,
+  Unplug
 } from 'lucide-react';
 import { useToast } from '../../components/ToastProvider';
 import { twMerge } from 'tailwind-merge';
 import { NetworkService, NetworkStats } from '../../lib/NetworkService';
+import { NodeClient } from '../../lib/NodeClient';
 
 export function SettingsView() {
-  const { profile } = useSocial();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [dialAddr, setDialAddr] = useState('');
   const [stats, setStats] = useState<NetworkStats>({
     peerId: null,
     multiaddrs: [],
     peers: [],
+    connections: [],
     isReady: false
   });
 
@@ -39,6 +43,14 @@ export function SettingsView() {
     setCopied(true);
     toast("Copied to clipboard", "info");
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDial = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dialAddr.trim()) return;
+    NodeClient.getInstance().dial(dialAddr.trim());
+    toast(`Dialing swarm address...`, "info");
+    setDialAddr('');
   };
 
   return (
@@ -129,41 +141,62 @@ export function SettingsView() {
             </div>
          </div>
 
-         {/* Bootstrap Relays */}
+         {/* Active Connections */}
          <div className="md:col-span-2 bg-zinc-900 border border-zinc-800 rounded-[3rem] p-10 space-y-8 shadow-2xl">
             <div className="flex items-center justify-between">
                <div className="flex items-center gap-4">
                   <div className="bg-amber-600/10 p-4 rounded-3xl border border-amber-500/20">
                      <Globe className="text-amber-500 w-6 h-6" />
                   </div>
-                  <h3 className="text-xl font-black text-white uppercase tracking-widest italic">Bootstrap Relays</h3>
+                  <h3 className="text-xl font-black text-white uppercase tracking-widest italic">Swarm Mesh</h3>
                </div>
-               <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg">
-                  Add Relay
-               </button>
+               
+               <form onSubmit={handleDial} className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={dialAddr}
+                    onChange={e => setDialAddr(e.target.value)}
+                    placeholder="Enter Multiaddress..."
+                    className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-[10px] font-mono text-zinc-300 w-64 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                  <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">
+                     Dial
+                  </button>
+               </form>
             </div>
 
             <div className="space-y-3">
-               {[
-                 { name: "VCO Mainnet A", addr: "/dns4/relay-a.vco.network/tcp/443/wss/p2p/12D3...", status: "Connected" },
-                 { name: "VCO Devnet Sydney", addr: "/ip4/45.79.143.12/udp/4001/quic-v1/p2p/Qm...", status: "Roaming" }
-               ].map(relay => (
-                 <div key={relay.name} className="flex items-center justify-between p-5 bg-zinc-950 border border-zinc-800 rounded-[2rem] group hover:border-zinc-700 transition-all shadow-inner">
+               {stats.connections.length > 0 ? stats.connections.map((conn, idx) => (
+                 <div key={idx} className="flex items-center justify-between p-5 bg-zinc-950 border border-zinc-800 rounded-[2rem] group hover:border-zinc-700 transition-all shadow-inner">
                     <div className="flex items-center gap-4">
                        <div className="w-10 h-10 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
                           <Server size={18} />
                        </div>
-                       <div>
-                          <div className="font-bold text-white text-sm">{relay.name}</div>
-                          <div className="text-[10px] text-zinc-600 font-mono truncate max-w-xs md:max-w-md">{relay.addr}</div>
+                       <div className="min-w-0">
+                          <div className="font-bold text-white text-sm truncate max-w-xs md:max-w-md">Peer: {conn.remotePeer}</div>
+                          <div className="text-[10px] text-zinc-600 font-mono truncate max-w-xs md:max-w-md">{conn.remoteAddr}</div>
                        </div>
                     </div>
                     <div className="flex items-center gap-2">
-                       <div className={`w-1.5 h-1.5 rounded-full ${relay.status === 'Connected' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                       <span className={`text-[10px] font-black uppercase tracking-widest ${relay.status === 'Connected' ? 'text-emerald-500' : 'text-amber-500'}`}>{relay.status}</span>
+                       {conn.tags.includes("connected") && (
+                         <div className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-black text-emerald-500 uppercase tracking-widest">
+                            Active
+                         </div>
+                       )}
+                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     </div>
                  </div>
-               ))}
+               )) : (
+                 <div className="py-12 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-[2rem] space-y-4">
+                    <div className="w-12 h-12 rounded-full bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-700">
+                       <Unplug size={24} />
+                    </div>
+                    <div className="text-center">
+                       <p className="text-zinc-600 font-black uppercase tracking-widest text-xs">No active connections</p>
+                       <p className="text-zinc-700 text-[10px] italic mt-1">Dial a bootstrap relay or wait for incoming peer syncs.</p>
+                    </div>
+                 </div>
+               )}
             </div>
          </div>
       </div>

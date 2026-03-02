@@ -1,10 +1,11 @@
 import { Command, Child } from '@tauri-apps/plugin-shell';
 
-type NodeEvent = 
+export type NodeEvent = 
   | { type: 'ready', peerId: string, multiaddrs: string[] }
   | { type: 'envelope', channelId: string, envelope: string }
-  | { type: 'stats', peerId: string, multiaddrs: string[], peers: string[] }
+  | { type: 'stats', peerId: string, multiaddrs: string[], peers: string[], connections: { remotePeer: string, remoteAddr: string, tags: string[] }[] }
   | { type: 'resolving', cid: string, channelId: string }
+  | { type: 'dial_success', addr: string }
   | { type: 'error', message: string };
 
 type EventListener = (event: NodeEvent) => void;
@@ -17,6 +18,7 @@ export class NodeClient {
   public peerId: string | null = null;
   public multiaddrs: string[] = [];
   public peers: string[] = [];
+  public connections: { remotePeer: string, remoteAddr: string, tags: string[] }[] = [];
 
   private constructor() {}
 
@@ -74,6 +76,10 @@ export class NodeClient {
     this.send({ type: 'resolve', cid: cidHex });
   }
 
+  public dial(addr: string) {
+    this.send({ type: 'dial', addr });
+  }
+
   public getStats() {
     this.send({ type: 'get_stats' });
   }
@@ -106,6 +112,7 @@ export class NodeClient {
       this.peerId = event.peerId;
       this.multiaddrs = event.multiaddrs;
       this.peers = event.peers;
+      this.connections = event.connections;
     }
     this.listeners.forEach(l => l(event));
   }

@@ -28,7 +28,7 @@ import { SwarmPulse } from './components/SwarmPulse';
 export type SocialTab = 'feed' | 'messaging' | 'notifications' | 'profile' | 'settings';
 
 function MainContent() {
-  const { profile, isLoading, activeTab, setActiveTab, isNodeReady, peerId } = useSocial();
+  const { profile, isLoading, activeTab, setActiveTab, isNodeReady, peerId, notifications, conversations } = useSocial();
 
   if (isLoading) {
     return (
@@ -40,6 +40,8 @@ function MainContent() {
   }
 
   if (!profile) return null;
+
+  const unreadMessages = conversations.reduce((acc, c) => acc + c.unread, 0);
 
   return (
     <div className="flex h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans text-sm md:text-base">
@@ -64,14 +66,14 @@ function MainContent() {
             label="Messages" 
             active={activeTab === 'messaging'} 
             onClick={() => setActiveTab('messaging')} 
-            badge={3}
+            badge={unreadMessages > 0 ? unreadMessages : undefined}
           />
           <NavItem 
             icon={<Bell size={20} />} 
             label="Notifications" 
             active={activeTab === 'notifications'} 
             onClick={() => setActiveTab('notifications')} 
-            badge={5}
+            badge={notifications.length > 0 ? notifications.length : undefined}
           />
           <NavItem 
             icon={<Users size={20} />} 

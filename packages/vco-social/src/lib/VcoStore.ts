@@ -35,6 +35,11 @@ export class VcoStore {
         if (!db.objectStoreNames.contains("blobs")) {
           db.createObjectStore("blobs", { keyPath: "cid" });
         }
+        // Store for notifications
+        if (!db.objectStoreNames.contains("notifications")) {
+          const store = db.createObjectStore("notifications", { keyPath: "id", autoIncrement: true });
+          store.createIndex("by_timestamp", "timestampMs", { unique: false });
+        }
       };
 
       request.onsuccess = () => {
@@ -166,6 +171,54 @@ export class VcoStore {
       request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
     });
+  }
+
+  /**
+   * Saves a notification to the store.
+   */
+  async putNotification(notification: any): Promise<void> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("notifications", "readwrite");
+      const store = tx.objectStore("notifications");
+      const request = store.put(notification);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Retrieves all notifications.
+   */
+  async getAllNotifications(): Promise<any[]> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("notifications", "readonly");
+      const store = tx.objectStore("notifications");
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Deletes a notification by target CID.
+   */
+  async deleteNotificationByTarget(targetCid: Uint8Array): Promise<void> {
+    const db = await this.getDB();
+    const hex = toHex(targetCid);
+    const all = await this.getAllNotifications();
+    const target = all.find(n => toHex(n.targetCid) === hex);
+    
+    if (target) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("notifications", "readwrite");
+        const store = tx.objectStore("notifications");
+        const request = store.delete(target.id);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    }
   }
 
   /**

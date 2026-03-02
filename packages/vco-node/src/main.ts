@@ -97,7 +97,7 @@ async function main() {
   // Read commands from stdin
   const rl = createInterface({ input: process.stdin });
 
-  rl.on("line", (line) => {
+  rl.on("line", async (line) => {
     let msg: Record<string, unknown>;
     try {
       msg = JSON.parse(line) as Record<string, unknown>;
@@ -127,7 +127,18 @@ async function main() {
         peerId: node.peerId.toString(),
         multiaddrs: node.getMultiaddrs().map((a) => a.toString()),
         peers: node.getPeers().map(p => p.toString()),
+        connections: node.getConnections().map(c => ({
+          remotePeer: c.remotePeer.toString(),
+          remoteAddr: c.remoteAddr.toString(),
+          tags: node.getPeers().includes(c.remotePeer) ? ["connected"] : []
+        }))
       });
+    } else if (msg.type === "dial") {
+      const addr = msg.addr as string;
+      const { multiaddr } = await import("@multiformats/multiaddr");
+      node.dial(multiaddr(addr) as any)
+        .then(() => emit({ type: "dial_success", addr }))
+        .catch(err => emit({ type: "error", message: `Dial failed: ${String(err)}` }));
     } else if (msg.type === "resolve") {
       const cid = msg.cid as string;
       const channelId = `vco://objects/${cid}`;

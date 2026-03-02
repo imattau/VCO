@@ -189,6 +189,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
                 `${authorProfile.displayName} replied to your post`
               );
               setNotifications(prev => [notif, ...prev]);
+              await vcoStore.putNotification(notif);
            }
         } else if (base64.includes("tombstone")) {
            const tombstoneData = decodeTombstone(envelope.payload);
@@ -203,6 +204,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
                 `${authorProfile.displayName} liked your post`
               );
               setNotifications(prev => [notif, ...prev]);
+              await vcoStore.putNotification(notif);
            }
         } else if (base64.includes("follow")) {
            const followData = decodeFollow(envelope.payload);
@@ -214,6 +216,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
                 `${authorProfile.displayName} started following you`
               );
               setNotifications(prev => [notif, ...prev]);
+              await vcoStore.putNotification(notif);
            }
         } else {
            const postData = decodePost(envelope.payload);
@@ -309,6 +312,10 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           if (p.creatorId !== id!.creatorIdHex) profileMap.set(p.creatorId, p.data);
         });
         setPeerProfiles(profileMap);
+
+        // Load Notifications
+        const storedNotifs = await vcoStore.getAllNotifications();
+        setNotifications(storedNotifs.sort((a,b) => Number(b.timestampMs - a.timestampMs)));
 
         const storedEnvelopes = await vcoStore.getAllEnvelopes();
         if (storedEnvelopes.length > 0) {
@@ -634,6 +641,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   const markNotificationAsRead = (cid: Uint8Array) => {
     setNotifications(prev => prev.filter(n => n.targetCid !== cid));
+    vcoStore.deleteNotificationByTarget(cid);
   };
 
   const setFilterAction = (f: { type: 'tag' | 'peer' | 'all'; value?: string } | null) => setFilter(f);

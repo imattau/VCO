@@ -4,6 +4,7 @@ export interface NetworkStats {
   peerId: string | null;
   multiaddrs: string[];
   peers: string[];
+  connections: { remotePeer: string, remoteAddr: string, tags: string[] }[];
   isReady: boolean;
 }
 
@@ -24,6 +25,7 @@ export class NetworkService {
         peerId: client.peerId,
         multiaddrs: client.multiaddrs,
         peers: client.peers,
+        connections: client.connections,
         isReady: client.isReady
       });
     };
