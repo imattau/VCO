@@ -1,29 +1,27 @@
 # Plan: Migrating VCO Social to Real Backend
 
 ## Objective
-Begin the transition of `vco-social` from a mocked prototype to a real decentralized application powered by a Tauri-managed `@vco/vco-node` sidecar.
+Transition `vco-social` from a mocked prototype to a real decentralized application.
 
-## Phase 1: Infrastructure & IPC Foundation (Current Focus)
+## Phase 1: Infrastructure & IPC Foundation [DONE]
+- [x] Task 1.1: Implement `KeyringService.ts` for persistent identity.
+- [x] Task 1.2: Implement `NodeClient.ts` for Tauri sidecar IPC.
+- [x] Task 1.3: Configure Tauri capabilities for shell execution.
 
-### 1. Tauri Sidecar Configuration
-- [ ] Task 1.1: Build `@vco/vco-node` as a standalone executable (e.g., using `pkg` or `nexe`, or leveraging Node.js single executable applications). *Alternative for now: Assume users have Node installed and invoke it directly via Tauri.*
-- [ ] Task 1.2: Update `packages/vco-social/src-tauri/tauri.conf.json` to configure the sidecar process or command execution permissions.
+## Phase 2: Context & State Integration [DONE]
+- [x] Task 2.1: Update `SocialContext.tsx` to load identity from `KeyringService`.
+- [x] Task 2.2: Implement `NodeClient` lifecycle (connect on mount, shutdown on unmount).
+- [x] Task 2.3: Implement real-time envelope processing:
+    - Listen for `envelope` events from `NodeClient`.
+    - Decode envelopes based on schema URI.
+    - Update `feed` and `conversations` states dynamically.
+- [x] Task 2.4: Wire `createPost` and `sendDM` to `NodeClient.publish` using real signing keys.
 
-### 2. Rust Backend Bridge
-- [ ] Task 2.1: Update `src-tauri/src/main.rs` to spawn the `vco-node` process.
-- [ ] Task 2.2: Implement `stdin`/`stdout` piping between the Rust process and the Tauri frontend via events.
-
-### 3. Frontend IPC Client
-- [ ] Task 3.1: Create `packages/vco-social/src/lib/NodeClient.ts`.
-- [ ] Task 3.2: Implement methods for `subscribe`, `publish`, and `shutdown`.
-- [ ] Task 3.3: Implement event listeners for `envelope`, `ready`, and `error`.
-
-### 4. Persistent Identity (The Keyring)
-- [ ] Task 4.1: Implement `KeyringService.ts` to generate and persist Ed25519 and X25519 keys securely using `localStorage` (as a fallback) or a Tauri store plugin.
-
-## Phase 2: Wiring Contexts (Future)
-- [ ] Refactor `SocialContext.tsx` to use `NodeClient` instead of `MockSocialService`.
+## Phase 3: Deployment & Hardening (CURRENT)
+- [ ] Task 3.1: Build `vco-node` as a sidecar binary.
+- [ ] Task 3.2: Finalize Rust-side process management in `main.rs`.
+- [ ] Task 3.3: Implement "Network Status" indicators linked to `NodeClient.isReady`.
 
 ## References
-- `packages/vco-node/README.md` (for IPC protocol definition)
-- `docs/plans/2026-03-02-real-app-migration-brainstorm.md`
+- `packages/vco-node/README.md`
+- `packages/vco-social/src/features/SocialContext.tsx`

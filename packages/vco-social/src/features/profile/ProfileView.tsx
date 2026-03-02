@@ -1,13 +1,15 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useSocial } from '../SocialContext';
 import { Edit2, Shield, Fingerprint, ShieldAlert, Key, Zap, CheckCircle2, Users } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { FollowButton } from './FollowButton';
 import { mockCid, toHex } from '@vco/vco-testing';
 import { socialBlobStore } from '../../lib/MockSocialService';
+import { useToast } from '../../components/ToastProvider';
+import { KeyringService } from '../../lib/KeyringService';
 
 export function ProfileView() {
-  const { profile, updateProfile, feed, conversations, notifications } = useSocial();
+  const { profile, updateProfile, feed, conversations, notifications, identity } = useSocial();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -17,7 +19,18 @@ export function ProfileView() {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (!profile) return null;
+  // Sync form data when profile loads
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        displayName: profile.displayName,
+        bio: profile.bio,
+        avatarCid: profile.avatarCid
+      });
+    }
+  }, [profile]);
+
+  if (!profile || !identity) return null;
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -42,10 +55,11 @@ export function ProfileView() {
   }, [formData.avatarCid, profile.displayName]);
 
   const handleRotateKeys = () => {
-    toast("Rotating identity keys... Broadcasting new manifest to swarm.", "info");
-    setTimeout(() => {
-      toast("Identity rotated successfully. Previous keys revoked.", "success");
-    }, 1500);
+    if (confirm("Revoking your identity keys will make your previous posts unmanageable. Are you sure you want to generate a new swarm identity?")) {
+      KeyringService.revokeIdentity();
+      toast("Identity revoked. Reloading application...", "error");
+      setTimeout(() => window.location.reload(), 1500);
+    }
   };
 
   return (
@@ -171,7 +185,7 @@ export function ProfileView() {
                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Signing Key (Ed25519)</span>
                      </div>
                      <code className="text-[10px] text-zinc-300 font-mono break-all line-clamp-2 uppercase">
-                        ed25519:did:vco:7X9hJ2p5N...m4LqR8sW
+                        {toHex(identity.signingPublicKey)}
                      </code>
                   </div>
 
@@ -181,7 +195,7 @@ export function ProfileView() {
                         <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Encryption Key (X25519)</span>
                      </div>
                      <code className="text-[10px] text-zinc-300 font-mono break-all line-clamp-2 uppercase">
-                        x25519:0x8f2d...e1c4b9
+                        {toHex(identity.encryptionPublicKey)}
                      </code>
                   </div>
                </div>
@@ -201,8 +215,6 @@ export function ProfileView() {
     </div>
   );
 }
-
-import { useToast } from '../../components/ToastProvider';
 
 function Badge({ icon, label, color }: any) {
   return (
