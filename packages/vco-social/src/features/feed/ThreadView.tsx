@@ -1,27 +1,34 @@
-import React from 'react';
-import { PostData } from '@vco/vco-schemas';
+import React, { useState } from 'react';
+import { PostData, ProfileData } from '@vco/vco-schemas';
 import { X, MessageSquare, Repeat2, Heart, Share, Shield } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { twMerge } from 'tailwind-merge';
+import { useSocial } from '../SocialContext';
+import { MediaGallery } from './MediaGallery';
+import { toHex } from '@vco/vco-testing';
 
 interface ThreadViewProps {
-  parentPost: { data: PostData; cid: Uint8Array } | null;
+  parentPost: { data: PostData; cid: Uint8Array; authorProfile: ProfileData } | null;
   onClose: () => void;
 }
 
 export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
-  const { feed } = useSocial();
+  const { replies, createReply } = useSocial();
+  const [replyText, setReplyText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   if (!parentPost) return null;
 
-  // Dynamically find replies in the feed
-  // For this prototype, we'll consider any post that isn't the parent but shares similar tags 
-  // or logic as a "reply" for demonstration, OR check a hypothetical parentCid field.
-  const replies = feed.filter(item => {
-    // In real app, check item.data.parentCid === parentPost.cid
-    // For prototype simulation, we'll show some related posts
-    return item.cid.toString() !== parentPost.cid.toString() && 
-           (item.data.tags || []).some(tag => (parentPost.data.tags || []).includes(tag));
-  });
+  const threadReplies = replies.filter(r => toHex(r.data.parentCid) === toHex(parentPost.cid));
+
+  const handleReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyText.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    await createReply(parentPost.cid, replyText);
+    setReplyText('');
+    setIsSubmitting(false);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-zinc-950/80 backdrop-blur-sm">
@@ -42,16 +49,16 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
            <div className="p-6 border-b border-zinc-800 bg-zinc-900">
               <div className="flex items-center gap-3 mb-4">
                  <div className="w-12 h-12 rounded-full bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-sm font-black text-blue-400">
-                    A
+                    {parentPost.authorProfile.displayName[0]}
                  </div>
                  <div>
                     <div className="flex items-center gap-2">
-                       <span className="font-black text-white text-lg tracking-tight">Alice</span>
-                       <span className="text-zinc-500 text-sm font-bold">@alice.vco</span>
+                       <span className="font-black text-white text-lg tracking-tight">{parentPost.authorProfile.displayName}</span>
+                       <span className="text-zinc-500 text-sm font-bold">@{parentPost.authorProfile.displayName.split(' ')[0].toLowerCase()}.vco</span>
                     </div>
                     <div className="text-xs text-zinc-600 font-mono flex items-center gap-1">
                        <Shield size={10} className="text-emerald-500" />
-                       did:vco:1234...5678
+                       did:vco:{toHex(parentPost.authorProfile.encryptionPubkey || new Uint8Array(4)).substring(0,8)}...
                     </div>
                  </div>
               </div>
@@ -65,7 +72,7 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
               <MediaGallery mediaCids={parentPost.data.mediaCids} />
 
               <div className="flex items-center gap-4 text-xs font-black text-zinc-500 uppercase tracking-widest border-t border-zinc-800/50 pt-4 mb-4 mt-6">
-                 <span>{replies.length} Replies</span>
+                 <span>{threadReplies.length} Replies</span>
                  <span>5 Reposts</span>
                  <span>42 Likes</span>
               </div>
@@ -80,15 +87,17 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
 
            {/* Replies Area */}
            <div className="p-6 space-y-8">
-              {replies.length > 0 ? replies.map(reply => (
-                 <div key={reply.cid.toString()} className="flex gap-4 group">
+              {threadReplies.length > 0 ? threadReplies.map(reply => (
+                 <div key={toHex(reply.cid)} className="flex gap-4 group">
                     <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-black text-zinc-400 shrink-0">
-                       S
+                       {reply.authorProfile.displayName[0]}
                     </div>
                     <div className="flex-1 space-y-1.5">
                        <div className="flex items-center gap-2">
-                          <span className="font-black text-white text-sm tracking-tight italic">Swarm Peer</span>
-                          <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Just Now</span>
+                          <span className="font-black text-white text-sm tracking-tight italic">{reply.authorProfile.displayName}</span>
+                          <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">
+                             {new Date(Number(reply.data.timestampMs)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                        </div>
                        <div className="prose prose-invert prose-zinc prose-sm text-zinc-300 leading-relaxed font-medium">
                           <ReactMarkdown>{reply.data.content}</ReactMarkdown>
@@ -114,20 +123,20 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
         </div>
 
         {/* Compose Reply Input */}
-        <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 backdrop-blur-md">
+        <form onSubmit={handleReply} className="p-4 border-t border-zinc-800 bg-zinc-950/80 backdrop-blur-md">
            <input 
              type="text" 
+             value={replyText}
+             onChange={e => setReplyText(e.target.value)}
+             disabled={isSubmitting}
              placeholder="Post your reply to the swarm..." 
-             className="w-full bg-zinc-900 border border-zinc-800 rounded-full py-3 px-6 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-inner"
+             className="w-full bg-zinc-900 border border-zinc-800 rounded-full py-3 px-6 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-inner disabled:opacity-50"
            />
-        </div>
+        </form>
       </div>
     </div>
   );
 }
-
-import { useSocial } from '../SocialContext';
-import { MediaGallery } from './MediaGallery';
 
 function ActionButton({ icon, color, label }: { icon: React.ReactNode, color: string, label: string }) {
   return (

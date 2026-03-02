@@ -111,12 +111,14 @@ export class VcoStore {
   /**
    * Saves a media blob to the store.
    */
-  async putBlob(cid: string, blob: Blob): Promise<void> {
+  async putBlob(cid: string | Uint8Array, blob: Blob): Promise<void> {
     const db = await this.getDB();
+    const cidHex = typeof cid === 'string' ? cid : toHex(cid);
+    
     return new Promise((resolve, reject) => {
       const tx = db.transaction("blobs", "readwrite");
       const store = tx.objectStore("blobs");
-      const request = store.put({ cid, blob, updatedAt: Date.now() });
+      const request = store.put({ cid: cidHex, blob, updatedAt: Date.now() });
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
@@ -125,12 +127,14 @@ export class VcoStore {
   /**
    * Retrieves a media blob by CID.
    */
-  async getBlob(cid: string): Promise<Blob | null> {
+  async getBlob(cid: string | Uint8Array): Promise<Blob | null> {
     const db = await this.getDB();
+    const cidHex = typeof cid === 'string' ? cid : toHex(cid);
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction("blobs", "readonly");
       const store = tx.objectStore("blobs");
-      const request = store.get(cid);
+      const request = store.get(cidHex);
       request.onsuccess = () => resolve(request.result?.blob || null);
       request.onerror = () => reject(request.error);
     });

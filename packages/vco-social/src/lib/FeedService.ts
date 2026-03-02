@@ -4,8 +4,9 @@ import {
   PostData,
   extractHashtags
 } from '@vco/vco-schemas';
-import { mockCid, toHex } from '@vco/vco-testing';
-import { socialBlobStore } from './MockSocialService';
+import { toHex } from '@vco/vco-testing';
+import { blake3 } from '@vco/vco-crypto';
+import { vcoStore } from './VcoStore';
 
 export class FeedService {
   /**
@@ -18,10 +19,11 @@ export class FeedService {
   ): Promise<Uint8Array> {
     const tags = extractHashtags(content);
     
-    // Simulating media hashing and storage
+    // Media hashing and storage
     const mediaCids = await Promise.all(mediaFiles.map(async (file) => {
-      const cid = mockCid(`media-${file.name}-${Math.random()}`);
-      socialBlobStore.set(toHex(cid), file);
+      const buffer = await file.arrayBuffer();
+      const cid = blake3(new Uint8Array(buffer));
+      await vcoStore.putBlob(cid, file);
       return cid;
     }));
 

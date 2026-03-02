@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useSocial } from '../SocialContext';
 import { Edit2, Shield, Fingerprint, ShieldAlert, Key, Zap, CheckCircle2, Users, Search, X } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { FollowButton } from './FollowButton';
 import { mockCid, toHex } from '@vco/vco-testing';
-import { socialBlobStore } from '../../lib/MockSocialService';
+import { blake3 } from '@vco/vco-crypto';
+import { vcoStore } from '../../lib/VcoStore';
 import { useToast } from '../../components/ToastProvider';
 import { KeyringService } from '../../lib/KeyringService';
 import { Card } from '@vco/vco-ui';
@@ -37,8 +38,9 @@ export function ProfileView() {
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const cid = mockCid(`avatar-${file.name}-${Date.now()}`);
-      socialBlobStore.set(toHex(cid), file);
+      const buffer = await file.arrayBuffer();
+      const cid = blake3(new Uint8Array(buffer));
+      await vcoStore.putBlob(cid, file);
       setFormData({ ...formData, avatarCid: cid });
       toast("New avatar hashed and staged", "info");
     }
@@ -49,11 +51,18 @@ export function ProfileView() {
     setIsEditing(false);
   };
 
-  const avatarUrl = useMemo(() => {
-    const hex = toHex(formData.avatarCid);
-    const blob = socialBlobStore.get(hex);
-    if (blob) return URL.createObjectURL(blob);
-    return `https://api.dicebear.com/9.x/identicon/svg?seed=${profile.displayName}`;
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const resolve = async () => {
+      const blob = await vcoStore.getBlob(formData.avatarCid);
+      if (blob) {
+        setAvatarUrl(URL.createObjectURL(blob));
+      } else {
+        setAvatarUrl(`https://api.dicebear.com/9.x/identicon/svg?seed=${profile.displayName}`);
+      }
+    };
+    resolve();
   }, [formData.avatarCid, profile.displayName]);
 
   const handleRotateKeys = () => {
@@ -195,7 +204,7 @@ export function ProfileView() {
                   Swarm Activity
                </h4>
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <StatCard label="Followers" value="1,242" subValue="+12 today" />
+                  <StatCard label="Followers" value={peerProfiles.size.toString()} subValue="Active social graph" />
                   <StatCard label="Posts Published" value={feed.length.toString()} subValue="Verifiable objects" />
                   <StatCard label="Inbound Syncs" value={notifications.length.toString()} subValue="Recent events" />
                   <StatCard label="E2EE Sessions" value={conversations.length.toString()} subValue="Active secure channels" />
