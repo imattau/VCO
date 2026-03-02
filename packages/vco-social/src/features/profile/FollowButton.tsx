@@ -9,22 +9,23 @@ interface FollowButtonProps {
 }
 
 export function FollowButton({ did, initialState = false }: FollowButtonProps) {
-  const [isFollowing, setIsFollowing] = useState(initialState);
+  const { following, followPeer, unfollowPeer } = useSocial();
   const [isProcessing, setIsProcessing] = useState(false);
-  const { toast } = useToast();
+  
+  const isFollowing = following.has(did);
 
   const handleToggle = async () => {
     setIsProcessing(true);
-    // Simulate network delay for publishing Follow schema
-    await new Promise(r => setTimeout(r, 600));
-    
-    setIsFollowing(!isFollowing);
-    setIsProcessing(false);
-    
-    if (!isFollowing) {
-      toast(`Follow manifest published for ${did.substring(0, 12)}...`, "success");
-    } else {
-      toast(`Unfollowed peer`, "info");
+    try {
+      if (isFollowing) {
+        await unfollowPeer(did);
+      } else {
+        await followPeer(did);
+      }
+    } catch (err) {
+      console.error("Failed to toggle follow status", err);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -58,3 +59,5 @@ export function FollowButton({ did, initialState = false }: FollowButtonProps) {
     </button>
   );
 }
+
+import { useSocial } from '../SocialContext';

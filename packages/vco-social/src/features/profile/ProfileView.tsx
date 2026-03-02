@@ -11,7 +11,7 @@ import { KeyringService } from '../../lib/KeyringService';
 import { Card } from '@vco/vco-ui';
 
 export function ProfileView() {
-  const { profile, updateProfile, feed, conversations, notifications, identity, peerProfiles, resolvePeerProfile } = useSocial();
+  const { profile, updateProfile, feed, conversations, notifications, identity, peerProfiles, resolvePeerProfile, following } = useSocial();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [discoveryDid, setDiscoveryDid] = useState('');
@@ -186,7 +186,7 @@ export function ProfileView() {
                              <div className="text-[9px] text-zinc-500 font-mono truncate max-w-[150px]">{creatorId}</div>
                           </div>
                        </div>
-                       <FollowButton did={creatorId} initialState={true} />
+                       <FollowButton did={creatorId} />
                     </div>
                   ))}
                   {peerProfiles.size === 0 && (
@@ -204,7 +204,7 @@ export function ProfileView() {
                   Swarm Activity
                </h4>
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <StatCard label="Followers" value={peerProfiles.size.toString()} subValue="Active social graph" />
+                  <StatCard label="Following" value={following.size.toString()} subValue="Active swarm contacts" />
                   <StatCard label="Posts Published" value={feed.length.toString()} subValue="Verifiable objects" />
                   <StatCard label="Inbound Syncs" value={notifications.length.toString()} subValue="Recent events" />
                   <StatCard label="E2EE Sessions" value={conversations.length.toString()} subValue="Active secure channels" />

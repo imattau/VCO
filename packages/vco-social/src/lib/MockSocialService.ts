@@ -28,4 +28,29 @@ export class MockSocialService {
       }
     ];
   }
+
+  static getSeedPosts(): { creatorId: string, post: PostData }[] {
+    return [
+      {
+        creatorId: "charlie-id-hex",
+        post: {
+          schema: POST_V3_SCHEMA_URI,
+          content: "Hello #VCO! This is a decentralized post synced via the protocol. Checking out the new media gallery component. #web3 #privacy",
+          mediaCids: [], // Real app would have blake3 hashes here
+          timestampMs: BigInt(Date.now() - 3600000),
+          tags: ["vco", "web3", "privacy"]
+        }
+      },
+      {
+        creatorId: "bob-id-hex",
+        post: {
+          schema: POST_V3_SCHEMA_URI,
+          content: "Just implemented E2EE DMs using X25519. Privacy is not a feature, it's a foundation. #cryptography",
+          mediaCids: [],
+          timestampMs: BigInt(Date.now() - 7200000),
+          tags: ["cryptography"]
+        }
+      }
+    ];
+  }
 }
