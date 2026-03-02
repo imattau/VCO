@@ -7,14 +7,6 @@
   ],
   "permissions": [
     "core:default",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [
-        {
-          "args": [],
-          "sidecar": "binaries/vco-node"
-        }
-      ]
-    }
+    "event:default"
   ]
 }

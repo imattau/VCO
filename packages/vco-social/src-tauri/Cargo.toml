@@ -24,3 +24,10 @@ log = "0.4"
 tauri = { version = "2.0.0-rc.17", features = [] }
 tauri-plugin-log = "2.0.0-rc"
 tauri-plugin-shell = "2.0.0-rc"
+libp2p = { version = "0.54", features = ["tcp", "quic", "noise", "yamux", "kad", "identify", "ping", "macros", "tokio", "gossipsub"] }
+tokio = { version = "1.37", features = ["full"] }
+futures = "0.3"
+async-trait = "0.1"
+anyhow = "1.0"
+base64 = "0.22"
+parking_lot = "0.12"

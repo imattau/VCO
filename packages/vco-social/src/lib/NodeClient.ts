@@ -1,4 +1,6 @@
 import { Command, Child } from '@tauri-apps/plugin-shell';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 export type NodeEvent = 
   | { type: 'ready', peerId: string, multiaddrs: string[] }
@@ -12,7 +14,6 @@ type EventListener = (event: NodeEvent) => void;
 
 export class NodeClient {
   private static instance: NodeClient;
-  private process: Child | null = null;
   private listeners: Set<EventListener> = new Set();
   public isReady: boolean = false;
   public peerId: string | null = null;
@@ -30,77 +31,56 @@ export class NodeClient {
   }
 
   /**
-   * Starts the vco-node sidecar process via Tauri shell.
+   * Connects to the native Rust libp2p node via Tauri IPC.
    */
   public async connect(): Promise<void> {
-    if (this.process) return;
-
     try {
-      // Assuming 'vco-node' is bundled as a sidecar via Tauri config
-      const command = Command.sidecar('binaries/vco-node');
+      // Listen for events from the native Rust node
+      await listen<NodeEvent>('vco-node-event', (event) => {
+        this.handleEvent(event.payload);
+      });
+
+      console.log('NodeClient: Connected to native Rust node.');
       
-      command.stdout.on('data', (line) => {
-        try {
-          const event = JSON.parse(line) as NodeEvent;
-          this.handleEvent(event);
-        } catch (e) {
-          console.warn('NodeClient: Received non-JSON stdout:', line);
-        }
-      });
-
-      command.stderr.on('data', (line) => {
-        console.error('NodeClient STDERR:', line);
-      });
-
-      this.process = await command.spawn();
-      console.log('NodeClient: Sidecar process spawned with PID:', this.process.pid);
+      // Initial stats request
+      this.getStats();
     } catch (error) {
-      console.error('NodeClient: Failed to spawn sidecar, falling back to mock mode.', error);
-      // In a pure web environment, we won't have the sidecar.
+      console.error('NodeClient: Failed to connect to native node.', error);
     }
   }
 
   public subscribe(channelId: string) {
-    this.send({ type: 'subscribe', channelId });
+    invoke('subscribe', { channelId }).catch(console.error);
   }
 
   public unsubscribe(channelId: string) {
-    this.send({ type: 'unsubscribe', channelId });
+    invoke('unsubscribe', { channelId }).catch(console.error);
   }
 
   public publish(channelId: string, envelopeBase64: string) {
-    this.send({ type: 'publish', channelId, envelope: envelopeBase64 });
+    invoke('publish', { channelId, envelopeBase64 }).catch(console.error);
   }
 
   public resolve(cidHex: string) {
-    this.send({ type: 'resolve', cid: cidHex });
+    // Rust-side resolve not implemented yet, using subscribe pattern for now
+    this.subscribe(`vco://objects/${cidHex}`);
   }
 
   public dial(addr: string) {
-    this.send({ type: 'dial', addr });
+    invoke('dial', { addr }).catch(console.error);
   }
 
   public getStats() {
-    this.send({ type: 'get_stats' });
+    invoke('get_stats').catch(console.error);
   }
 
   public async shutdown() {
-    this.send({ type: 'shutdown' });
-    this.process = null;
     this.isReady = false;
   }
 
   public onEvent(listener: EventListener) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
-  }
-
-  private send(command: any) {
-    if (this.process) {
-      this.process.write(JSON.stringify(command) + "\n");
-    } else {
-      console.log('NodeClient (Mock) Command:', command);
-    }
   }
 
   private handleEvent(event: NodeEvent) {
