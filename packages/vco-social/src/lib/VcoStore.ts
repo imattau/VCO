@@ -105,6 +105,20 @@ export class VcoStore {
   }
 
   /**
+   * Retrieves all known peer profiles.
+   */
+  async getAllProfiles(): Promise<{ creatorId: string, data: any }[]> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("profiles", "readonly");
+      const store = tx.objectStore("profiles");
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
    * Wipes all local data (security/reset utility).
    */
   async clearAll(): Promise<void> {

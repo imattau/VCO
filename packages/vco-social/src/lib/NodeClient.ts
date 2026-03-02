@@ -4,6 +4,7 @@ type NodeEvent =
   | { type: 'ready', peerId: string, multiaddrs: string[] }
   | { type: 'envelope', channelId: string, envelope: string }
   | { type: 'stats', peerId: string, multiaddrs: string[], peers: string[] }
+  | { type: 'resolving', cid: string, channelId: string }
   | { type: 'error', message: string };
 
 type EventListener = (event: NodeEvent) => void;
@@ -67,6 +68,10 @@ export class NodeClient {
 
   public publish(channelId: string, envelopeBase64: string) {
     this.send({ type: 'publish', channelId, envelope: envelopeBase64 });
+  }
+
+  public resolve(cidHex: string) {
+    this.send({ type: 'resolve', cid: cidHex });
   }
 
   public getStats() {

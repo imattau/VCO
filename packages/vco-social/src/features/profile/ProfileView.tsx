@@ -1,17 +1,19 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useSocial } from '../SocialContext';
-import { Edit2, Shield, Fingerprint, ShieldAlert, Key, Zap, CheckCircle2, Users } from 'lucide-react';
+import { Edit2, Shield, Fingerprint, ShieldAlert, Key, Zap, CheckCircle2, Users, Search, X } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { FollowButton } from './FollowButton';
 import { mockCid, toHex } from '@vco/vco-testing';
 import { socialBlobStore } from '../../lib/MockSocialService';
 import { useToast } from '../../components/ToastProvider';
 import { KeyringService } from '../../lib/KeyringService';
+import { Card } from '@vco/vco-ui';
 
 export function ProfileView() {
-  const { profile, updateProfile, feed, conversations, notifications, identity } = useSocial();
+  const { profile, updateProfile, feed, conversations, notifications, identity, peerProfiles, resolvePeerProfile } = useSocial();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
+  const [discoveryDid, setDiscoveryDid] = useState('');
   const [formData, setFormData] = useState({
     displayName: profile?.displayName || '',
     bio: profile?.bio || '',
@@ -60,6 +62,13 @@ export function ProfileView() {
       toast("Identity revoked. Reloading application...", "error");
       setTimeout(() => window.location.reload(), 1500);
     }
+  };
+
+  const handleDiscover = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!discoveryDid.trim()) return;
+    resolvePeerProfile(discoveryDid.trim());
+    setDiscoveryDid('');
   };
 
   return (
@@ -128,6 +137,26 @@ export function ProfileView() {
                </div>
             </div>
 
+            {/* Discover Peers */}
+            <Card className="p-10 space-y-6">
+               <h4 className="text-xl font-black text-white uppercase tracking-widest italic flex items-center gap-3">
+                  <Search size={20} className="text-blue-500" />
+                  Discover Peer
+               </h4>
+               <form onSubmit={handleDiscover} className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={discoveryDid}
+                    onChange={e => setDiscoveryDid(e.target.value)}
+                    placeholder="Enter Creator ID (Hex)..."
+                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-xs font-mono text-zinc-300 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                  <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">
+                     Resolve
+                  </button>
+               </form>
+            </Card>
+
             {/* Peer Graph */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-10 space-y-8 shadow-2xl">
                <div className="flex items-center justify-between">
@@ -137,23 +166,26 @@ export function ProfileView() {
                   </h4>
                </div>
                <div className="space-y-4">
-                  {[
-                    { name: 'Crypto Charlie', did: 'did:vco:char...991', following: true },
-                    { name: 'Decentralized Dave', did: 'did:vco:dave...456', following: false },
-                  ].map(peer => (
-                    <div key={peer.did} className="flex items-center justify-between p-4 bg-zinc-950 border border-zinc-800 rounded-2xl group hover:border-zinc-700 transition-all">
+                  {Array.from(peerProfiles.entries()).map(([creatorId, peer]) => (
+                    <div key={creatorId} className="flex items-center justify-between p-4 bg-zinc-950 border border-zinc-800 rounded-2xl group hover:border-zinc-700 transition-all shadow-inner">
                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center font-black text-xs text-white shrink-0">
-                             {peer.name[0]}
+                          <div className="w-10 h-10 rounded-full bg-blue-600/10 border border-blue-500/20 flex items-center justify-center font-black text-xs text-blue-400 shrink-0">
+                             {peer.displayName[0]}
                           </div>
-                          <div>
-                             <div className="font-bold text-white text-sm">{peer.name}</div>
-                             <div className="text-[10px] text-zinc-500 font-mono">{peer.did}</div>
+                          <div className="min-w-0">
+                             <div className="font-bold text-white text-sm truncate">{peer.displayName}</div>
+                             <div className="text-[9px] text-zinc-500 font-mono truncate max-w-[150px]">{creatorId}</div>
                           </div>
                        </div>
-                       <FollowButton did={peer.did} initialState={peer.following} />
+                       <FollowButton did={creatorId} initialState={true} />
                     </div>
                   ))}
+                  {peerProfiles.size === 0 && (
+                    <div className="py-10 text-center space-y-2 border-2 border-dashed border-zinc-800 rounded-3xl">
+                       <p className="text-zinc-600 font-black uppercase tracking-widest text-xs">Social Graph Empty</p>
+                       <p className="text-zinc-700 text-[10px] italic">Resolve a peer ID to start building your swarm.</p>
+                    </div>
+                  )}
                </div>
             </div>
 

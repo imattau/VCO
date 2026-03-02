@@ -128,6 +128,14 @@ async function main() {
         multiaddrs: node.getMultiaddrs().map((a) => a.toString()),
         peers: node.getPeers().map(p => p.toString()),
       });
+    } else if (msg.type === "resolve") {
+      const cid = msg.cid as string;
+      const channelId = `vco://objects/${cid}`;
+      subscriptions.add(channelId);
+      registerChannelListener(channelId);
+      replayChannel(channelId);
+      // In a real implementation, this would trigger a DHT findProviders call
+      emit({ type: "resolving", cid, channelId });
     } else if (msg.type === "shutdown") {
       void Promise.resolve(node.stop()).then(() => process.exit(0)).catch(() => process.exit(1));
     }

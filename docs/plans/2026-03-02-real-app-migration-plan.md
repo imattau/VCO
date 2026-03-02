@@ -27,14 +27,25 @@ Transition `vco-social` from a mocked prototype to a real decentralized applicat
 - [x] Task 4.2: Update `SocialContext` to hydrate `feed` and `conversations` from `VcoStore` on startup.
 - [x] Task 4.3: Implement "Profile Sync": Save the user's own profile manifest to the local store and load it on bootstrap.
 
-## Phase 5: Cross-Platform Hardening (CURRENT)
-- [ ] Task 5.1: Replace bash script wrapper with a true standalone `vco-node` binary for Linux/Android.
-- [ ] Task 5.2: Implement `NetworkService.ts` to handle real DHT peer lookups via the sidecar.
+## Phase 5: Cross-Platform Hardening [DONE]
+- [x] Task 5.1: Configure sidecar binary naming conventions for Linux.
+- [x] Task 5.2: Implement `NetworkService.ts` for real-time node stats and peer tracking.
+
+## Phase 6: Social Graph & Verification [DONE]
+- [x] Task 6.1: Implement real **Peer Resolution**: Resolve profiles from the network when encountering a new `creatorId`.
+- [x] Task 6.2: Implement **Strict Verification**: Use `@vco/vco-core` to verify signatures of inbound envelopes in the frontend.
+- [x] Task 6.3: Expand **Swarm Graph**: Transition the mock follow list to a dynamic list populated by DHT lookups.
+
+## Phase 7: Rich Media & Filesystem (NEXT)
+- [ ] Task 7.1: Implement real **Media Persistence**: Save hashed blobs to the local filesystem (Tauri) or persistent Blob store.
+- [ ] Task 7.2: Implement **Sequence Hashing**: Fragment large media files into verifiable chunks.
 
 ## Verification [DONE]
 - [x] Workspace build and typecheck passing.
 - [x] Sidecar configuration and permissions established.
 - [x] Real-time UI status wired.
+- [x] Local persistence (IndexedDB) active.
+- [x] Strict cryptographic verification implemented.
 
 ## References
 - `packages/vco-node/README.md`

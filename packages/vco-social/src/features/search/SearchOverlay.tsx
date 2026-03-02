@@ -8,7 +8,7 @@ export function SearchOverlay() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const overlayRef = useRef<HTMLDivElement>(null);
-  const { setFilter } = useSocial();
+  const { setFilter, resolvePeerProfile } = useSocial();
   const { toast } = useToast();
 
   // Close overlay on click outside
@@ -29,9 +29,11 @@ export function SearchOverlay() {
     setQuery('');
   };
 
-  const handlePeerClick = (name: string) => {
+  const handlePeerClick = (name: string, did: string) => {
     setFilter({ type: 'peer', value: name });
-    toast(`Requesting latest manifest for ${name}...`, "info");
+    // Strip did:vco: prefix for resolution
+    const creatorIdHex = did.replace('did:vco:', '');
+    resolvePeerProfile(creatorIdHex);
     setIsOpen(false);
     setQuery('');
   };
@@ -54,7 +56,7 @@ export function SearchOverlay() {
           onFocus={() => setIsOpen(true)}
           placeholder="Search social swarm..." 
           className={twMerge(
-            "w-full bg-zinc-900 border border-zinc-800 py-1.5 pl-10 pr-4 text-xs font-medium focus:outline-none focus:border-blue-500/50 transition-all shadow-inner",
+            "w-full bg-zinc-900 border border-zinc-800 py-1.5 pl-10 pr-4 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-inner",
             isOpen ? "rounded-t-2xl border-b-zinc-800" : "rounded-full"
           )}
         />
@@ -101,7 +103,7 @@ export function SearchOverlay() {
                    {mockUsers.filter(u => u.name.toLowerCase().includes(query.toLowerCase())).map(user => (
                      <button 
                        key={user.did} 
-                       onClick={() => handlePeerClick(user.name)}
+                       onClick={() => handlePeerClick(user.name, user.did)}
                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 rounded-xl transition-colors text-left"
                      >
                         <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-black text-white shrink-0">
