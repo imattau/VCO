@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useSocial } from '../SocialContext';
-import { Edit2, Shield, Fingerprint, ShieldAlert, Key, Zap, CheckCircle2 } from 'lucide-react';
+import { Edit2, Shield, Fingerprint, ShieldAlert, Key, Zap, CheckCircle2, Users } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { FollowButton } from './FollowButton';
 
 export function ProfileView() {
   const { profile, updateProfile } = useSocial();
@@ -69,6 +70,35 @@ export function ProfileView() {
                         <Badge icon={<Fingerprint size={14} />} label="VCO CORE MEMBER" color="text-blue-500 bg-blue-500/10 border-blue-500/20" />
                      </div>
                   </div>
+               </div>
+            </div>
+
+            {/* Peer Graph */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-10 space-y-8 shadow-2xl">
+               <div className="flex items-center justify-between">
+                  <h4 className="text-2xl font-black text-white tracking-tighter italic flex items-center gap-3">
+                     <Users size={24} className="text-blue-500" />
+                     Swarm Graph
+                  </h4>
+               </div>
+               <div className="space-y-4">
+                  {[
+                    { name: 'Crypto Charlie', did: 'did:vco:char...991', following: true },
+                    { name: 'Decentralized Dave', did: 'did:vco:dave...456', following: false },
+                  ].map(peer => (
+                    <div key={peer.did} className="flex items-center justify-between p-4 bg-zinc-950 border border-zinc-800 rounded-2xl group hover:border-zinc-700 transition-all">
+                       <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center font-black text-xs text-white shrink-0">
+                             {peer.name[0]}
+                          </div>
+                          <div>
+                             <div className="font-bold text-white text-sm">{peer.name}</div>
+                             <div className="text-[10px] text-zinc-500 font-mono">{peer.did}</div>
+                          </div>
+                       </div>
+                       <FollowButton did={peer.did} initialState={peer.following} />
+                    </div>
+                  ))}
                </div>
             </div>
 

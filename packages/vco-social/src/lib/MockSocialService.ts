@@ -19,8 +19,8 @@ export class MockSocialService {
         cid: mockCid("post-1"),
         data: {
           schema: POST_V3_SCHEMA_URI,
-          content: "Hello #VCO! This is a decentralized post synced via the protocol. #web3 #privacy",
-          mediaCids: [],
+          content: "Hello #VCO! This is a decentralized post synced via the protocol. Checking out the new media gallery component. #web3 #privacy",
+          mediaCids: [mockCid("media-1"), mockCid("media-2"), mockCid("media-3")],
           timestampMs: BigInt(Date.now() - 3600000),
           tags: ["vco", "web3", "privacy"]
         }

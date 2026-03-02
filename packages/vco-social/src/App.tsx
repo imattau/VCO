@@ -18,7 +18,9 @@ import { MessageView } from './features/messaging/MessageView';
 import { NotificationView } from './features/notifications/NotificationView';
 import { ProfileView } from './features/profile/ProfileView';
 import { MobileNav } from './components/MobileNav';
+import { SearchOverlay } from './features/search/SearchOverlay';
 import { NavItem } from '@vco/vco-ui';
+import { ToastProvider } from './components/ToastProvider';
 
 export type SocialTab = 'feed' | 'messaging' | 'notifications' | 'profile';
 
@@ -90,14 +92,7 @@ function MainContent() {
          {/* Top Header Strip */}
          <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 md:px-8 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-10">
           <div className="flex items-center gap-4 flex-1">
-             <div className="relative max-w-md w-full hidden md:block">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 w-4 h-4" />
-                <input 
-                  type="text" 
-                  placeholder="Search social swarm..." 
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-full py-1.5 pl-10 pr-4 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-inner"
-                />
-             </div>
+             <SearchOverlay />
              {/* Mobile Logo */}
              <div className="md:hidden flex items-center gap-3">
                <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-500/20">
@@ -135,9 +130,11 @@ function MainContent() {
 
 function App() {
   return (
-    <SocialProvider>
-       <MainContent />
-    </SocialProvider>
+    <ToastProvider>
+      <SocialProvider>
+         <MainContent />
+      </SocialProvider>
+    </ToastProvider>
   );
 }
 

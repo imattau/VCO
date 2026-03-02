@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useSocial } from '../SocialContext';
+import { useToast } from '../../components/ToastProvider';
 import { Send, Image, Smile, MapPin, Hash, Loader2 } from 'lucide-react';
 
 export function ComposePost() {
   const { createPost } = useSocial();
+  const { toast } = useToast();
   const [content, setContent] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
 
@@ -15,6 +17,7 @@ export function ComposePost() {
     await createPost(content);
     setContent('');
     setIsPublishing(false);
+    toast("Post published to the decentralized swarm", "success");
   };
 
   return (
@@ -57,7 +60,7 @@ export function ComposePost() {
 
 function ToolButton({ icon, label }: { icon: React.ReactNode, label: string }) {
   return (
-    <button title={label} className="p-2.5 text-zinc-500 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all">
+    <button title={label} aria-label={label} className="p-2.5 text-zinc-500 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all">
       {icon}
     </button>
   );

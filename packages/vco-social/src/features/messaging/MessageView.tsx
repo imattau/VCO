@@ -59,7 +59,7 @@ export function MessageView() {
              {/* Chat Header */}
              <header className="h-16 md:h-20 border-b border-zinc-800 px-4 md:px-6 flex items-center justify-between bg-zinc-900/40">
                 <div className="flex items-center gap-3 md:gap-4">
-                   <button onClick={() => setSelectedChannel(null)} className="md:hidden p-2 text-zinc-400 active:scale-90 transition-transform">
+                   <button onClick={() => setSelectedChannel(null)} className="md:hidden p-2 text-zinc-400 active:scale-90 transition-transform" aria-label="Back to conversations">
                       <ArrowLeft size={20} />
                    </button>
                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-black shadow-inner flex-shrink-0">VB</div>
@@ -71,7 +71,7 @@ export function MessageView() {
                       </div>
                    </div>
                 </div>
-                <button className="p-2 text-zinc-500 hover:text-white transition-colors">
+                <button className="p-2 text-zinc-500 hover:text-white transition-colors" aria-label="View group members">
                    <Users size={18} />
                 </button>
              </header>
@@ -98,15 +98,15 @@ export function MessageView() {
              <div className="p-4 md:p-6 border-t border-zinc-800 bg-zinc-900/40">
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-[2rem] p-3 md:p-4 flex items-center gap-2 md:gap-4 shadow-xl">
                    <div className="flex items-center gap-0.5 md:gap-1">
-                      <ToolButton icon={<Image size={18} />} />
-                      <ToolButton icon={<Smile size={18} />} />
+                      <ToolButton icon={<Image size={18} />} label="Add Image" />
+                      <ToolButton icon={<Smile size={18} />} label="Add Emoji" />
                    </div>
                    <input 
                      type="text" 
                      placeholder="Type a secure message..."
                      className="flex-1 bg-transparent border-none text-[11px] md:text-sm font-medium text-white focus:ring-0 placeholder:text-zinc-600"
                    />
-                   <button className="bg-blue-600 p-2 md:p-2.5 rounded-xl md:rounded-2xl text-white shadow-lg shadow-blue-600/20 active:translate-y-0.5 transition-all flex-shrink-0">
+                   <button className="bg-blue-600 p-2 md:p-2.5 rounded-xl md:rounded-2xl text-white shadow-lg shadow-blue-600/20 active:translate-y-0.5 transition-all flex-shrink-0" aria-label="Send secure message">
                       <Send size={16} />
                    </button>
                 </div>
@@ -169,9 +169,9 @@ function MessageBubble({ content, isOwn, timestamp }: any) {
   );
 }
 
-function ToolButton({ icon }: any) {
+function ToolButton({ icon, label }: any) {
   return (
-    <button className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-xl transition-all">
+    <button aria-label={label} title={label} className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-xl transition-all">
       {icon}
     </button>
   );

@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSocial } from '../SocialContext';
 import { PostCard } from './PostCard';
 import { ComposePost } from './ComposePost';
+import { ThreadView } from './ThreadView';
 import { SwatchBook } from 'lucide-react';
+import { PostData } from '@vco/vco-schemas';
 
 export function FeedView() {
   const { feed, isLoading } = useSocial();
+  const [activeThread, setActiveThread] = useState<{ data: PostData; cid: Uint8Array } | null>(null);
 
   if (isLoading) {
     return (
@@ -27,9 +30,21 @@ export function FeedView() {
 
       <div className="space-y-8 pb-20">
         {feed.map((item) => (
-          <PostCard key={item.cid.toString()} data={item.data} cid={item.cid} />
+          <PostCard 
+            key={item.cid.toString()} 
+            data={item.data} 
+            cid={item.cid} 
+            onOpenThread={() => setActiveThread(item)}
+          />
         ))}
       </div>
+
+      {activeThread && (
+        <ThreadView 
+          parentPost={activeThread} 
+          onClose={() => setActiveThread(null)} 
+        />
+      )}
     </div>
   );
 }
