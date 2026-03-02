@@ -22,6 +22,15 @@ Transition `vco-social` from a mocked prototype to a real decentralized applicat
 - [x] Task 3.2: Finalize Rust-side process management in `main.rs` (enabled shell plugin).
 - [x] Task 3.3: Implement "Network Status" indicators linked to `NodeClient.isReady`.
 
+## Phase 4: Local Persistence Layer [DONE]
+- [x] Task 4.1: Implement `VcoStore.ts` using **IndexedDB** to persist all received envelopes.
+- [x] Task 4.2: Update `SocialContext` to hydrate `feed` and `conversations` from `VcoStore` on startup.
+- [x] Task 4.3: Implement "Profile Sync": Save the user's own profile manifest to the local store and load it on bootstrap.
+
+## Phase 5: Cross-Platform Hardening (CURRENT)
+- [ ] Task 5.1: Replace bash script wrapper with a true standalone `vco-node` binary for Linux/Android.
+- [ ] Task 5.2: Implement `NetworkService.ts` to handle real DHT peer lookups via the sidecar.
+
 ## Verification [DONE]
 - [x] Workspace build and typecheck passing.
 - [x] Sidecar configuration and permissions established.

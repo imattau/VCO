@@ -3,6 +3,8 @@ import { blake3 } from "@noble/hashes/blake3";
 import { varint } from "multiformats";
 import { CryptoError } from "./errors.js";
 
+export { blake3 };
+
 /**
  * Common type for byte arrays (Uint8Array).
  */

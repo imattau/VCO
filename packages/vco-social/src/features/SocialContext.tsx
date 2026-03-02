@@ -4,7 +4,8 @@ import {
   PostData, 
   DirectMessageData, 
   NotificationData,
-  NotificationType
+  NotificationType,
+  ReportReason
 } from '@vco/vco-schemas';
 import { MockSocialService, socialBlobStore } from '@/lib/MockSocialService';
 import { FeedService } from '@/lib/FeedService';
@@ -13,9 +14,11 @@ import { ProfileService } from '@/lib/ProfileService';
 import { NotificationService } from '@/lib/NotificationService';
 import { useToast } from '@/components/ToastProvider';
 import { mockCid, toHex } from '@vco/vco-testing';
+import { blake3 } from '@vco/vco-crypto';
 import { SocialTab } from '@/App';
 import { KeyringService, IdentityKeys } from '@/lib/KeyringService';
 import { NodeClient } from '@/lib/NodeClient';
+import { vcoStore } from '@/lib/VcoStore';
 
 interface MessageWithMetadata {
   cid: Uint8Array;
@@ -93,47 +96,72 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     const bootstrap = async () => {
       setIsLoading(true);
       
-      // 1. Load or Generate Identity
-      let id = KeyringService.loadIdentity();
-      if (!id) {
-        id = KeyringService.generateAndStoreIdentity();
-        toast("New cryptographic identity established", "success");
-      }
-      setIdentity(id);
-
-      // 2. Load Profile (Simulation: in real app, we'd fetch the latest manifest from DHT)
-      const myProfile = MockSocialService.getMockProfile();
-      myProfile.displayName = id.creatorIdHex.substring(0, 12);
-      myProfile.encryptionPubkey = id.encryptionPublicKey;
-      setProfile(myProfile);
-
-      // 3. Connect to libp2p node
-      const client = NodeClient.getInstance();
-      await client.connect();
-      
-      // 4. Subscribe to global social channel
-      client.subscribe(GLOBAL_SOCIAL_CHANNEL);
-
-      // 5. Listen for real-time events
-      const cleanup = client.onEvent((event) => {
-        if (event.type === 'envelope') {
-          handleInboundEnvelope(event.envelope, event.channelId);
-        } else if (event.type === 'ready') {
-          setIsNodeReady(true);
-          setPeerId(event.peerId);
-          toast("Connected to VCO swarm", "success");
-        } else if (event.type === 'error') {
-          toast(`Node Error: ${event.message}`, "error");
+      try {
+        // 1. Load or Generate Identity
+        let id = KeyringService.loadIdentity();
+        if (!id) {
+          id = KeyringService.generateAndStoreIdentity();
+          toast("New cryptographic identity established", "success");
         }
-      });
+        setIdentity(id);
 
-      setFeed(MockSocialService.getMockFeed());
-      setIsLoading(false);
+        // 2. Load Profile from Persistent Store
+        let myProfile = await vcoStore.getProfile(id.creatorIdHex);
+        if (!myProfile) {
+          myProfile = MockSocialService.getMockProfile();
+          myProfile.displayName = id.creatorIdHex.substring(0, 12);
+          myProfile.encryptionPubkey = id.encryptionPublicKey;
+          await vcoStore.putProfile(id.creatorIdHex, myProfile);
+        }
+        setProfile(myProfile);
 
-      return () => {
-        cleanup();
-        client.shutdown();
-      };
+        // 3. Load Feed from Persistent Store
+        const storedEnvelopes = await vcoStore.getEnvelopesByChannel(GLOBAL_SOCIAL_CHANNEL);
+        if (storedEnvelopes.length > 0) {
+          const { decodePost } = await import('@vco/vco-schemas');
+          const items: FeedItem[] = storedEnvelopes.map(e => {
+            const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
+            return {
+              cid: Uint8Array.from(atob(e.cid), c => c.charCodeAt(0)),
+              data: decodePost(bytes),
+              authorProfile: myProfile! // For simplicity, in real app resolve from profiles store
+            };
+          });
+          setFeed(items);
+        } else {
+          // Seed with mock feed if empty
+          setFeed(MockSocialService.getMockFeed());
+        }
+
+        // 4. Connect to libp2p node
+        const client = NodeClient.getInstance();
+        await client.connect();
+        
+        // 5. Subscribe to global social channel
+        client.subscribe(GLOBAL_SOCIAL_CHANNEL);
+
+        // 6. Listen for real-time events
+        const cleanup = client.onEvent((event) => {
+          if (event.type === 'envelope') {
+            handleInboundEnvelope(event.envelope, event.channelId);
+          } else if (event.type === 'ready') {
+            setIsNodeReady(true);
+            setPeerId(event.peerId);
+            toast("Connected to VCO swarm", "success");
+          } else if (event.type === 'error') {
+            toast(`Node Error: ${event.message}`, "error");
+          }
+        });
+
+        return () => {
+          cleanup();
+          client.shutdown();
+        };
+      } catch (err) {
+        console.error("Bootstrap failed:", err);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     bootstrap();
@@ -142,6 +170,16 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const handleInboundEnvelope = async (base64: string, channelId: string) => {
     try {
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const hash = blake3(bytes);
+      const cidBase64 = btoa(String.fromCharCode(...hash));
+
+      // Persist to IndexedDB
+      await vcoStore.putEnvelope({
+        cid: cidBase64,
+        channelId,
+        payload: base64,
+        timestamp: Date.now()
+      });
       
       // Determine if it's a DM channel
       if (channelId.startsWith("vco://channels/dm/") && identity) {
@@ -157,14 +195,13 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         );
 
         const msg: MessageWithMetadata = {
-          cid: mockCid(`inbound-dm-${Date.now()}`),
+          cid: hash,
           data: dmData,
           payload: decryptedPayload,
           isOwn: false
         };
 
         setConversations(prev => {
-          // Find peer by senderCid (mocked as Bob for now)
           const peerName = "Verifiable Bob"; 
           const existing = prev.find(c => c.peerProfile.displayName === peerName);
           
@@ -178,66 +215,43 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         });
 
         toast("New Encrypted Message Received", "info");
-      } else {
-        // Handle Posts on global channel
-        console.log(`Received social object on ${channelId}`);
+      } else if (channelId === GLOBAL_SOCIAL_CHANNEL) {
+        const { decodePost } = await import('@vco/vco-schemas');
+        const postData = decodePost(bytes);
+        
+        setFeed(prev => [{ 
+          cid: hash, 
+          data: postData, 
+          authorProfile: MockSocialService.getMockFeed()[0].authorProfile // Simulating peer resolution
+        }, ...prev]);
       }
     } catch (err) {
       console.error("Failed to process inbound envelope:", err);
     }
   };
 
-  // Filtered Feed Calculation
-  const filteredFeed = feed.filter(item => {
-    const hexCid = toHex(item.cid);
-    if (tombstones.has(hexCid)) return false;
-
-    if (!filter || filter.type === 'all') return true;
-    if (filter.type === 'tag') {
-      return (item.data.tags || []).includes(filter.value?.replace('#', '').toLowerCase() || '');
-    }
-    if (filter.type === 'peer') {
-      return item.authorProfile.displayName.toLowerCase() === filter.value?.toLowerCase();
-    }
-    return true;
-  });
-
-  // Simulated Real-time Swarm Loop
-  useEffect(() => {
-    if (isLoading || !profile) return;
-
-    const interval = setInterval(() => {
-      // 10% chance of a mock notification every 10 seconds
-      if (Math.random() > 0.9) {
-        const notif = NotificationService.generateNotification(
-          NotificationType.REACTION,
-          mockCid(`actor-${Math.random()}`),
-          new Uint8Array(32),
-          "liked your recent post"
-        );
-        setNotifications(prev => [notif, ...prev]);
-        toast(`New Swarm Alert: Someone ${notif.summary}`, "info");
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [isLoading, profile, toast]);
-
   const createPost = async (content: string, mediaFiles?: File[]) => {
     if (!profile || !identity) return;
     
     const encoded = await FeedService.publishPost(content, mediaFiles);
+    const base64 = btoa(String.fromCharCode(...encoded));
     
-    // In real app, we'd sign the envelope with identity.signingPrivateKey here.
-    // For now, we publish the payload to the sidecar.
     const client = NodeClient.getInstance();
-    client.publish(GLOBAL_SOCIAL_CHANNEL, btoa(String.fromCharCode(...encoded)));
+    client.publish(GLOBAL_SOCIAL_CHANNEL, base64);
 
-    const mockCidStr = `post-${Math.random().toString(36).slice(2, 11)}`;
-    const cid = mockCid(mockCidStr);
+    const hash = blake3(encoded);
+    const cidBase64 = btoa(String.fromCharCode(...hash));
+
+    // Persist to local store
+    await vcoStore.putEnvelope({
+      cid: cidBase64,
+      channelId: GLOBAL_SOCIAL_CHANNEL,
+      payload: base64,
+      timestamp: Date.now()
+    });
+
     const postData = await import('@vco/vco-schemas').then(m => m.decodePost(encoded));
-    
-    setFeed([{ cid, data: postData, authorProfile: profile }, ...feed]);
+    setFeed(prev => [{ cid: hash, data: postData, authorProfile: profile }, ...prev]);
     toast("Post broadcast to swarm", "success");
   };
 
@@ -270,12 +284,25 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     };
 
     const encoded = await import('@vco/vco-schemas').then(m => m.encodeDirectMessage(msgData));
+    const base64 = btoa(String.fromCharCode(...encoded));
+    const channelId = `vco://channels/dm/${toHex(recipientProfile.encryptionPubkey)}`;
+    
     const client = NodeClient.getInstance();
-    // Publish to a specific DM channel derived from recipient's pubkey
-    client.publish(`vco://channels/dm/${toHex(recipientProfile.encryptionPubkey)}`, btoa(String.fromCharCode(...encoded)));
+    client.publish(channelId, base64);
+
+    const hash = blake3(encoded);
+    const cidBase64 = btoa(String.fromCharCode(...hash));
+
+    // Persist DM outbox
+    await vcoStore.putEnvelope({
+      cid: cidBase64,
+      channelId,
+      payload: base64,
+      timestamp: Date.now()
+    });
 
     const msg: MessageWithMetadata = {
-      cid: mockCid(`msg-${Math.random()}`),
+      cid: hash,
       data: msgData,
       payload: { content, mediaCids },
       isOwn: true
@@ -301,12 +328,28 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProfile = async (data: Partial<ProfileData>) => {
-    if (profile) {
+    if (profile && identity) {
       const updated = { ...profile, ...data };
       setProfile(updated);
-      toast("Profile manifest updated", "success");
+      await vcoStore.putProfile(identity.creatorIdHex, updated);
+      toast("Profile manifest updated locally", "success");
     }
   };
+
+  // Filtered Feed Calculation
+  const filteredFeed = feed.filter(item => {
+    const hexCid = toHex(item.cid);
+    if (tombstones.has(hexCid)) return false;
+
+    if (!filter || filter.type === 'all') return true;
+    if (filter.type === 'tag') {
+      return (item.data.tags || []).includes(filter.value?.replace('#', '').toLowerCase() || '');
+    }
+    if (filter.type === 'peer') {
+      return item.authorProfile.displayName.toLowerCase() === filter.value?.toLowerCase();
+    }
+    return true;
+  });
 
   const markNotificationAsRead = (cid: Uint8Array) => {
     setNotifications(prev => prev.filter(n => n.targetCid !== cid));
@@ -331,7 +374,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   };
 
   const publishReport = async (cid: Uint8Array, reason: number) => {
-    // In real app, encode Report manifest and publish to moderation channel
     console.log(`Report published for ${toHex(cid)} with reason code: ${reason}`);
   };
 
