@@ -7,6 +7,24 @@
   ],
   "permissions": [
     "core:default",
-    "core:event:default"
+    "shell:default",
+    "log:default",
+    "event:default",
+    {
+      "identifier": "event:allow-emit",
+      "allow": [
+        {
+          "event": "vco-node-event"
+        }
+      ]
+    },
+    {
+      "identifier": "event:allow-listen",
+      "allow": [
+        {
+          "event": "vco-node-event"
+        }
+      ]
+    }
   ]
 }

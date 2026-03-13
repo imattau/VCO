@@ -47,10 +47,22 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             let handle = app.handle().clone();
+            let (tx_ready, mut rx_ready) = tokio::sync::mpsc::channel(1);
             
-            // Start libp2p node in a dedicated tokio task
-            let tx = tauri::async_runtime::block_on(async move {
-                vco_node::start_node(handle).await.expect("failed to start libp2p node")
+            // Start libp2p node in a dedicated async task
+            tauri::async_runtime::spawn(async move {
+                match vco_node::start_node(handle).await {
+                    Ok(tx) => {
+                        let _ = tx_ready.send(tx).await;
+                    }
+                    Err(e) => {
+                        eprintln!("CRITICAL: Failed to start libp2p node: {:?}", e);
+                    }
+                }
+            });
+
+            let tx = tauri::async_runtime::block_on(async {
+                rx_ready.recv().await.expect("libp2p node failed to initialize")
             });
             app.manage(VcoNodeState { swarm_tx: tx });
 

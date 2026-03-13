@@ -21,6 +21,7 @@ struct VcoBehaviour {
     identify: identify::Behaviour,
     kad: kad::Behaviour<MemoryStore>,
     gossipsub: gossipsub::Behaviour,
+    #[cfg(not(mobile))]
     mdns: mdns::tokio::Behaviour,
 }
 
@@ -122,12 +123,19 @@ pub async fn start_node(app_handle: AppHandle) -> Result<mpsc::UnboundedSender<N
             )
             .expect("Valid gossipsub config");
             
+            #[cfg(not(mobile))]
             let mdns = mdns::tokio::Behaviour::new(
                 mdns::Config::default(),
                 local_peer_id,
             ).expect("Valid mdns config");
             
-            VcoBehaviour { identify, kad, gossipsub, mdns }
+            VcoBehaviour { 
+                identify, 
+                kad, 
+                gossipsub, 
+                #[cfg(not(mobile))]
+                mdns 
+            }
         })?
         .with_swarm_config(|c| c
             .with_idle_connection_timeout(Duration::from_secs(60))
@@ -149,11 +157,13 @@ pub async fn start_node(app_handle: AppHandle) -> Result<mpsc::UnboundedSender<N
                             multiaddrs: vec![address.to_string()],
                         });
                     }
+                    #[cfg(not(mobile))]
                     SwarmEvent::Behaviour(VcoBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                         for (peer_id, multiaddr) in list {
                             swarm.behaviour_mut().kad.add_address(&peer_id, multiaddr);
                         }
                     }
+                    #[cfg(not(mobile))]
                     SwarmEvent::Behaviour(VcoBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
                         for (peer_id, multiaddr) in list {
                             swarm.behaviour_mut().kad.remove_address(&peer_id, &multiaddr);
