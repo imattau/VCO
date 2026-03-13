@@ -1,13 +1,14 @@
 import { toHex } from "@vco/vco-testing";
 
 const DB_NAME = "vco_social_db";
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Bumped for migrations
 
 export interface StoredEnvelope {
   cid: string;
   channelId: string;
   payload: string; // Base64 or JSON
   timestamp: number;
+  syncStatus?: 'synced' | 'pending' | 'failed'; // Added in v2
 }
 
 export class VcoStore {
@@ -21,25 +22,54 @@ export class VcoStore {
 
       request.onupgradeneeded = (event) => {
         const db = request.result;
-        // Store for all verifiable objects (envelopes)
-        if (!db.objectStoreNames.contains("envelopes")) {
-          const store = db.createObjectStore("envelopes", { keyPath: "cid" });
-          store.createIndex("by_channel", "channelId", { unique: false });
-          store.createIndex("by_timestamp", "timestamp", { unique: false });
+        const oldVersion = event.oldVersion;
+        const newVersion = event.newVersion;
+
+        console.log(`VCO Store: Migrating from v${oldVersion} to v${newVersion}`);
+
+        // Version 1: Initial schema
+        if (oldVersion < 1) {
+          // Store for all verifiable objects (envelopes)
+          if (!db.objectStoreNames.contains("envelopes")) {
+            const store = db.createObjectStore("envelopes", { keyPath: "cid" });
+            store.createIndex("by_channel", "channelId", { unique: false });
+            store.createIndex("by_timestamp", "timestamp", { unique: false });
+          }
+          // Store for peer profiles
+          if (!db.objectStoreNames.contains("profiles")) {
+            db.createObjectStore("profiles", { keyPath: "creatorId" });
+          }
+          // Store for media blobs
+          if (!db.objectStoreNames.contains("blobs")) {
+            db.createObjectStore("blobs", { keyPath: "cid" });
+          }
+          // Store for notifications
+          if (!db.objectStoreNames.contains("notifications")) {
+            const store = db.createObjectStore("notifications", { keyPath: "id", autoIncrement: true });
+            store.createIndex("by_timestamp", "timestampMs", { unique: false });
+          }
         }
-        // Store for peer profiles
-        if (!db.objectStoreNames.contains("profiles")) {
-          db.createObjectStore("profiles", { keyPath: "creatorId" });
+
+        // Version 2: Added Contacts store and SyncStatus index
+        if (oldVersion < 2) {
+          if (!db.objectStoreNames.contains("contacts")) {
+            const store = db.createObjectStore("contacts", { keyPath: "creatorIdHex" });
+            store.createIndex("by_name", "displayName", { unique: false });
+            store.createIndex("by_follow_status", "isFollowing", { unique: false });
+          }
+
+          // Add sync index to existing envelopes store
+          const tx = request.transaction;
+          if (tx) {
+            const envelopeStore = tx.objectStore("envelopes");
+            if (!envelopeStore.indexNames.contains("by_sync")) {
+              envelopeStore.createIndex("by_sync", "syncStatus", { unique: false });
+            }
+          }
         }
-        // Store for media blobs
-        if (!db.objectStoreNames.contains("blobs")) {
-          db.createObjectStore("blobs", { keyPath: "cid" });
-        }
-        // Store for notifications
-        if (!db.objectStoreNames.contains("notifications")) {
-          const store = db.createObjectStore("notifications", { keyPath: "id", autoIncrement: true });
-          store.createIndex("by_timestamp", "timestampMs", { unique: false });
-        }
+
+        // Future migrations go here...
+        // if (oldVersion < 3) { ... }
       };
 
       request.onsuccess = () => {
@@ -59,7 +89,10 @@ export class VcoStore {
     return new Promise((resolve, reject) => {
       const tx = db.transaction("envelopes", "readwrite");
       const store = tx.objectStore("envelopes");
-      const request = store.put(envelope);
+      const request = store.put({
+        syncStatus: 'synced', // Default to synced for inbound, can be overridden
+        ...envelope
+      });
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
@@ -78,7 +111,6 @@ export class VcoStore {
 
       request.onsuccess = () => {
         const results = request.result as StoredEnvelope[];
-        // Sort descending by timestamp
         resolve(results.sort((a, b) => b.timestamp - a.timestamp));
       };
       request.onerror = () => reject(request.error);
@@ -222,11 +254,11 @@ export class VcoStore {
   }
 
   /**
-   * Wipes all local data (security/reset utility).
+   * Wipes all local data.
    */
   async clearAll(): Promise<void> {
     const db = await this.getDB();
-    const stores = ["envelopes", "profiles"];
+    const stores = Array.from(db.objectStoreNames);
     const tx = db.transaction(stores, "readwrite");
     stores.forEach(s => tx.objectStore(s).clear());
     return new Promise((resolve) => {

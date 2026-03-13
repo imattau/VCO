@@ -18,6 +18,13 @@ VCO Social follows a dual-layer architecture:
 1.  **Networking Core (Rust):** A standalone libp2p node that handles identity persistence, peer discovery, and swarm-based message routing.
 2.  **Application Layer (React/TypeScript):** A responsive UI that communicates with the networking core via Tauri's IPC mechanism.
 
+## 🔐 Security Model
+VCO Social implements a decentralized "Web-of-Trust" security model:
+- **Identity Encryption:** All private keys are encrypted at rest in the browser's storage using **AES-GCM (256-bit)**. The encryption key is derived from your passphrase via **PBKDF2** (100,000 iterations).
+- **Verifiable Objects:** Every post, reply, and profile update is wrapped in a cryptographic **Envelope**.
+- **Integrity:** All objects are identified by their **Blake3** CID. The UI verifies that the CID matches the content and that the signature is valid before displaying any data.
+- **E2EE Messaging:** Direct messages are encrypted using **X25519** (Diffie-Hellman key exchange) and **AES-GCM**.
+
 ## Development Setup
 
 ### Prerequisites
@@ -66,7 +73,7 @@ npm run tauri android build
 If you encounter "Failed to request" or "Connection refused" errors on Android:
 - **Emulator:** The Android emulator uses `10.0.2.2` to refer to your PC's localhost. Ensure the `devUrl` in `tauri.conf.json` is accessible.
 - **Physical Device:** Ensure your phone and PC are on the same Wi-Fi network. You must replace `localhost` in `tauri.conf.json`'s `devUrl` with your PC's local IP address (e.g., `http://192.168.1.50:5173`).
-- **Firewall:** Ensure your PC's firewall allows inbound traffic on port `5173`.
+- **Firewall:** Ensure your PC's firewall allows inbound traffic on port `5173`. Run `sudo ufw allow 5173/tcp` if necessary.
 
 *Note: The project's CSP is pre-configured to allow connections to `10.0.2.2` and common local network ranges.*
 
@@ -78,6 +85,15 @@ To ensure code quality and type safety:
 # Run TypeScript type-checking
 npm run typecheck
 ```
+
+## 🧪 Integration Testing
+To run the decentralized networking integration tests, invoke the manual test runner:
+```bash
+# In the browser console / dev environment
+import { runNetworkingIntegrationTest } from './src/__tests__/Networking.test';
+await runNetworkingIntegrationTest();
+```
+The test verifies swarm connectivity, pub/sub behavior, and message loopback via the decentralized network.
 
 ## Key Networking Protocols
 
@@ -92,13 +108,6 @@ All social objects (Posts, Profiles, Replies) are wrapped in a **VCO Envelope** 
 - **Cryptographic Signature:** Verifies the author's identity.
 - **CID (Content IDentifier):** Ensures data integrity through BLAKE3 hashing.
 - **Proof of Work (PoW):** Prevents spam and resource exhaustion on the swarm.
-
-## Testing & Quality Assurance
-
-VCO Social leverages standard TypeScript and Rust tooling for verification:
-- **Rust Node:** Run `cargo test` in the `src-tauri` directory.
-- **Frontend:** Use `npm run typecheck` for static analysis.
-- **E2EE:** Verification scripts are available in the `@vco/vco-testing` workspace package.
 
 ---
 

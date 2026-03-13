@@ -26,13 +26,11 @@ export function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
         icon={<MessageSquare size={24} />} 
         active={activeTab === 'messaging'} 
         onClick={() => onTabChange('messaging')} 
-        badge={3}
       />
       <MobileNavItem 
         icon={<Bell size={24} />} 
         active={activeTab === 'notifications'} 
         onClick={() => onTabChange('notifications')} 
-        badge={5}
       />
       <MobileNavItem 
         icon={<Users size={24} />} 

@@ -98,21 +98,18 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
       <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
         <ActionButton 
           icon={<MessageSquare size={18} />} 
-          count={12} 
           color="group-hover:text-blue-500" 
           label="Reply to post" 
           onClick={(e) => { e.stopPropagation(); onOpenThread?.(); }}
         />
         <ActionButton 
           icon={<Repeat2 size={18} />} 
-          count={5} 
           color="group-hover:text-emerald-500" 
           label="Repost" 
           onClick={(e) => { e.stopPropagation(); repost(cid); }}
         />
         <ActionButton 
           icon={<Heart size={18} />} 
-          count={42} 
           color="group-hover:text-rose-500" 
           label="Like post" 
           onClick={(e) => { e.stopPropagation(); reactToPost(cid); }}

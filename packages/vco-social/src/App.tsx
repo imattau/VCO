@@ -18,6 +18,7 @@ import { MessageView } from './features/messaging/MessageView';
 import { NotificationView } from './features/notifications/NotificationView';
 import { ProfileView } from './features/profile/ProfileView';
 import { SettingsView } from './features/settings/SettingsView';
+import { AuthView } from './features/auth/AuthView';
 import { MobileNav } from './components/MobileNav';
 import { SearchOverlay } from './features/search/SearchOverlay';
 import { NavItem } from '@vco/vco-ui';
@@ -28,14 +29,37 @@ import { SwarmPulse } from './components/SwarmPulse';
 export type SocialTab = 'feed' | 'messaging' | 'notifications' | 'profile' | 'settings';
 
 function MainContent() {
-  const { profile, isLoading, activeTab, setActiveTab, isNodeReady, peerId, notifications, conversations } = useSocial();
+  const { 
+    profile, 
+    identity, 
+    isLoading, 
+    activeTab, 
+    setActiveTab, 
+    isNodeReady, 
+    peerId, 
+    notifications, 
+    conversations,
+    unlock,
+    createIdentity,
+    hasExistingIdentity
+  } = useSocial();
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center animate-pulse">
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center animate-pulse">
         <Shield className="text-zinc-800 w-16 h-16 mb-4" />
-        <p className="text-zinc-600 font-black uppercase tracking-widest text-xs tracking-tighter italic uppercase">Initializing Secure Identity...</p>
+        <p className="text-zinc-600 font-black uppercase tracking-widest text-[10px] italic">Accessing Secure Vault...</p>
       </div>
+    );
+  }
+
+  if (!identity) {
+    return (
+      <AuthView 
+        onUnlock={unlock} 
+        onCreate={createIdentity} 
+        hasExisting={hasExistingIdentity()} 
+      />
     );
   }
 

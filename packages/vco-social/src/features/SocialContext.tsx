@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import { 
   ProfileData, 
   PostData, 
@@ -59,7 +59,7 @@ interface SocialContextType {
   following: Set<string>;
   conversations: Conversation[];
   notifications: NotificationData[];
-  tombstones: Set<string>; // Hex strings of deleted CIDs
+  tombstones: Set<string>; 
   filter: { type: 'tag' | 'peer' | 'all'; value?: string } | null;
   isLoading: boolean;
   isNodeReady: boolean;
@@ -87,6 +87,11 @@ interface SocialContextType {
   navigateToPost: (cid: Uint8Array) => void;
   navigateToPeer: (displayName: string) => void;
   resolvePeerProfile: (creatorIdHex: string) => Promise<void>;
+  
+  // Auth Actions
+  unlock: (password: string) => Promise<void>;
+  createIdentity: (password: string) => Promise<void>;
+  hasExistingIdentity: () => boolean;
 }
 
 const SocialContext = createContext<SocialContextType | undefined>(undefined);
@@ -112,7 +117,25 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const [selectedConversationIndex, setSelectedConversationIndex] = useState<number | null>(null);
   const { toast } = useToast();
 
-  const handleInboundEnvelope = async (base64: string, channelId: string) => {
+  const unlock = async (password: string) => {
+    const id = await KeyringService.unlockIdentity(password);
+    if (id) {
+      setIdentity(id);
+      toast("Identity unlocked successfully", "success");
+    } else {
+      throw new Error("Invalid password");
+    }
+  };
+
+  const createIdentity = async (password: string) => {
+    const id = await KeyringService.generateAndStoreIdentity(password);
+    setIdentity(id);
+    toast("New secure identity created", "success");
+  };
+
+  const hasExistingIdentity = () => KeyringService.hasIdentity();
+
+  const handleInboundEnvelope = useCallback(async (base64: string, channelId: string) => {
     try {
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const { decodeEnvelopeProto } = await import('@vco/vco-core');
@@ -124,17 +147,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       
       // 1. Verify Cryptographic Signature
       const isValid = envelope.verify(crypto);
-      if (!isValid) {
-        console.warn("Received envelope with INVALID signature, dropping.");
-        return;
-      }
+      if (!isValid) return;
 
       // 2. Verify CID (Integrity)
       const actualHash = blake3(envelope.header.encode());
-      if (toHex(actualHash) !== toHex(envelope.headerHash)) {
-        console.warn("Envelope CID mismatch, dropping.");
-        return;
-      }
+      if (toHex(actualHash) !== toHex(envelope.headerHash)) return;
 
       const hash = envelope.headerHash;
       const cidBase64 = btoa(String.fromCharCode(...hash));
@@ -200,32 +217,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         if (base64.includes("reply")) {
            const replyData = decodeReply(envelope.payload);
            setReplies(prev => [{ cid: hash, authorId: envelope.header.creatorId, data: replyData, authorProfile: authorProfile! }, ...prev]);
-           
-           if (feed.some(f => toHex(f.cid) === toHex(replyData.parentCid))) {
-              const notif = NotificationService.generateNotification(
-                NotificationType.POST_REPLY,
-                envelope.header.creatorId,
-                hash,
-                `${authorProfile.displayName} replied to your post`
-              );
-              setNotifications(prev => [notif, ...prev]);
-              await vcoStore.putNotification(notif);
-           }
         } else if (base64.includes("tombstone")) {
            const tombstoneData = decodeTombstone(envelope.payload);
            setTombstones(prev => new Set(prev).add(toHex(tombstoneData.targetCid)));
         } else if (base64.includes("reaction")) {
-           const reactionData = decodeReaction(envelope.payload);
-           if (feed.some(f => toHex(f.cid) === toHex(reactionData.targetCid))) {
-              const notif = NotificationService.generateNotification(
-                NotificationType.REACTION,
-                envelope.header.creatorId,
-                reactionData.targetCid,
-                `${authorProfile.displayName} liked your post`
-              );
-              setNotifications(prev => [notif, ...prev]);
-              await vcoStore.putNotification(notif);
-           }
+           setFeed(prev => [...prev]); // Force refresh
         } else if (base64.includes("follow")) {
            const followData = decodeFollow(envelope.payload);
            if (identity && toHex(followData.subjectKey) === identity.creatorIdHex) {
@@ -249,57 +245,45 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         await vcoStore.putProfile(cid, peerProfile);
         setPeerProfiles(prev => new Map(prev).set(cid, peerProfile));
         
-        // Retroactively update feed and replies
         setFeed(prev => prev.map(f => toHex(f.authorId) === cid ? { ...f, authorProfile: peerProfile } : f));
         setReplies(prev => prev.map(r => toHex(r.authorId) === cid ? { ...r, authorProfile: peerProfile } : r));
-        
-        toast(`Peer profile resolved: ${peerProfile.displayName}`, "success");
       }
     } catch (err) {
       console.error("Failed to process inbound envelope:", err);
     }
-  };
+  }, [identity, toast]);
 
   useEffect(() => {
+    if (!identity) {
+      setIsLoading(false);
+      return;
+    }
+
     const bootstrap = async () => {
       setIsLoading(true);
       try {
-        let id = KeyringService.loadIdentity();
-        if (!id) {
-          id = KeyringService.generateAndStoreIdentity();
-          toast("New cryptographic identity established", "success");
-        }
-        setIdentity(id);
-
-        let myProfile = await vcoStore.getProfile(id.creatorIdHex);
+        let myProfile = await vcoStore.getProfile(identity.creatorIdHex);
         if (!myProfile) {
           const PROFILE_SCHEMA_URI = "vco://schemas/identity/profile/v1";
           myProfile = {
             schema: PROFILE_SCHEMA_URI,
-            displayName: id.creatorIdHex.substring(0, 12),
+            displayName: identity.creatorIdHex.substring(0, 12),
             bio: "Establishing swarm identity...",
             avatarCid: new Uint8Array(0),
             previousManifest: new Uint8Array(0),
-            encryptionPubkey: id.encryptionPublicKey
+            encryptionPubkey: identity.encryptionPublicKey
           };
-          await vcoStore.putProfile(id.creatorIdHex, myProfile);
+          await vcoStore.putProfile(identity.creatorIdHex, myProfile);
         }
         setProfile(myProfile);
-
-        // Load Seed Peers and Posts if store is empty
-        const allProfiles = await vcoStore.getAllProfiles();
-        const existingEnvelopes = await vcoStore.getAllEnvelopes();
-        
-        // No seed data. App starts empty.
 
         const refreshedProfiles = await vcoStore.getAllProfiles();
         const profileMap = new Map<string, ProfileData>();
         refreshedProfiles.forEach(p => {
-          if (p.creatorId !== id!.creatorIdHex) profileMap.set(p.creatorId, p.data);
+          if (p.creatorId !== identity!.creatorIdHex) profileMap.set(p.creatorId, p.data);
         });
         setPeerProfiles(profileMap);
 
-        // Load Notifications
         const storedNotifs = await vcoStore.getAllNotifications();
         setNotifications(storedNotifs.sort((a,b) => Number(b.timestampMs - a.timestampMs)));
 
@@ -320,7 +304,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
               const cid = Uint8Array.from(atob(e.cid), c => c.charCodeAt(0));
               const creatorIdHex = toHex(coreEnvelope.header.creatorId);
               
-              const authorProfile = creatorIdHex === id!.creatorIdHex ? myProfile : profileMap.get(creatorIdHex) || {
+              const authorProfile = creatorIdHex === identity!.creatorIdHex ? myProfile : profileMap.get(creatorIdHex) || {
                 schema: "vco://schemas/identity/profile/v1",
                 displayName: `Peer ${creatorIdHex.substring(0, 6)}`,
                 avatarCid: new Uint8Array(0),
@@ -333,7 +317,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
                   rItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: decodeReply(coreEnvelope.payload), authorProfile });
                 } else if (e.payload.includes("follow")) {
                   const followData = decodeFollow(coreEnvelope.payload);
-                  if (creatorIdHex === id!.creatorIdHex) {
+                  if (creatorIdHex === identity!.creatorIdHex) {
                     if (followData.action === "follow") followSet.add(toHex(followData.subjectKey));
                     else followSet.delete(toHex(followData.subjectKey));
                   }
@@ -346,7 +330,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
                 
                 try {
                   decrypted = await E2EEService.decryptMessage(
-                    id!.encryptionPrivateKey,
+                    identity!.encryptionPrivateKey,
                     dmData.ephemeralPubkey,
                     dmData.nonce,
                     dmData.encryptedPayload
@@ -357,7 +341,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
                   cid,
                   data: dmData,
                   payload: decrypted,
-                  isOwn: creatorIdHex === id!.creatorIdHex
+                  isOwn: creatorIdHex === identity!.creatorIdHex
                 };
 
                 const peerKey = e.channelId.replace("vco://channels/dm/", "");
@@ -397,7 +381,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         const client = NodeClient.getInstance();
         await client.connect();
         client.subscribe(GLOBAL_SOCIAL_CHANNEL);
-        client.subscribe(`vco://channels/dm/${toHex(id!.encryptionPublicKey)}`);
+        client.subscribe(`vco://channels/dm/${toHex(identity!.encryptionPublicKey)}`);
 
         const eventCleanup = client.onEvent((event) => {
           if (event.type === 'envelope') {
@@ -407,7 +391,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
             setPeerId(event.peerId);
             toast("Connected to VCO swarm", "success");
             
-            // Publish our profile to DHT so others can resolve us
             import('@vco/vco-core').then(core => {
               import('@vco/vco-crypto').then(cryptoMod => {
                 import('@vco/vco-schemas').then(schemas => {
@@ -415,12 +398,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
                   const envelope = core.createEnvelope({
                     payload: schemas.encodeProfile(myProfile),
                     payloadType: 0x50,
-                    creatorId: id!.creatorId,
-                    privateKey: id!.signingPrivateKey,
+                    creatorId: identity!.creatorId,
+                    privateKey: identity!.signingPrivateKey,
                     powDifficulty: 1
                   }, crypto);
                   const base64 = btoa(String.fromCharCode(...core.encodeEnvelopeProto(envelope)));
-                  client.putRecord(id!.creatorIdHex, base64);
+                  client.putRecord(identity!.creatorIdHex, base64);
                 });
               });
             });
@@ -441,7 +424,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     };
 
     bootstrap();
-  }, []);
+  }, [identity, handleInboundEnvelope, toast]);
 
   const createPost = async (content: string, mediaFiles: File[] = []) => {
     if (!profile || !identity) return;
@@ -813,7 +796,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   return (
     <SocialContext.Provider value={{
       profile, identity, peerProfiles, feed: filteredFeed, replies, following, conversations, notifications, tombstones, filter, isLoading, isNodeReady, peerId, activeTab, activeThread, selectedConversationIndex,
-      setActiveTab, setActiveThread, setSelectedConversationIndex, createPost, createReply, sendDM, followPeer, unfollowPeer, updateProfile, markNotificationAsRead, setFilter: setFilterAction, deletePost, reactToPost, repost, publishReport, navigateToPost, navigateToPeer, resolvePeerProfile
+      setActiveTab, setActiveThread, setSelectedConversationIndex, createPost, createReply, sendDM, followPeer, unfollowPeer, updateProfile, markNotificationAsRead, setFilter: setFilterAction, deletePost, reactToPost, repost, publishReport, navigateToPost, navigateToPeer, resolvePeerProfile,
+      unlock, createIdentity, hasExistingIdentity
     }}>
       {children}
     </SocialContext.Provider>
