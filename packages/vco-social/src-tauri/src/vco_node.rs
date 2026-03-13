@@ -1,7 +1,7 @@
 use libp2p::{
     gossipsub, identify, kad, tcp,
     swarm::{NetworkBehaviour, SwarmEvent},
-    Multiaddr, PeerId,
+    Multiaddr, PeerId, StreamProtocol,
 };
 #[cfg(not(mobile))]
 use libp2p::mdns;
@@ -97,7 +97,7 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
         .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default)?
         .with_quic()
         .with_behaviour(|key| {
-            let mut kad_config = kad::Config::new();
+            let mut kad_config = kad::Config::new(StreamProtocol::new("/vco/kad/1.0.0"));
             kad_config.set_query_timeout(Duration::from_secs(10));
             let kad = kad::Behaviour::with_config(
                 local_peer_id,
