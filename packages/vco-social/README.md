@@ -62,7 +62,13 @@ npm run tauri android dev
 npm run tauri android build
 ```
 
-*Note: Ensure your Android SDK and NDK paths are correctly configured in your environment. Machine-specific paths are excluded from source control.*
+#### Android Connectivity Troubleshooting
+If you encounter "Failed to request" or "Connection refused" errors on Android:
+- **Emulator:** The Android emulator uses `10.0.2.2` to refer to your PC's localhost. Ensure the `devUrl` in `tauri.conf.json` is accessible.
+- **Physical Device:** Ensure your phone and PC are on the same Wi-Fi network. You must replace `localhost` in `tauri.conf.json`'s `devUrl` with your PC's local IP address (e.g., `http://192.168.1.50:5173`).
+- **Firewall:** Ensure your PC's firewall allows inbound traffic on port `5173`.
+
+*Note: The project's CSP is pre-configured to allow connections to `10.0.2.2` and common local network ranges.*
 
 ### 4. Development Utilities
 
