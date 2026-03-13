@@ -1,5 +1,6 @@
 mod vco_node;
 
+use std::panic;
 use tauri::{Manager, State};
 use vco_node::{NodeCommand, VcoNodeState};
 use base64::{Engine as _, engine::general_purpose};
@@ -78,18 +79,29 @@ async fn put_record(cid: String, payload_base64: String, state: State<'_, VcoNod
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Redirect panics to logcat/stdout
+    panic::set_hook(Box::new(|info| {
+        let location = info.location().map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())).unwrap_or_else(|| "unknown".to_string());
+        let payload = info.payload().downcast_ref::<&str>().cloned()
+            .or_else(|| info.payload().downcast_ref::<String>().map(|s| s.as_str()))
+            .unwrap_or("unknown panic payload");
+        log::error!("VCO PANIC at {}: {}", location, payload);
+        eprintln!("VCO PANIC at {}: {}", location, payload);
+    }));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             let handle = app.handle().clone();
             
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            // Initialize logging early
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Info)
+                    .build(),
+            )?;
+
+            log::info!("VCO: App setup starting...");
 
             // Initialize state with None
             app.manage(VcoNodeState { swarm_tx: tokio::sync::Mutex::new(None) });
@@ -106,6 +118,7 @@ pub fn run() {
                     }
                     Err(e) => {
                         log::error!("VCO CRITICAL: Failed to start libp2p node: {:?}", e);
+                        eprintln!("VCO CRITICAL: Failed to start libp2p node: {:?}", e);
                     }
                 }
             });
