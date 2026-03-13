@@ -6,7 +6,7 @@ authors = ["you"]
 license = ""
 repository = ""
 edition = "2021"
-rust-version = "1.71"
+rust-version = "1.73"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -15,16 +15,16 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.0.0-rc.13", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.0.0-rc.17", features = [] }
-tauri-plugin-log = "2.0.0-rc"
-tauri-plugin-shell = "2.0.0-rc"
-libp2p = { version = "0.54", features = ["tcp", "quic", "noise", "yamux", "kad", "identify", "ping", "macros", "tokio", "gossipsub"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-shell = "2"
+libp2p = { version = "0.54", features = ["tcp", "quic", "noise", "yamux", "kad", "identify", "gossipsub", "macros", "tokio", "mdns"] }
 tokio = { version = "1.37", features = ["full"] }
 futures = "0.3"
 async-trait = "0.1"

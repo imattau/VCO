@@ -57,10 +57,26 @@ export class MediaService {
   /**
    * Resolves a CID to a playable/viewable URL.
    * Handles both single blobs and SequenceManifests.
+   * If content is missing, attempts to resolve from network DHT.
    */
   static async resolveToUrl(cid: Uint8Array): Promise<string | null> {
     const hex = toHex(cid);
-    const blob = await vcoStore.getBlob(hex);
+    let blob = await vcoStore.getBlob(hex);
+    
+    // If not in local store, request from network
+    if (!blob) {
+      console.log(`MediaService: CID ${hex.substring(0, 8)} missing locally, requesting from DHT...`);
+      const { NodeClient } = await import("./NodeClient");
+      NodeClient.getInstance().resolve(hex);
+      
+      // Wait for a few seconds for resolution (simplistic polling for now)
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        blob = await vcoStore.getBlob(hex);
+        if (blob) break;
+      }
+    }
+
     if (!blob) return null;
 
     // Check if it's a manifest (application/x-protobuf)
@@ -73,7 +89,20 @@ export class MediaService {
         // Reconstruct the blob from chunks
         const chunks: Blob[] = [];
         for (const chunkCid of manifest.chunkCids) {
-          const chunkBlob = await vcoStore.getBlob(toHex(chunkCid));
+          const chunkHex = toHex(chunkCid);
+          let chunkBlob = await vcoStore.getBlob(chunkHex);
+          
+          if (!chunkBlob) {
+            const { NodeClient } = await import("./NodeClient");
+            NodeClient.getInstance().resolve(chunkHex);
+            // Poll for chunk
+            for (let j = 0; j < 10; j++) {
+              await new Promise(r => setTimeout(r, 1000));
+              chunkBlob = await vcoStore.getBlob(chunkHex);
+              if (chunkBlob) break;
+            }
+          }
+          
           if (chunkBlob) chunks.push(chunkBlob);
         }
         

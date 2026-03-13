@@ -1,0 +1,99 @@
+# VCO Social
+
+VCO Social is a production-ready, decentralized social network prototype built on top of the **libp2p** protocol and the **Tauri v2** framework. It leverages a high-performance Rust networking core for swarm-based communication while providing a modern, fluid user experience through a React-based frontend.
+
+## Key Features
+
+- **Decentralized Feed:** Content is broadcast via **libp2p Gossipsub** and indexed locally for low-latency browsing.
+- **Swarm Identity:** Persistent cryptographic identities stored in the application's configuration directory.
+- **Real-time Peer Discovery:** Automatic local network discovery via **MDNS** and global routing through a **Kademlia DHT**.
+- **End-to-End Encryption (E2EE):** Direct messages are secured using **X25519** and **AES-GCM**, ensuring only participants can read private conversations.
+- **Offline-First Storage:** All social data is persisted in a local **IndexedDB** instance (`vcoStore`), allowing for a seamless experience even without an active network connection.
+- **Secure by Default:** Strict Content Security Policy (CSP) and local manifest signing for all social objects.
+
+## Architecture
+
+VCO Social follows a dual-layer architecture:
+
+1.  **Networking Core (Rust):** A standalone libp2p node that handles identity persistence, peer discovery, and swarm-based message routing.
+2.  **Application Layer (React/TypeScript):** A responsive UI that communicates with the networking core via Tauri's IPC mechanism.
+
+## Development Setup
+
+### Prerequisites
+
+To build and run VCO Social, you will need:
+
+- **Node.js:** v20+ and `npm`.
+- **Rust:** Latest stable version via `rustup`.
+- **Tauri CLI:** `npm install -g @tauri-apps/cli`.
+- **Android Studio & NDK:** Required for Android development (ensure `ANDROID_HOME` and `ANDROID_NDK_HOME` are set).
+
+### 1. Web Development (Browser-only Mock)
+
+For UI development without the networking core, run the Vite development server:
+
+```bash
+npm install
+npm run dev
+```
+
+### 2. Desktop (Linux/macOS/Windows)
+
+To run the full decentralized application on your desktop:
+
+```bash
+# Development mode with hot-reloading
+npm run tauri dev
+
+# Build a production package
+npm run tauri build
+```
+
+### 3. Android
+
+The Android environment is designed for flexibility and environment discovery.
+
+```bash
+# Run on a connected emulator or device
+npm run tauri android dev
+
+# Generate a debug APK
+npm run tauri android build
+```
+
+*Note: Ensure your Android SDK and NDK paths are correctly configured in your environment. Machine-specific paths are excluded from source control.*
+
+### 4. Development Utilities
+
+To ensure code quality and type safety:
+
+```bash
+# Run TypeScript type-checking
+npm run typecheck
+```
+
+## Key Networking Protocols
+
+- **Gossipsub v1.2:** Efficient multi-hop message broadcasting.
+- **Kademlia DHT:** Decentralized peer and object resolution.
+- **MDNS:** Local network discovery for zero-configuration swarm entry.
+- **QUIC & TCP:** Multi-protocol transport support for maximum connectivity.
+
+## Verification & Integrity
+
+All social objects (Posts, Profiles, Replies) are wrapped in a **VCO Envelope** that includes:
+- **Cryptographic Signature:** Verifies the author's identity.
+- **CID (Content IDentifier):** Ensures data integrity through BLAKE3 hashing.
+- **Proof of Work (PoW):** Prevents spam and resource exhaustion on the swarm.
+
+## Testing & Quality Assurance
+
+VCO Social leverages standard TypeScript and Rust tooling for verification:
+- **Rust Node:** Run `cargo test` in the `src-tauri` directory.
+- **Frontend:** Use `npm run typecheck` for static analysis.
+- **E2EE:** Verification scripts are available in the `@vco/vco-testing` workspace package.
+
+---
+
+*VCO Social is part of the VCO Ecosystem.*

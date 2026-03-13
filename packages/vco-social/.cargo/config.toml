@@ -1,0 +1,60 @@
+[target.aarch64-linux-android]
+linker = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+ar = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+rustflags = [
+    "-C", "link-arg=--target=aarch64-linux-android",
+    "-C", "link-arg=--sysroot=/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot",
+    "-C", "link-arg=-L/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/35",
+    "-C", "link-arg=-B/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/35",
+]
+
+[target.armv7-linux-androideabi]
+linker = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi35-clang"
+ar = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+rustflags = [
+    "-C", "link-arg=--target=armv7a-linux-androideabi",
+    "-C", "link-arg=--sysroot=/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot",
+    "-C", "link-arg=-L/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/35",
+    "-C", "link-arg=-B/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/35",
+]
+
+[target.i686-linux-android]
+linker = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android35-clang"
+ar = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+rustflags = [
+    "-C", "link-arg=--target=i686-linux-android",
+    "-C", "link-arg=--sysroot=/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot",
+    "-C", "link-arg=-L/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/i686-linux-android/35",
+    "-C", "link-arg=-B/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/i686-linux-android/35",
+]
+
+[target.x86_64-linux-android]
+linker = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android35-clang"
+ar = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+rustflags = [
+    "-C", "link-arg=--target=x86_64-linux-android",
+    "-C", "link-arg=--sysroot=/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot",
+    "-C", "link-arg=-L/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/35",
+    "-C", "link-arg=-B/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/35",
+]
+
+[env]
+CC_aarch64_linux_android = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang", force = true }
+CXX_aarch64_linux_android = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang++", force = true }
+AR_aarch64_linux_android = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar", force = true }
+CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang", force = true }
+
+CC_armv7_linux_androideabi = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi35-clang", force = true }
+CXX_armv7_linux_androideabi = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi35-clang++", force = true }
+AR_armv7_linux_androideabi = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar", force = true }
+CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi35-clang", force = true }
+
+CC_i686_linux_android = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android35-clang", force = true }
+CXX_i686_linux_android = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android35-clang++", force = true }
+AR_i686_linux_android = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar", force = true }
+CARGO_TARGET_I686_LINUX_ANDROID_LINKER = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android35-clang", force = true }
+
+CC_x86_64_linux_android = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android35-clang", force = true }
+CXX_x86_64_linux_android = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android35-clang++", force = true }
+AR_x86_64_linux_android = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar", force = true }
+CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER = { value = "/home/mattthomson/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android35-clang", force = true }

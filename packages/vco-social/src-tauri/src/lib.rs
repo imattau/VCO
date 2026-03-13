@@ -30,6 +30,17 @@ async fn dial(addr: String, state: State<'_, VcoNodeState>) -> Result<(), String
     state.swarm_tx.send(NodeCommand::Dial(addr)).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn resolve(cid: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    state.swarm_tx.send(NodeCommand::Resolve(cid)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn put_record(cid: String, payload_base64: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let data = general_purpose::STANDARD.decode(payload_base64).map_err(|e| e.to_string())?;
+    state.swarm_tx.send(NodeCommand::PutRecord(cid, data)).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -38,10 +49,10 @@ pub fn run() {
             let handle = app.handle().clone();
             
             // Start libp2p node in a dedicated tokio task
-            tauri::async_runtime::block_on(async move {
-                let tx = vco_node::start_node(handle).await.expect("failed to start libp2p node");
-                app.manage(VcoNodeState { swarm_tx: tx });
+            let tx = tauri::async_runtime::block_on(async move {
+                vco_node::start_node(handle).await.expect("failed to start libp2p node")
             });
+            app.manage(VcoNodeState { swarm_tx: tx });
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -57,7 +68,9 @@ pub fn run() {
             unsubscribe,
             publish,
             get_stats,
-            dial
+            dial,
+            resolve,
+            put_record
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

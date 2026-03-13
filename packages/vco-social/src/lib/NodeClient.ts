@@ -62,8 +62,11 @@ export class NodeClient {
   }
 
   public resolve(cidHex: string) {
-    // Rust-side resolve not implemented yet, using subscribe pattern for now
-    this.subscribe(`vco://objects/${cidHex}`);
+    invoke('resolve', { cid: cidHex }).catch(console.error);
+  }
+
+  public putRecord(cidHex: string, payloadBase64: string) {
+    invoke('put_record', { cid: cidHex, payloadBase64 }).catch(console.error);
   }
 
   public dial(addr: string) {

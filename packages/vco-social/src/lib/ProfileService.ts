@@ -1,12 +1,13 @@
-import { 
-  encodeProfile, 
+import {
+  encodeProfile,
   PROFILE_SCHEMA_URI,
   ProfileData
 } from '@vco/vco-schemas';
-import { 
-  generateX25519KeyPair, 
+import {
+  generateX25519KeyPair,
   ByteArray
 } from '@vco/vco-crypto';
+import { invoke } from '@tauri-apps/api/core';
 
 export class ProfileService {
   /**
@@ -31,10 +32,16 @@ export class ProfileService {
     };
     
     const encoded = encodeProfile(profile);
-    
-    // In a real app, publish encoded Profile to network
-    console.log("Profile created & encoded:", encoded.length, "bytes");
-    
+
+    // Publish profile envelope to the network via Tauri IPC
+    try {
+      const envelopeBase64 = btoa(String.fromCharCode(...encoded));
+      await invoke('publish', { channelId: 'vco/profiles/v1', envelopeBase64 });
+    } catch (err) {
+      console.error("Failed to publish profile to network:", err);
+      // Profile is still created locally even if publish fails
+    }
+
     return {
       profile,
       encryptionPrivateKey: encryption.privateKey

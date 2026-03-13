@@ -42,12 +42,11 @@ export class NetworkService {
   }
 
   /**
-   * Resolves a peer profile from the DHT (Simulation).
-   * In a real app, this would use a 'find_peer' IPC command.
+   * Resolves a peer profile from the DHT.
+   * Event will be emitted back to NodeClient and handled by SocialContext.
    */
-  static async resolvePeer(creatorId: string): Promise<any | null> {
-    console.log(`Resolving peer ${creatorId} from swarm...`);
-    // Real implementation would wait for a 'peer_resolved' event from sidecar
-    return null;
+  static async resolvePeer(creatorId: string): Promise<void> {
+    console.log(`Resolving peer ${creatorId} from swarm DHT...`);
+    NodeClient.getInstance().resolve(creatorId);
   }
 }

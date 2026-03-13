@@ -1,22 +1,27 @@
 use libp2p::{
-    core::upgrade,
-    identify, kad, noise, quic,
+    gossipsub, identify, kad, mdns, tcp,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Swarm,
+    Multiaddr, PeerId,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use futures::StreamExt;
+use serde::Serialize;
 use std::error::Error;
 use std::time::Duration;
-use tauri::{AppHandle, Manager, Emitter};
-use tokio::sync::{mpsc, Mutex};
-use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::mpsc;
 use base64::{Engine as _, engine::general_purpose};
+use libp2p::kad::store::MemoryStore;
+use libp2p::kad::RecordKey;
+use libp2p::kad::Record;
+use std::fs;
+use std::path::PathBuf;
 
 #[derive(NetworkBehaviour)]
 struct VcoBehaviour {
     identify: identify::Behaviour,
-    kad: kad::Behaviour<kad::store::MemoryStore>,
+    kad: kad::Behaviour<MemoryStore>,
+    gossipsub: gossipsub::Behaviour,
+    mdns: mdns::tokio::Behaviour,
 }
 
 #[derive(Serialize, Clone)]
@@ -35,6 +40,10 @@ pub enum NodeEvent {
     },
     #[serde(rename = "error")]
     Error { message: String },
+    #[serde(rename = "resolving")]
+    Resolving { cid: String },
+    #[serde(rename = "dial_success")]
+    DialSuccess { addr: String },
 }
 
 #[derive(Serialize, Clone)]
@@ -53,91 +62,192 @@ pub enum NodeCommand {
     Unsubscribe(String),
     Publish(String, Vec<u8>),
     Dial(String),
+    Resolve(String),
+    PutRecord(String, Vec<u8>),
     GetStats,
     Shutdown,
 }
 
+fn load_or_generate_keypair(app_handle: &AppHandle) -> Result<libp2p::identity::Keypair, Box<dyn Error>> {
+    let config_dir = app_handle.path().app_config_dir()?;
+    if !config_dir.exists() {
+        fs::create_dir_all(&config_dir)?;
+    }
+    
+    let key_path = config_dir.join("libp2p_id.key");
+    if key_path.exists() {
+        let bytes = fs::read(key_path)?;
+        Ok(libp2p::identity::Keypair::from_protobuf_encoding(&bytes)?)
+    } else {
+        let keypair = libp2p::identity::Keypair::generate_ed25519();
+        let bytes = keypair.to_protobuf_encoding()?;
+        fs::write(key_path, bytes)?;
+        Ok(keypair)
+    }
+}
+
 pub async fn start_node(app_handle: AppHandle) -> Result<mpsc::UnboundedSender<NodeCommand>, Box<dyn Error>> {
     let (tx, mut rx) = mpsc::unbounded_channel::<NodeCommand>();
-    
-    let local_key = libp2p::identity::Keypair::generate_ed25519();
+
+    let local_key = load_or_generate_keypair(&app_handle)?;
     let local_peer_id = PeerId::from(local_key.public());
 
-    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
+    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
         .with_tokio()
+        .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default)?
         .with_quic()
         .with_behaviour(|key| {
-            let kad = kad::Behaviour::new(
+            let mut kad_config = kad::Config::default();
+            kad_config.set_query_timeout(Duration::from_secs(10));
+            let kad = kad::Behaviour::with_config(
                 local_peer_id,
-                kad::store::MemoryStore::new(local_peer_id),
+                MemoryStore::new(local_peer_id),
+                kad_config,
             );
+            
             let identify = identify::Behaviour::new(identify::Config::new(
                 "/vco/1.0.0".into(),
                 key.public(),
             ));
-            VcoBehaviour { identify, kad }
+            
+            let mut gossipsub_config = gossipsub::Config::default();
+            gossipsub_config = gossipsub::ConfigBuilder::from(gossipsub_config)
+                .max_transmit_size(2 * 1024 * 1024) // 2MB to support chunks
+                .build()
+                .expect("Valid gossipsub config");
+
+            let gossipsub = gossipsub::Behaviour::new(
+                gossipsub::MessageAuthenticity::Signed(key.clone()),
+                gossipsub_config,
+            )
+            .expect("Valid gossipsub config");
+            
+            let mdns = mdns::tokio::Behaviour::new(
+                mdns::Config::default(),
+                local_peer_id,
+            ).expect("Valid mdns config");
+            
+            VcoBehaviour { identify, kad, gossipsub, mdns }
         })?
-        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+        .with_swarm_config(|c| c
+            .with_idle_connection_timeout(Duration::from_secs(60))
+        )
         .build();
 
     swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     let handle = app_handle.clone();
-    
-    tokio::spawn(async move {
-        let mut subscriptions = HashSet::new();
 
+    tokio::spawn(async move {
         loop {
             tokio::select! {
                 event = swarm.select_next_some() => match event {
                     SwarmEvent::NewListenAddr { address, .. } => {
-                        handle.emit("vco-node-event", NodeEvent::Ready {
+                        let _ = handle.emit("vco-node-event", NodeEvent::Ready {
                             peer_id: local_peer_id.to_string(),
                             multiaddrs: vec![address.to_string()],
-                        }).unwrap();
+                        });
                     }
-                    SwarmEvent::IncomingConnection { .. } => {}
-                    SwarmEvent::Behaviour(VcoBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
-                        println!("Identified peer {} {:?}", peer_id, info.listen_addrs);
+                    SwarmEvent::Behaviour(VcoBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
+                        for (peer_id, multiaddr) in list {
+                            swarm.behaviour_mut().kad.add_address(&peer_id, multiaddr);
+                        }
+                    }
+                    SwarmEvent::Behaviour(VcoBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
+                        for (peer_id, multiaddr) in list {
+                            swarm.behaviour_mut().kad.remove_address(&peer_id, &multiaddr);
+                        }
+                    }
+                    SwarmEvent::Behaviour(VcoBehaviourEvent::Identify(identify::Event::Received { peer_id, info, .. })) => {
+                        for addr in info.listen_addrs {
+                            swarm.behaviour_mut().kad.add_address(&peer_id, addr);
+                        }
+                    }
+                    SwarmEvent::Behaviour(VcoBehaviourEvent::Gossipsub(gossipsub::Event::Message {
+                        message,
+                        ..
+                    })) => {
+                        let channel_id = message.topic.as_str().to_string();
+                        let envelope = general_purpose::STANDARD.encode(&message.data);
+                        let _ = handle.emit("vco-node-event", NodeEvent::Envelope {
+                            channel_id,
+                            envelope,
+                        });
+                    }
+                    SwarmEvent::Behaviour(VcoBehaviourEvent::Kad(kad::Event::OutboundQueryProgressed {
+                        result: kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(kad::PeerRecord { record: Record { key, value, .. }, .. }))),
+                        ..
+                    })) => {
+                        let cid = String::from_utf8_lossy(key.as_ref()).into_owned();
+                        let envelope = general_purpose::STANDARD.encode(&value);
+                        let _ = handle.emit("vco-node-event", NodeEvent::Envelope {
+                            channel_id: format!("vco://objects/{}", cid),
+                            envelope,
+                        });
+                    }
+                    SwarmEvent::Behaviour(VcoBehaviourEvent::Kad(kad::Event::OutboundQueryProgressed {
+                        result: kad::QueryResult::GetRecord(Err(e)),
+                        ..
+                    })) => {
+                        let _ = handle.emit("vco-node-event", NodeEvent::Error {
+                            message: format!("DHT query failed: {:?}", e),
+                        });
+                    }
+                    SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
+                        let _ = handle.emit("vco-node-event", NodeEvent::DialSuccess {
+                            addr: format!("{} ({})", peer_id, endpoint.get_remote_address()),
+                        });
                     }
                     _ => {}
                 },
                 command = rx.recv() => match command {
                     Some(NodeCommand::Subscribe(channel_id)) => {
-                        subscriptions.insert(channel_id);
+                        let topic = gossipsub::IdentTopic::new(&channel_id);
+                        let _ = swarm.behaviour_mut().gossipsub.subscribe(&topic);
                     }
                     Some(NodeCommand::Unsubscribe(channel_id)) => {
-                        subscriptions.remove(&channel_id);
+                        let topic = gossipsub::IdentTopic::new(&channel_id);
+                        let _ = swarm.behaviour_mut().gossipsub.unsubscribe(&topic);
                     }
                     Some(NodeCommand::Publish(channel_id, data)) => {
-                        // In a real implementation, we would broadcast via Sync Session
-                        // For now, we simulate by emitting back if subscribed
-                        if subscriptions.contains(&channel_id) {
-                            handle.emit("vco-node-event", NodeEvent::Envelope {
-                                channel_id,
-                                envelope: general_purpose::STANDARD.encode(data),
-                            }).unwrap();
-                        }
+                        let topic = gossipsub::IdentTopic::new(&channel_id);
+                        let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
                     }
                     Some(NodeCommand::Dial(addr)) => {
                         if let Ok(maddr) = addr.parse::<Multiaddr>() {
                             let _ = swarm.dial(maddr);
                         }
                     }
+                    Some(NodeCommand::Resolve(cid)) => {
+                        let key = RecordKey::new(&cid);
+                        swarm.behaviour_mut().kad.get_record(key);
+                        let _ = handle.emit("vco-node-event", NodeEvent::Resolving { cid: cid.clone() });
+                    }
+                    Some(NodeCommand::PutRecord(cid, payload)) => {
+                        let key = RecordKey::new(&cid);
+                        let record = Record {
+                            key,
+                            value: payload,
+                            publisher: None,
+                            expires: None,
+                        };
+                        let _ = swarm.behaviour_mut().kad.put_record(record, kad::Quorum::One);
+                    }
                     Some(NodeCommand::GetStats) => {
                         let peers: Vec<String> = swarm.connected_peers().map(|p| p.to_string()).collect();
-                        let connections: Vec<ConnectionInfo> = swarm.connections().map(|(p, c)| ConnectionInfo {
-                            remote_peer: p.to_string(),
-                            remote_addr: c.remote_address().to_string(),
+                        let connections: Vec<ConnectionInfo> = peers.iter().map(|p| ConnectionInfo {
+                            remote_peer: p.clone(),
+                            remote_addr: "unknown".to_string(),
                             tags: vec![],
                         }).collect();
 
-                        handle.emit("vco-node-event", NodeEvent::Stats {
+                        let _ = handle.emit("vco-node-event", NodeEvent::Stats {
                             peer_id: local_peer_id.to_string(),
                             multiaddrs: swarm.listeners().map(|a| a.to_string()).collect(),
                             peers,
                             connections,
-                        }).unwrap();
+                        });
                     }
                     Some(NodeCommand::Shutdown) => break,
                     None => break,

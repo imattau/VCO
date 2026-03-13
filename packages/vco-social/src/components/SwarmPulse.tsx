@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Database, ArrowRightLeft, Shield, Globe } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { NodeClient, NodeEvent } from '@/lib/NodeClient';
 
 interface PulseEvent {
   id: string;
@@ -13,37 +14,43 @@ export function SwarmPulse() {
   const [events, setEvents] = useState<PulseEvent[]>([]);
 
   useEffect(() => {
-    const eventTypes = [
-      { type: 'SYNC', icon: <Database size={10} />, color: 'text-emerald-500' },
-      { type: 'DISCOVERY', icon: <Globe size={10} />, color: 'text-blue-500' },
-      { type: 'PROTOCOL', icon: <ArrowRightLeft size={10} />, color: 'text-amber-500' },
-      { type: 'SECURITY', icon: <Shield size={10} />, color: 'text-purple-500' },
-    ];
+    const client = NodeClient.getInstance();
 
-    const messages = [
-      "Range bisection complete (depth 4)",
-      "New peer joined via DHT",
-      "Envelope #42 verified",
-      "TOL handshake successful",
-      "Merkle proof generated",
-      "Reconciled 3 new objects",
-      "QUIC stream established",
-      "Identity manifest synced"
-    ];
-
-    const interval = setInterval(() => {
-      const typeInfo = eventTypes[Math.floor(Math.random() * eventTypes.length)];
-      const message = messages[Math.floor(Math.random() * messages.length)];
+    const pushEvent = (type: PulseEvent['type'], message: string) => {
       const newEvent: PulseEvent = {
         id: Math.random().toString(36).slice(2, 9),
-        type: typeInfo.type as any,
+        type,
         message
       };
-
       setEvents(prev => [newEvent, ...prev].slice(0, 5));
-    }, 3000);
+    };
 
-    return () => clearInterval(interval);
+    const cleanup = client.onEvent((event: NodeEvent) => {
+      switch (event.type) {
+        case 'ready':
+          pushEvent('PROTOCOL', 'Swarm peer initialized');
+          break;
+        case 'envelope':
+          pushEvent('SYNC', `Envelope verified on ${event.channelId.split('/').pop()}`);
+          break;
+        case 'stats':
+          if (event.peers.length > 0) {
+            pushEvent('DISCOVERY', `Connected to ${event.peers.length} peers`);
+          }
+          break;
+        case 'resolving':
+          pushEvent('DISCOVERY', `Querying DHT for ${event.cid.substring(0, 8)}`);
+          break;
+        case 'dial_success':
+          pushEvent('PROTOCOL', `Connected to ${event.addr}`);
+          break;
+        case 'error':
+          pushEvent('SECURITY', `Error: ${event.message}`);
+          break;
+      }
+    });
+
+    return () => { cleanup(); };
   }, []);
 
   return (
