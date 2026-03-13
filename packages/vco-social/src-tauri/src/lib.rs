@@ -1,6 +1,6 @@
 mod vco_node;
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{Manager, State};
 use vco_node::{NodeCommand, VcoNodeState};
 use base64::{Engine as _, engine::general_purpose};
 

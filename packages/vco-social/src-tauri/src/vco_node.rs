@@ -1,11 +1,12 @@
 use libp2p::{
-    gossipsub, identify, kad, mdns, tcp,
+    gossipsub, identify, kad, tcp,
     swarm::{NetworkBehaviour, SwarmEvent},
     Multiaddr, PeerId,
 };
+#[cfg(not(mobile))]
+use libp2p::mdns;
 use futures::StreamExt;
 use serde::Serialize;
-use std::error::Error;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
@@ -14,7 +15,6 @@ use libp2p::kad::store::MemoryStore;
 use libp2p::kad::RecordKey;
 use libp2p::kad::Record;
 use std::fs;
-use std::path::PathBuf;
 
 #[derive(NetworkBehaviour)]
 struct VcoBehaviour {
@@ -66,10 +66,9 @@ pub enum NodeCommand {
     Resolve(String),
     PutRecord(String, Vec<u8>),
     GetStats,
-    Shutdown,
 }
 
-fn load_or_generate_keypair(app_handle: &AppHandle) -> Result<libp2p::identity::Keypair, Box<dyn Error>> {
+fn load_or_generate_keypair(app_handle: &AppHandle) -> anyhow::Result<libp2p::identity::Keypair> {
     let config_dir = app_handle.path().app_config_dir()?;
     if !config_dir.exists() {
         fs::create_dir_all(&config_dir)?;
@@ -87,7 +86,7 @@ fn load_or_generate_keypair(app_handle: &AppHandle) -> Result<libp2p::identity::
     }
 }
 
-pub async fn start_node(app_handle: AppHandle) -> Result<mpsc::UnboundedSender<NodeCommand>, Box<dyn Error>> {
+pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::UnboundedSender<NodeCommand>> {
     let (tx, mut rx) = mpsc::unbounded_channel::<NodeCommand>();
 
     let local_key = load_or_generate_keypair(&app_handle)?;
@@ -98,7 +97,7 @@ pub async fn start_node(app_handle: AppHandle) -> Result<mpsc::UnboundedSender<N
         .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default)?
         .with_quic()
         .with_behaviour(|key| {
-            let mut kad_config = kad::Config::default();
+            let mut kad_config = kad::Config::new();
             kad_config.set_query_timeout(Duration::from_secs(10));
             let kad = kad::Behaviour::with_config(
                 local_peer_id,
@@ -259,7 +258,6 @@ pub async fn start_node(app_handle: AppHandle) -> Result<mpsc::UnboundedSender<N
                             connections,
                         });
                     }
-                    Some(NodeCommand::Shutdown) => break,
                     None => break,
                 }
             }
