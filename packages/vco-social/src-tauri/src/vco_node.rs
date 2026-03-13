@@ -66,6 +66,7 @@ pub enum NodeCommand {
     Resolve(String),
     PutRecord(String, Vec<u8>),
     GetStats,
+    Bootstrap(Vec<String>),
 }
 
 fn load_or_generate_keypair(app_handle: &AppHandle) -> anyhow::Result<libp2p::identity::Keypair> {
@@ -242,6 +243,20 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                             expires: None,
                         };
                         let _ = swarm.behaviour_mut().kad.put_record(record, kad::Quorum::One);
+                    }
+                    Some(NodeCommand::Bootstrap(addrs)) => {
+                        for addr in addrs {
+                            if let Ok(maddr) = addr.parse::<Multiaddr>() {
+                                if let Some(peer_id) = maddr.iter().find_map(|p| match p {
+                                    libp2p::multiaddr::Protocol::P2p(id) => Some(id),
+                                    _ => None,
+                                }) {
+                                    swarm.behaviour_mut().kad.add_address(&peer_id, maddr.clone());
+                                    let _ = swarm.dial(maddr);
+                                }
+                            }
+                        }
+                        let _ = swarm.behaviour_mut().kad.bootstrap();
                     }
                     Some(NodeCommand::GetStats) => {
                         let peers: Vec<String> = swarm.connected_peers().map(|p| p.to_string()).collect();

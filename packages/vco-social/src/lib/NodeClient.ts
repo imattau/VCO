@@ -73,6 +73,10 @@ export class NodeClient {
     invoke('dial', { addr }).catch(console.error);
   }
 
+  public bootstrap(addrs: string[]) {
+    invoke('bootstrap', { addrs }).catch(console.error);
+  }
+
   public getStats() {
     invoke('get_stats').catch(console.error);
   }

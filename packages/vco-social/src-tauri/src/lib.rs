@@ -77,6 +77,16 @@ async fn put_record(cid: String, payload_base64: String, state: State<'_, VcoNod
     }
 }
 
+#[tauri::command]
+async fn bootstrap(addrs: Vec<String>, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::Bootstrap(addrs)).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Redirect panics to logcat/stdout
@@ -131,7 +141,8 @@ pub fn run() {
             get_stats,
             dial,
             resolve,
-            put_record
+            put_record,
+            bootstrap
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

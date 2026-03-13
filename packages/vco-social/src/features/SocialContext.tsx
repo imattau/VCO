@@ -391,6 +391,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
             setPeerId(event.peerId);
             toast("Connected to VCO swarm", "success");
             
+            // Hardcoded bootstrap nodes for VCO network
+            const bootstrapNodes = [
+              "/dnsaddr/bootstrap.vco.network/p2p/12D3KooWJvB6zE8K3J2yH8j8b4j8b4j8b4j8b4j8b4j8b4j8b4j8" // Placeholder
+            ];
+            client.bootstrap(bootstrapNodes);
+            
             import('@vco/vco-core').then(core => {
               import('@vco/vco-crypto').then(cryptoMod => {
                 import('@vco/vco-schemas').then(schemas => {
