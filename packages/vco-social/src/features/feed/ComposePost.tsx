@@ -132,10 +132,10 @@ export function ComposePost() {
              <button
                onClick={handleSubmit}
                disabled={(!content.trim() && mediaFiles.length === 0) || isPublishing}
-               className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-6 py-2.5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 active:translate-y-0.5 flex items-center justify-center gap-2 w-full sm:w-auto"
+               className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2.5 sm:px-6 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 active:translate-y-0.5 flex items-center justify-center gap-2 self-end sm:self-auto sm:w-auto"
              >
                {isPublishing ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
-               {isPublishing ? 'Publishing...' : 'Post'}
+               <span className="hidden sm:inline">{isPublishing ? 'Publishing...' : 'Post'}</span>
              </button>
            </div>
         </div>
