@@ -386,7 +386,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         const eventCleanup = client.onEvent((event) => {
           if (event.type === 'envelope') {
             handleInboundEnvelope(event.envelope, event.channelId);
-          } else if (event.type === 'ready') {
+          } else if (event.type === 'ready' || (event.type === 'stats' && !isNodeReady)) {
+            if (isNodeReady) return; // Only bootstrap once
+            
             setIsNodeReady(true);
             setPeerId(event.peerId);
             toast("Connected to VCO swarm", "success");

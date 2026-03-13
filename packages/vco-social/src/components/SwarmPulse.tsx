@@ -25,6 +25,10 @@ export function SwarmPulse() {
       setEvents(prev => [newEvent, ...prev].slice(0, 5));
     };
 
+    if (client.isReady) {
+      pushEvent('PROTOCOL', 'Swarm connection active');
+    }
+
     const cleanup = client.onEvent((event: NodeEvent) => {
       switch (event.type) {
         case 'ready':

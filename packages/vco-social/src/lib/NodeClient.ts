@@ -96,6 +96,7 @@ export class NodeClient {
       this.peerId = event.peerId;
       this.multiaddrs = event.multiaddrs;
     } else if (event.type === 'stats') {
+      this.isReady = true; // If we get stats, the node is definitely alive
       this.peerId = event.peerId;
       this.multiaddrs = event.multiaddrs;
       this.peers = event.peers;
