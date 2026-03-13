@@ -9,7 +9,7 @@ use futures::StreamExt;
 use serde::Serialize;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use base64::{Engine as _, engine::general_purpose};
 use libp2p::kad::store::MemoryStore;
 use libp2p::kad::RecordKey;
@@ -55,7 +55,7 @@ pub struct ConnectionInfo {
 }
 
 pub struct VcoNodeState {
-    pub swarm_tx: mpsc::UnboundedSender<NodeCommand>,
+    pub swarm_tx: Mutex<Option<mpsc::UnboundedSender<NodeCommand>>>,
 }
 
 pub enum NodeCommand {
