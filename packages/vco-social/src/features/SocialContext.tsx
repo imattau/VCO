@@ -379,6 +379,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     const bootstrapData = async () => {
       setIsLoading(true);
       try {
+        console.log("VCO Social: Starting data bootstrap for identity", identity.creatorIdHex);
+        
         let myProfile = await vcoStore.getProfile(identity.creatorIdHex);
         if (!myProfile) {
           myProfile = {
@@ -405,6 +407,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
         // Load ALL local envelopes first to ensure persistence
         const allLocalEnvelopes = await vcoStore.getAllEnvelopes();
+        console.log(`VCO Social: Loaded ${allLocalEnvelopes.length} envelopes from local store.`);
         
         // Then load paginated feed for UI
         const initialEnvelopes = await vcoStore.getEnvelopesPaged(Constants.FEED_PAGE_SIZE * 2);
@@ -414,6 +417,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         if (allLocalEnvelopes.length > 0) {
           const { fItems, rItems, followSet, dmMap, reactionMap, repostMap } = await processEnvelopes(allLocalEnvelopes, myProfile, profileMap, identity);
           
+          console.log(`VCO Social: Processed ${fItems.length} posts from local storage.`);
           setFeed(fItems.sort((a,b) => Number(b.data.timestampMs - a.data.timestampMs)));
           setReplies(rItems);
           setFollowing(followSet);
@@ -443,7 +447,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         }
         setIsLoading(false);
       } catch (err) {
-        console.error("Bootstrap failed:", err);
+        console.error("VCO Social: Bootstrap failed:", err);
         setIsLoading(false);
       }
     };

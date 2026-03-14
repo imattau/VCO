@@ -2,31 +2,26 @@ import { invoke } from "@tauri-apps/api/core";
 import { toHex } from "@vco/vco-testing";
 
 const DB_NAME_BASE = "vco_social_db";
-const DB_VERSION = 3; // Bumped for blob eviction index
+const DB_VERSION = 3; 
 
 export interface StoredEnvelope {
   cid: string;
   channelId: string;
-  payload: string; // Base64 or JSON
+  payload: string; // Base64
   timestamp: number;
   syncStatus?: 'pending' | 'synced';
 }
 
-export interface StoredNotification {
-  cid: Uint8Array;
-  type: number;
-  authorId: Uint8Array;
-  targetCid: Uint8Array;
-  content: string;
-  timestampMs: bigint;
-}
-
 export class VcoStore {
   private db: IDBDatabase | null = null;
+  private currentProfile: string | null = null;
 
-  private async getDB(): Promise<IDBDatabase> {
-    if (this.db) return this.db;
-
+  /**
+   * Internal helper to get the active storage profile.
+   */
+  private async getStorageProfile(): Promise<string> {
+    if (this.currentProfile) return this.currentProfile;
+    
     let profile = "default";
     try {
       if ((window as any).__TAURI_INTERNALS__) {
@@ -35,7 +30,14 @@ export class VcoStore {
     } catch (e) {
       console.warn("VcoStore: Failed to get profile, using default", e);
     }
+    this.currentProfile = profile;
+    return profile;
+  }
 
+  private async getDB(): Promise<IDBDatabase> {
+    if (this.db) return this.db;
+
+    const profile = await this.getStorageProfile();
     const dbName = `${DB_NAME_BASE}_${profile}`;
 
     return new Promise((resolve, reject) => {
@@ -96,22 +98,6 @@ export class VcoStore {
     });
   }
 
-  async getEnvelopesByChannel(channelId: string): Promise<StoredEnvelope[]> {
-    const db = await this.getDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("envelopes", "readonly");
-      const store = tx.objectStore("envelopes");
-      const index = store.index("by_channel");
-      const request = index.getAll(IDBKeyRange.only(channelId));
-
-      request.onsuccess = () => {
-        const results = request.result as StoredEnvelope[];
-        resolve(results.sort((a, b) => b.timestamp - a.timestamp));
-      };
-      request.onerror = () => reject(request.error);
-    });
-  }
-
   async getEnvelopesPaged(limit: number, beforeTimestamp?: number): Promise<StoredEnvelope[]> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
@@ -142,7 +128,7 @@ export class VcoStore {
       const tx = db.transaction("envelopes", "readonly");
       const store = tx.objectStore("envelopes");
       const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
     });
   }
@@ -158,6 +144,9 @@ export class VcoStore {
     });
   }
 
+  /**
+   * Retrieves a social profile for a specific creator.
+   */
   async getProfile(creatorId: string): Promise<any | null> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
@@ -242,7 +231,7 @@ export class VcoStore {
       const tx = db.transaction("profiles", "readonly");
       const store = tx.objectStore("profiles");
       const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
     });
   }
@@ -264,7 +253,7 @@ export class VcoStore {
       const tx = db.transaction("notifications", "readonly");
       const store = tx.objectStore("notifications");
       const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
     });
   }
