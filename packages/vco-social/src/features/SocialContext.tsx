@@ -6,8 +6,27 @@ import {
   DirectMessageData, 
   NotificationData,
   NotificationType,
-  ReportReason
+  ReportReason,
+  decodePost,
+  decodeReply,
+  decodeDirectMessage,
+  decodeFollow,
+  decodeReaction,
+  decodeRepost,
+  encodePost,
+  encodeReply,
+  encodeDirectMessage,
+  encodeFollow,
+  encodeProfile,
+  encodeReaction,
+  encodeRepost,
+  encodeTombstone,
+  encodeReport,
+  extractHashtags
 } from '@vco/vco-schemas';
+
+import { decodeEnvelopeProto as decodeCore, verifyEnvelope, createEnvelope, encodeEnvelopeProto as encodeCore } from '@vco/vco-core';
+import { createNobleCryptoProvider, blake3 } from '@vco/vco-crypto';
 
 import { FeedService } from '@/lib/FeedService';
 import { E2EEService } from '@/lib/E2EEService';
@@ -15,7 +34,6 @@ import { ProfileService } from '@/lib/ProfileService';
 import { NotificationService } from '@/lib/NotificationService';
 import { useToast } from '@/components/ToastProvider';
 import { mockCid, toHex } from '@vco/vco-testing';
-import { blake3 } from '@vco/vco-crypto';
 import { SocialTab } from '@/App';
 import { KeyringService, IdentityKeys } from '@/lib/KeyringService';
 import { NodeClient } from '@/lib/NodeClient';
@@ -61,8 +79,8 @@ interface SocialContextType {
   conversations: Conversation[];
   notifications: NotificationData[];
   tombstones: Set<string>; 
-  reactions: Map<string, Set<string>>; // targetCid -> Set of creatorIdHex
-  reposts: Map<string, Set<string>>;    // targetCid -> Set of creatorIdHex
+  reactions: Map<string, Set<string>>; 
+  reposts: Map<string, Set<string>>;    
   filter: { type: 'tag' | 'peer' | 'all'; value?: string } | null;
   isLoading: boolean;
   isNodeReady: boolean;
@@ -158,9 +176,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const hasExistingIdentity = async () => await KeyringService.hasIdentity();
 
   const processEnvelopes = useCallback(async (envelopes: any[], myProfile: ProfileData, profileMap: Map<string, ProfileData>, identity: IdentityKeys) => {
-    const { decodePost, decodeReply, decodeDirectMessage, decodeFollow, decodeReaction, decodeRepost } = await import('@vco/vco-schemas');
-    const { decodeEnvelopeProto: decodeCore } = await import('@vco/vco-core');
-    
     const fItems: FeedItem[] = [];
     const rItems: ReplyItem[] = [];
     const followSet = new Set<string>();
@@ -245,12 +260,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
     try {
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-      const { decodeEnvelopeProto, verifyEnvelope } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider, blake3 } = await import('@vco/vco-crypto');
-      const { toHex } = await import('@vco/vco-testing');
-      
       const crypto = createNobleCryptoProvider();
-      const envelope = decodeEnvelopeProto(bytes);
+      const envelope = decodeCore(bytes);
       if (!verifyEnvelope(envelope, crypto)) return;
 
       const actualHash = blake3((envelope.header as any).encode());
@@ -379,7 +390,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     const bootstrapData = async () => {
       setIsLoading(true);
       try {
-        console.log("VCO Social: Starting data bootstrap for identity", identity.creatorIdHex);
+        console.log("VCO Social: Starting bootstrap for identity", identity.creatorIdHex);
         
         let myProfile = await vcoStore.getProfile(identity.creatorIdHex);
         if (!myProfile) {
@@ -409,15 +420,10 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         const allLocalEnvelopes = await vcoStore.getAllEnvelopes();
         console.log(`VCO Social: Loaded ${allLocalEnvelopes.length} envelopes from local store.`);
         
-        // Then load paginated feed for UI
-        const initialEnvelopes = await vcoStore.getEnvelopesPaged(Constants.FEED_PAGE_SIZE * 2);
-        if (initialEnvelopes.length < Constants.FEED_PAGE_SIZE * 2) setHasMoreFeed(false);
-
-        // Process all local envelopes to build full state (reactions, reposts, etc)
         if (allLocalEnvelopes.length > 0) {
           const { fItems, rItems, followSet, dmMap, reactionMap, repostMap } = await processEnvelopes(allLocalEnvelopes, myProfile, profileMap, identity);
           
-          console.log(`VCO Social: Processed ${fItems.length} posts from local storage.`);
+          console.log(`VCO Social: Successfully processed ${fItems.length} posts from local storage.`);
           setFeed(fItems.sort((a,b) => Number(b.data.timestampMs - a.data.timestampMs)));
           setReplies(rItems);
           setFollowing(followSet);
@@ -444,6 +450,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
             });
           }
           setConversations(convs);
+        } else {
+          console.warn("VCO Social: No local envelopes found during bootstrap.");
         }
         setIsLoading(false);
       } catch (err) {
@@ -480,23 +488,17 @@ export function SocialProvider({ children }: { children: ReactNode }) {
             
             if (profileRef.current) {
               const myProfile = profileRef.current;
-              import('@vco/vco-core').then(core => {
-                import('@vco/vco-crypto').then(cryptoMod => {
-                  import('@vco/vco-schemas').then(schemas => {
-                    const crypto = cryptoMod.createNobleCryptoProvider();
-                    const payload = schemas.encodeProfile(myProfile);
-                    const envelope = core.createEnvelope({
-                      payload,
-                      payloadType: 0x50,
-                      creatorId: identity.creatorId,
-                      privateKey: identity.signingPrivateKey,
-                      powDifficulty: 10
-                    }, crypto);
-                    const base64 = btoa(String.fromCharCode(...core.encodeEnvelopeProto(envelope)));
-                    client.putRecord(identity.creatorIdHex, base64);
-                  });
-                });
-              });
+              const crypto = createNobleCryptoProvider();
+              const payload = encodeProfile(myProfile);
+              const envelope = createEnvelope({
+                payload,
+                payloadType: 0x50,
+                creatorId: identity.creatorId,
+                privateKey: identity.signingPrivateKey,
+                powDifficulty: 10
+              }, crypto);
+              const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
+              client.putRecord(identity.creatorIdHex, base64);
             }
           }
         } else if (event.type === 'error') {
@@ -516,11 +518,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const createPost = async (content: string, mediaFiles: File[] = []) => {
     if (!profile || !identity) return;
     try {
-      const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
-      const { extractHashtags, encodePost } = await import('@vco/vco-schemas');
       const crypto = createNobleCryptoProvider();
-
       const mediaCids = await Promise.all(mediaFiles.map(file => MediaService.processAndStore(file)));
       const postData: PostData = {
         schema: Constants.POST_SCHEMA_URI,
@@ -539,7 +537,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         powDifficulty: calculateDifficulty(postEncoded)
       }, crypto);
 
-      const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+      const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
 
       const hash = envelope.headerHash;
@@ -561,11 +559,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const createReply = async (parentCid: Uint8Array, content: string, mediaFiles: File[] = []) => {
     if (!profile || !identity) return;
     try {
-      const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
-      const { encodeReply } = await import('@vco/vco-schemas');
       const crypto = createNobleCryptoProvider();
-
       const mediaCids = await Promise.all(mediaFiles.map(file => MediaService.processAndStore(file)));
       const replyData: ReplyData = {
         schema: Constants.REPLY_SCHEMA_URI,
@@ -585,7 +579,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         powDifficulty: calculateDifficulty(replyEncoded)
       }, crypto);
 
-      const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+      const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
 
       const hash = envelope.headerHash;
@@ -625,9 +619,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         timestampMs: BigInt(Date.now())
       };
 
-      const dmEncoded = await import('@vco/vco-schemas').then(m => m.encodeDirectMessage(msgData));
-      const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
+      const dmEncoded = encodeDirectMessage(msgData);
       const crypto = createNobleCryptoProvider();
 
       const envelope = createEnvelope({
@@ -638,7 +630,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         powDifficulty: calculateDifficulty(dmEncoded)
       }, crypto);
 
-      const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+      const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       const channelId = `vco://channels/dm/${toHex(recipientProfile.encryptionPubkey)}`;
       NodeClient.getInstance().publish(channelId, base64);
 
@@ -678,17 +670,13 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const followPeer = async (creatorIdHex: string) => {
     if (!identity) return;
     try {
-      const { encodeFollow } = await import('@vco/vco-schemas');
-      const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
       const crypto = createNobleCryptoProvider();
-
       const subjectKey = Uint8Array.from(creatorIdHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
       const followData = { schema: Constants.FOLLOW_SCHEMA_URI, subjectKey, action: "follow" as const, timestampMs: BigInt(Date.now()) };
       const payload = encodeFollow(followData);
       
       const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
-      const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+      const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       await vcoStore.putEnvelope({ cid: btoa(String.fromCharCode(...envelope.headerHash)), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
@@ -704,17 +692,13 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const unfollowPeer = async (creatorIdHex: string) => {
     if (!identity) return;
     try {
-      const { encodeFollow } = await import('@vco/vco-schemas');
-      const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
       const crypto = createNobleCryptoProvider();
-
       const subjectKey = Uint8Array.from(creatorIdHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
       const followData = { schema: Constants.FOLLOW_SCHEMA_URI, subjectKey, action: "unfollow" as const, timestampMs: BigInt(Date.now()) };
       const payload = encodeFollow(followData);
       
       const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
-      const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+      const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       await vcoStore.putEnvelope({ cid: btoa(String.fromCharCode(...envelope.headerHash)), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
@@ -738,9 +722,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         setProfile(updated);
         await vcoStore.putProfile(identity.creatorIdHex, updated);
         
-        const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-        const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
-        const { encodeProfile } = await import('@vco/vco-schemas');
         const crypto = createNobleCryptoProvider();
         const payload = encodeProfile(updated);
         
@@ -752,7 +733,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           powDifficulty: calculateDifficulty(payload)
         }, crypto);
         
-        const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+        const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
         NodeClient.getInstance().putRecord(identity.creatorIdHex, base64);
         
         toast("Profile manifest updated locally and published to DHT", "success");
@@ -773,14 +754,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const deletePost = async (cid: Uint8Array) => {
     if (!identity) return;
     try {
-      const { encodeTombstone } = await import('@vco/vco-schemas');
-      const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
       const crypto = createNobleCryptoProvider();
       const tombstoneData = { schema: Constants.TOMBSTONE_SCHEMA_URI, targetCid: cid, reason: "User requested deletion", timestampMs: BigInt(Date.now()) };
       const payload = encodeTombstone(tombstoneData);
       const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
-      const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+      const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       await vcoStore.putEnvelope({ cid: btoa(String.fromCharCode(...envelope.headerHash)), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
       setTombstones(prev => new Set(prev).add(toHex(cid)));
@@ -794,14 +772,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const reactToPost = async (cid: Uint8Array) => {
     if (!identity) return;
     try {
-      const { encodeReaction } = await import('@vco/vco-schemas');
-      const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
       const crypto = createNobleCryptoProvider();
       const reactionData = { schema: Constants.REACTION_SCHEMA_URI, targetCid: cid, emoji: "❤️", timestampMs: BigInt(Date.now()) };
       const payload = encodeReaction(reactionData);
       const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
-      const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+      const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       
       const targetHex = toHex(cid);
@@ -823,16 +798,13 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const repost = async (cid: Uint8Array, commentary: string = "") => {
     if (!identity) return;
     try {
-      const { encodeRepost } = await import('@vco/vco-schemas');
-      const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
       const crypto = createNobleCryptoProvider();
       const originalPost = feed.find(f => toHex(f.cid) === toHex(cid));
       if (!originalPost) return;
       const repostData = { schema: Constants.REPOST_SCHEMA_URI, originalPostCid: cid, originalAuthorCid: originalPost.authorId, commentary, timestampMs: BigInt(Date.now()) };
       const payload = encodeRepost(repostData);
       const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
-      const base64 = btoa(String.fromCharCode(...encodeEnvelopeProto(envelope)));
+      const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       
       const targetHex = toHex(cid);
@@ -854,14 +826,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const publishReport = async (cid: Uint8Array, reason: number) => {
     if (!identity) return;
     try {
-      const { encodeReport } = await import('@vco/vco-schemas');
-      const { createEnvelope, encodeEnvelopeProto } = await import('@vco/vco-core');
-      const { createNobleCryptoProvider } = await import('@vco/vco-crypto');
       const crypto = createNobleCryptoProvider();
       const reportData = { schema: Constants.REPORT_SCHEMA_URI, targetCid: cid, reason: reason, timestampMs: BigInt(Date.now()) };
       const payload = encodeReport(reportData);
       const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
-      NodeClient.getInstance().publish(Constants.MODERATION_REPORTS_CHANNEL, btoa(String.fromCharCode(...encodeEnvelopeProto(envelope))));
+      NodeClient.getInstance().publish(Constants.MODERATION_REPORTS_CHANNEL, btoa(String.fromCharCode(...encodeCore(envelope))));
       toast("Verifiable report broadcast to network", "success");
     } catch (err) {
       console.error("Reporting failed:", err);

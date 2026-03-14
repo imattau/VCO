@@ -14,21 +14,20 @@ export interface StoredEnvelope {
 
 export class VcoStore {
   private db: IDBDatabase | null = null;
+  private dbPromise: Promise<IDBDatabase> | null = null;
   private currentProfile: string | null = null;
 
-  /**
-   * Internal helper to get the active storage profile.
-   */
   private async getStorageProfile(): Promise<string> {
     if (this.currentProfile) return this.currentProfile;
     
     let profile = "default";
     try {
-      if ((window as any).__TAURI_INTERNALS__) {
+      // Check if we are in Tauri and have access to invoke
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
         profile = await invoke<string>("get_vco_profile");
       }
     } catch (e) {
-      console.warn("VcoStore: Failed to get profile, using default", e);
+      console.warn("VcoStore: Failed to get profile via invoke, using default", e);
     }
     this.currentProfile = profile;
     return profile;
@@ -36,55 +35,68 @@ export class VcoStore {
 
   private async getDB(): Promise<IDBDatabase> {
     if (this.db) return this.db;
+    if (this.dbPromise) return this.dbPromise;
 
-    const profile = await this.getStorageProfile();
-    const dbName = `${DB_NAME_BASE}_${profile}`;
+    this.dbPromise = (async () => {
+      const profile = await this.getStorageProfile();
+      const dbName = `${DB_NAME_BASE}_${profile}`;
+      
+      console.log(`VcoStore: Opening database [${dbName}] (v${DB_VERSION})`);
 
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, DB_VERSION);
+      return new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(dbName, DB_VERSION);
 
-      request.onupgradeneeded = (event: any) => {
-        const db = request.result;
-        const oldVersion = event.oldVersion;
+        request.onupgradeneeded = (event: any) => {
+          const db = request.result;
+          const oldVersion = event.oldVersion;
+          console.log(`VcoStore: Upgrading [${dbName}] from v${oldVersion} to v${DB_VERSION}`);
 
-        if (oldVersion < 1) {
-          const envelopeStore = db.createObjectStore("envelopes", { keyPath: "cid" });
-          envelopeStore.createIndex("by_channel", "channelId", { unique: false });
-          envelopeStore.createIndex("by_timestamp", "timestamp", { unique: false });
+          if (oldVersion < 1) {
+            const envelopeStore = db.createObjectStore("envelopes", { keyPath: "cid" });
+            envelopeStore.createIndex("by_channel", "channelId", { unique: false });
+            envelopeStore.createIndex("by_timestamp", "timestamp", { unique: false });
 
-          db.createObjectStore("profiles", { keyPath: "creatorId" });
-          db.createObjectStore("blobs", { keyPath: "cid" });
-          db.createObjectStore("notifications", { keyPath: "cid" });
-        }
+            db.createObjectStore("profiles", { keyPath: "creatorId" });
+            db.createObjectStore("blobs", { keyPath: "cid" });
+            db.createObjectStore("notifications", { keyPath: "cid" });
+          }
 
-        if (oldVersion < 2) {
-          const tx = request.transaction;
-          if (tx) {
-            const envelopeStore = tx.objectStore("envelopes");
-            if (!envelopeStore.indexNames.contains("by_sync")) {
-              envelopeStore.createIndex("by_sync", "syncStatus", { unique: false });
+          if (oldVersion < 2) {
+            const tx = request.transaction;
+            if (tx) {
+              const envelopeStore = tx.objectStore("envelopes");
+              if (!envelopeStore.indexNames.contains("by_sync")) {
+                envelopeStore.createIndex("by_sync", "syncStatus", { unique: false });
+              }
             }
           }
-        }
 
-        if (oldVersion < 3) {
-          const tx = request.transaction;
-          if (tx) {
-            const blobStore = tx.objectStore("blobs");
-            if (!blobStore.indexNames.contains("by_updated")) {
-              blobStore.createIndex("by_updated", "updatedAt", { unique: false });
+          if (oldVersion < 3) {
+            const tx = request.transaction;
+            if (tx) {
+              const blobStore = tx.objectStore("blobs");
+              if (!blobStore.indexNames.contains("by_updated")) {
+                blobStore.createIndex("by_updated", "updatedAt", { unique: false });
+              }
             }
           }
-        }
-      };
+        };
 
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve(this.db);
-      };
+        request.onsuccess = () => {
+          this.db = request.result;
+          console.log(`VcoStore: Database [${dbName}] ready.`);
+          resolve(this.db);
+        };
 
-      request.onerror = () => reject(request.error);
-    });
+        request.onerror = () => {
+          console.error(`VcoStore: Failed to open database [${dbName}]`, request.error);
+          this.dbPromise = null;
+          reject(request.error);
+        };
+      });
+    })();
+
+    return this.dbPromise;
   }
 
   async putEnvelope(envelope: StoredEnvelope): Promise<void> {
@@ -93,8 +105,12 @@ export class VcoStore {
       const tx = db.transaction("envelopes", "readwrite");
       const store = tx.objectStore("envelopes");
       const request = store.put(envelope);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => {
+        console.error("VcoStore: putEnvelope transaction failed", tx.error);
+        reject(tx.error);
+      };
     });
   }
 
@@ -139,14 +155,11 @@ export class VcoStore {
       const tx = db.transaction("profiles", "readwrite");
       const store = tx.objectStore("profiles");
       const request = store.put({ creatorId, data });
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
   }
 
-  /**
-   * Retrieves a social profile for a specific creator.
-   */
   async getProfile(creatorId: string): Promise<any | null> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
@@ -168,8 +181,8 @@ export class VcoStore {
       const tx = db.transaction("blobs", "readwrite");
       const store = tx.objectStore("blobs");
       const request = store.put({ cid: cidHex, blob, updatedAt: Date.now() });
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
   }
 
@@ -242,8 +255,8 @@ export class VcoStore {
       const tx = db.transaction("notifications", "readwrite");
       const store = tx.objectStore("notifications");
       const request = store.put(notification);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
   }
 
@@ -260,6 +273,7 @@ export class VcoStore {
 
   async deleteNotificationByTarget(targetCid: Uint8Array): Promise<void> {
     const db = await this.getDB();
+    const targetHex = toHex(targetCid);
     return new Promise((resolve, reject) => {
       const tx = db.transaction("notifications", "readwrite");
       const store = tx.objectStore("notifications");
@@ -267,7 +281,7 @@ export class VcoStore {
       request.onsuccess = () => {
         const cursor = request.result;
         if (cursor) {
-          if (toHex(cursor.value.targetCid) === toHex(targetCid)) {
+          if (toHex(cursor.value.targetCid) === targetHex) {
             cursor.delete();
           }
           cursor.continue();
