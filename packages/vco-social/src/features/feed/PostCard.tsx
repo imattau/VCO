@@ -35,33 +35,33 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
   const isReposted = identity ? repostSet?.has(identity.creatorIdHex) : false;
 
   const relativeTime = new Intl.RelativeTimeFormat('en', { style: 'short' });
-  const timeStr = relativeTime.format(
-    Math.round((Number(data.timestampMs) - Date.now()) / 60000), 
-    'minute'
-  );
+  const timeDiff = Math.round((Number(data.timestampMs) - Date.now()) / 60000);
+  const timeStr = isNaN(timeDiff) ? "now" : relativeTime.format(timeDiff, 'minute');
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 space-y-4 hover:border-zinc-700 transition-all group shadow-xl shadow-black/20 cursor-pointer relative" onClick={onOpenThread}>
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-xs font-black text-blue-400">
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-3xl p-4 md:p-6 space-y-3 md:space-y-4 hover:border-zinc-700 transition-all group shadow-xl shadow-black/20 cursor-pointer relative overflow-hidden" onClick={onOpenThread}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          <div className="shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-[10px] md:text-xs font-black text-blue-400">
             {authorProfile.displayName[0]}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-black text-white tracking-tight">{authorProfile.displayName}</span>
-              <span className="text-zinc-500 text-xs font-bold">@{authorProfile.displayName.split(' ')[0].toLowerCase()}.vco</span>
-              <span className="text-zinc-600 text-xs">•</span>
-              <span className="text-zinc-600 text-xs font-bold uppercase tracking-widest">{timeStr}</span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0">
+              <span className="font-black text-white tracking-tight truncate max-w-[120px] md:max-w-none text-sm md:text-base">{authorProfile.displayName}</span>
+              <div className="flex items-center gap-1 text-zinc-500 text-[10px] md:text-xs font-bold">
+                <span className="truncate max-w-[80px] md:max-w-none">@{authorProfile.displayName.split(' ')[0].toLowerCase()}.vco</span>
+                <span className="text-zinc-600">•</span>
+                <span className="text-zinc-600 uppercase tracking-widest whitespace-nowrap">{timeStr}</span>
+              </div>
             </div>
-            <div className="text-[10px] text-zinc-600 font-mono">did:vco:{Array.from(authorProfile.encryptionPubkey || new Uint8Array(4)).map(b => b.toString(16).padStart(2,'0')).join('').substring(0,8)}...</div>
+            <div className="text-[8px] md:text-[10px] text-zinc-600 font-mono truncate">did:vco:{Array.from(authorProfile.encryptionPubkey || new Uint8Array(4)).map(b => b.toString(16).padStart(2,'0')).join('').substring(0,8)}...</div>
           </div>
         </div>
         
-        <div className="relative">
+        <div className="relative shrink-0">
           <button 
             className={twMerge(
-              "p-2 rounded-full text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all",
+              "p-1.5 md:p-2 rounded-full text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all",
               showMenu && "text-white bg-zinc-800"
             )}
             aria-label="More options"
@@ -70,7 +70,7 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
               setShowMenu(!showMenu);
             }}
           >
-            <MoreHorizontal size={20} />
+            <MoreHorizontal size={18} />
           </button>
 
           {showMenu && (
@@ -98,11 +98,11 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
         </div>
       </div>
 
-      <div className="prose prose-invert prose-zinc max-w-none text-zinc-200 leading-relaxed font-medium">
+      <div className="prose prose-invert prose-zinc max-w-none text-zinc-200 leading-relaxed font-medium text-sm md:text-base break-words overflow-hidden">
         <ReactMarkdown
           components={{
-            p: ({ children }) => <p className="m-0">{children}</p>,
-            a: ({ children, href }) => <a href={href} className="text-blue-500 no-underline hover:underline">#{children}</a>
+            p: ({ children }) => <p className="m-0 break-words">{children}</p>,
+            a: ({ children, href }) => <a href={href} className="text-blue-500 no-underline hover:underline break-all">#{children}</a>
           }}
         >
           {data.content}
@@ -111,16 +111,16 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
 
       <MediaGallery mediaCids={data.mediaCids} />
 
-      <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
+      <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50 gap-1">
         <ActionButton 
-          icon={<MessageSquare size={18} />} 
+          icon={<MessageSquare size={16} />} 
           count={replyCount > 0 ? replyCount : undefined}
           color="group-hover:text-blue-500" 
           label="Reply to post" 
           onClick={(e) => { e.stopPropagation(); onOpenThread?.(); }}
         />
         <ActionButton 
-          icon={<Repeat2 size={18} />} 
+          icon={<Repeat2 size={16} />} 
           count={repostCount > 0 ? repostCount : undefined}
           active={isReposted}
           color="group-hover:text-emerald-500" 
@@ -129,7 +129,7 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
           onClick={(e) => { e.stopPropagation(); repost(cid); }}
         />
         <ActionButton 
-          icon={<Heart size={18} className={isLiked ? "fill-current" : ""} />} 
+          icon={<Heart size={16} className={isLiked ? "fill-current" : ""} />} 
           count={reactionCount > 0 ? reactionCount : undefined}
           active={isLiked}
           color="group-hover:text-rose-500" 
@@ -138,7 +138,7 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
           onClick={(e) => { e.stopPropagation(); reactToPost(cid); }}
         />
         <ActionButton 
-          icon={<Share size={18} />} 
+          icon={<Share size={16} />} 
           color="group-hover:text-blue-500" 
           label="Share post" 
           onClick={(e) => e.stopPropagation()}
@@ -168,7 +168,7 @@ function ActionButton({ icon, count, color, activeColor, active, label, onClick 
   return (
     <button 
       className={twMerge(
-        "flex items-center gap-2 transition-all", 
+        "flex items-center gap-1 md:gap-2 transition-all shrink-0", 
         active ? (activeColor || "text-white") : "text-zinc-500",
         !active && color
       )} 
@@ -176,12 +176,12 @@ function ActionButton({ icon, count, color, activeColor, active, label, onClick 
       onClick={onClick}
     >
       <div className={twMerge(
-        "p-2 rounded-full transition-all",
+        "p-1.5 md:p-2 rounded-full transition-all",
         active ? "bg-white/5" : "hover:bg-zinc-800"
       )}>
         {icon}
       </div>
-      {count !== undefined && <span className="text-xs font-black tracking-widest">{count}</span>}
+      {count !== undefined && <span className="text-[10px] md:text-xs font-black tracking-widest">{count}</span>}
     </button>
   );
 }
