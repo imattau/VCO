@@ -61,6 +61,18 @@ npm run tauri build
 
 The Android environment is designed for flexibility and environment discovery.
 
+**Quick Environment Setup:**
+We provide a script to automatically detect your Android SDK/NDK locations and configure your terminal:
+
+```bash
+# For Bash or Zsh (Linux/macOS)
+./scripts/setup-android-env.sh
+
+# For PowerShell (Windows)
+.\scripts\setup-android-env.ps1
+```
+
+**Manual Commands:**
 ```bash
 # Run on a connected emulator or device
 npm run tauri android dev
