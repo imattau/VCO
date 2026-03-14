@@ -41,8 +41,14 @@ export class NodeClient {
    */
   public async connect(): Promise<void> {
     if (!isTauri()) {
-      console.warn('NodeClient: Running in browser mode. Using mock networking.');
-      this.startMockNode();
+      const mockNetworkEnabled = typeof import.meta !== 'undefined' && typeof (import.meta as any).env !== 'undefined' && (import.meta as any).env.VITE_MOCK_NETWORK === 'true';
+      if (mockNetworkEnabled) {
+        console.warn('NodeClient: VITE_MOCK_NETWORK=true — using mock networking (dev only).');
+        this.startMockNode();
+      } else {
+        console.error('NodeClient: Not running in Tauri and VITE_MOCK_NETWORK is not set. Node unavailable.');
+        this.handleEvent({ type: 'error', message: 'Node requires Tauri runtime. Set VITE_MOCK_NETWORK=true for browser development.' });
+      }
       return;
     }
 
@@ -58,7 +64,7 @@ export class NodeClient {
       this.getStats();
     } catch (error) {
       console.error('NodeClient: Failed to connect to native node.', error);
-      this.startMockNode();
+      this.handleEvent({ type: 'error', message: `Failed to connect to native node: ${error}` });
     }
   }
 
