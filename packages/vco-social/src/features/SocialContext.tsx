@@ -40,6 +40,8 @@ import { KeyringService, IdentityKeys } from '@/lib/KeyringService';
 import { NodeClient } from '@/lib/NodeClient';
 import { vcoStore } from '@/lib/VcoStore';
 import { MediaService } from '@/lib/MediaService';
+import { FeedProcessor, FeedItem, ReplyItem } from '@/lib/FeedProcessor';
+import { PoWService } from '@/lib/PoWService';
 import * as Constants from '@/lib/constants';
 
 interface MessageWithMetadata {
@@ -56,24 +58,6 @@ interface Conversation {
   unread: number;
 }
 
-interface FeedItem {
-  cid: Uint8Array;
-  authorId: Uint8Array;
-  data: PostData;
-  authorProfile: ProfileData;
-  repostBy?: {
-    profile: ProfileData;
-    timestampMs: bigint;
-  };
-}
-
-interface ReplyItem {
-  cid: Uint8Array;
-  authorId: Uint8Array;
-  data: ReplyData;
-  authorProfile: ProfileData;
-}
-
 interface SocialContextType {
   profile: ProfileData | null;
   identity: IdentityKeys | null;
@@ -82,7 +66,7 @@ interface SocialContextType {
   replies: ReplyItem[];
   following: Set<string>;
   conversations: Conversation[];
-  notifications: NotificationData[];
+  notifications: any[];
   tombstones: Set<string>; 
   reactions: Map<string, Set<string>>; 
   reposts: Map<string, Set<string>>;    
@@ -132,7 +116,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const [replies, setReplies] = useState<ReplyItem[]>([]);
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [notifications, setNotifications] = useState<NotificationData[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [tombstones, setTombstones] = useState<Set<string>>(new Set());
   const [reactions, setReactions] = useState<Map<string, Set<string>>>(new Map());
   const [reposts, setReposts] = useState<Map<string, Set<string>>>(new Map());
@@ -157,11 +141,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   useEffect(() => { peerProfilesRef.current = peerProfiles; }, [peerProfiles]);
   useEffect(() => { isNodeReadyRef.current = isNodeReady; }, [isNodeReady]);
 
-  const calculateDifficulty = useCallback((payload: Uint8Array) => {
-    const sizeScaling = Math.floor(Math.log2(payload.length / 1024 + 1));
-    return Math.floor((Constants.DEFAULT_POW_DIFFICULTY + sizeScaling) * networkLoad);
-  }, [networkLoad]);
-
   const unlock = async (password: string) => {
     const id = await KeyringService.unlockIdentity(password);
     if (id) {
@@ -181,98 +160,20 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const hasExistingIdentity = async () => await KeyringService.hasIdentity();
 
   const processEnvelopes = useCallback(async (envelopes: any[], myProfile: ProfileData, profileMap: Map<string, ProfileData>, identity: IdentityKeys) => {
-    const fItems: FeedItem[] = [];
-    const rItems: ReplyItem[] = [];
-    const followSet = new Set<string>();
-    const dmMap = new Map<string, MessageWithMetadata[]>();
-    const reactionMap = new Map<string, Set<string>>();
-    const repostMap = new Map<string, Set<string>>();
+    const results = FeedProcessor.process(envelopes, myProfile, profileMap, identity.creatorIdHex);
     
-    // First pass: cache all posts
-    const allPostsByCid = new Map<string, { authorId: Uint8Array, data: PostData, authorProfile: ProfileData }>();
+    // Logic for DMs remains here as it requires E2EEService
+    const dmMap = new Map<string, MessageWithMetadata[]>();
     for (const e of envelopes) {
-      try {
-        const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
-        const coreEnvelope = decodeCore(bytes);
-        const payloadRaw = new TextDecoder().decode(coreEnvelope.payload);
-        
-        if (payloadRaw.includes(Constants.POST_SCHEMA_URI)) {
+      if (e.channelId.startsWith("vco://channels/dm/")) {
+        try {
+          const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
+          const coreEnvelope = decodeCore(bytes);
+          const cid = Uint8Array.from(atob(e.cid), c => c.charCodeAt(0));
           const creatorIdHex = toHex(coreEnvelope.header.creatorId);
-          const authorProfile = creatorIdHex === identity.creatorIdHex ? myProfile : profileMap.get(creatorIdHex) || {
-            schema: Constants.PROFILE_SCHEMA_URI,
-            displayName: `Peer ${creatorIdHex.substring(0, 6)}`,
-            avatarCid: new Uint8Array(0),
-            previousManifest: new Uint8Array(0),
-            bio: "Offline identity"
-          };
-          allPostsByCid.set(toHex(coreEnvelope.headerHash), {
-            authorId: coreEnvelope.header.creatorId,
-            data: decodePost(coreEnvelope.payload),
-            authorProfile
-          });
-        }
-      } catch(err) {}
-    }
-
-    // Second pass: full process
-    for (const e of envelopes) {
-      try {
-        const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
-        const coreEnvelope = decodeCore(bytes);
-        const cid = Uint8Array.from(atob(e.cid), c => c.charCodeAt(0));
-        const creatorIdHex = toHex(coreEnvelope.header.creatorId);
-        
-        const authorProfile = creatorIdHex === identity.creatorIdHex ? myProfile : profileMap.get(creatorIdHex) || {
-          schema: Constants.PROFILE_SCHEMA_URI,
-          displayName: `Peer ${creatorIdHex.substring(0, 6)}`,
-          avatarCid: new Uint8Array(0),
-          previousManifest: new Uint8Array(0),
-          bio: "Offline identity"
-        };
-
-        if (e.channelId === Constants.GLOBAL_SOCIAL_CHANNEL) {
-          const payloadRaw = new TextDecoder().decode(coreEnvelope.payload);
-          
-          if (payloadRaw.includes(Constants.REPLY_SCHEMA_URI)) {
-            rItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: decodeReply(coreEnvelope.payload), authorProfile });
-          } else if (payloadRaw.includes(Constants.FOLLOW_SCHEMA_URI)) {
-            const followData = decodeFollow(coreEnvelope.payload);
-            if (creatorIdHex === identity.creatorIdHex) {
-              if (followData.action === "follow") followSet.add(toHex(followData.subjectKey));
-              else followSet.delete(toHex(followData.subjectKey));
-            }
-          } else if (payloadRaw.includes(Constants.POST_SCHEMA_URI)) {
-            const postData = decodePost(coreEnvelope.payload);
-            fItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: postData, authorProfile });
-          } else if (payloadRaw.includes(Constants.REACTION_SCHEMA_URI)) {
-            const reactionData = decodeReaction(coreEnvelope.payload);
-            const targetHex = toHex(reactionData.targetCid);
-            if (!reactionMap.has(targetHex)) reactionMap.set(targetHex, new Set());
-            reactionMap.get(targetHex)!.add(creatorIdHex);
-          } else if (payloadRaw.includes(Constants.REPOST_SCHEMA_URI)) {
-            const repostData = decodeRepost(coreEnvelope.payload);
-            const targetHex = toHex(repostData.originalPostCid);
-            if (!repostMap.has(targetHex)) repostMap.set(targetHex, new Set());
-            repostMap.get(targetHex)!.add(creatorIdHex);
-
-            const original = allPostsByCid.get(targetHex);
-            if (original) {
-              fItems.push({
-                cid: repostData.originalPostCid,
-                authorId: original.authorId,
-                data: original.data,
-                authorProfile: original.authorProfile,
-                repostBy: {
-                  profile: authorProfile,
-                  timestampMs: repostData.timestampMs
-                }
-              });
-            }
-          }
-        } else if (e.channelId.startsWith("vco://channels/dm/")) {
           const dmData = decodeDirectMessage(coreEnvelope.payload);
-          let decrypted: any = { content: "[Encrypted Message]", mediaCids: [] };
           
+          let decrypted: any = { content: "[Encrypted Message]", mediaCids: [] };
           try {
             decrypted = await E2EEService.decryptMessage(
               identity.encryptionPrivateKey,
@@ -280,7 +181,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
               dmData.nonce,
               dmData.encryptedPayload
             );
-          } catch(e) {}
+          } catch {}
 
           const msg: MessageWithMetadata = {
             cid,
@@ -292,12 +193,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           const peerKey = e.channelId.replace("vco://channels/dm/", "");
           if (!dmMap.has(peerKey)) dmMap.set(peerKey, []);
           dmMap.get(peerKey)!.push(msg);
-        }
-      } catch (err) {
-        console.warn("ProcessEnvelopes: Failed to decode envelope", err);
+        } catch {}
       }
     }
-    return { fItems, rItems, followSet, dmMap, reactionMap, repostMap };
+
+    return { ...results, dmMap };
   }, []);
 
   const handleInboundEnvelope = useCallback(async (base64: string, channelId: string) => {
@@ -309,7 +209,19 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const crypto = createNobleCryptoProvider();
       const envelope = decodeCore(bytes);
-      if (!verifyEnvelope(envelope, crypto)) return;
+      
+      // 1. Cryptographic Verification
+      if (!verifyEnvelope(envelope, crypto)) {
+        console.warn("VCO: Rejected envelope with invalid signature");
+        return;
+      }
+
+      // 2. PoW Verification
+      const requiredDiff = PoWService.calculateTargetDifficulty(envelope.payload.length, networkLoad);
+      if (!PoWService.verify(envelope.headerHash, envelope.header.powDifficulty)) {
+        console.warn("VCO: Rejected envelope with insufficient Proof-of-Work");
+        return;
+      }
 
       const actualHash = blake3((envelope.header as any).encode());
       if (toHex(actualHash) !== toHex(envelope.headerHash)) return;
@@ -338,10 +250,10 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         };
       }
       
-      const { fItems, rItems, followSet, dmMap, reactionMap, repostMap } = await processEnvelopes([{ cid: cidBase64, channelId, payload: base64 }], currentProfile, peerProfilesRef.current, currentIdentity);
+      const { feedItems, replyItems, followSet, dmMap, reactionMap, repostMap, notifications: newNotifs } = await processEnvelopes([{ cid: cidBase64, channelId, payload: base64 }], currentProfile, peerProfilesRef.current, currentIdentity);
       
-      if (fItems.length > 0) setFeed(prev => [fItems[0], ...prev]);
-      if (rItems.length > 0) setReplies(prev => [rItems[0], ...prev]);
+      if (feedItems.length > 0) setFeed(prev => [feedItems[0], ...prev]);
+      if (replyItems.length > 0) setReplies(prev => [replyItems[0], ...prev]);
       if (followSet.size > 0) {
         setFollowing(prev => {
           const next = new Set(prev);
@@ -385,10 +297,16 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           return next;
         });
       }
+      if (newNotifs.length > 0) {
+        for (const n of newNotifs) {
+          await vcoStore.putNotification(n);
+          setNotifications(prev => [n, ...prev]);
+        }
+      }
     } catch (err) {
       console.error("Failed to process inbound envelope:", err);
     }
-  }, [processEnvelopes]);
+  }, [processEnvelopes, networkLoad]);
 
   const loadMoreFeed = useCallback(async () => {
     const currentIdentity = identityRef.current;
@@ -401,8 +319,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     if (moreEnvelopes.length < Constants.FEED_PAGE_SIZE) setHasMoreFeed(false);
     if (moreEnvelopes.length === 0) return;
 
-    const { fItems, reactionMap, repostMap } = await processEnvelopes(moreEnvelopes, currentProfile, peerProfilesRef.current, currentIdentity);
-    setFeed(prev => [...prev, ...fItems.sort((a,b) => {
+    const { feedItems, reactionMap, repostMap } = await processEnvelopes(moreEnvelopes, currentProfile, peerProfilesRef.current, currentIdentity);
+    setFeed(prev => [...prev, ...feedItems.sort((a,b) => {
       const aTime = a.repostBy ? Number(a.repostBy.timestampMs) : Number(a.data.timestampMs);
       const bTime = b.repostBy ? Number(b.repostBy.timestampMs) : Number(b.data.timestampMs);
       return bTime - aTime;
@@ -472,15 +390,15 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         console.log(`VCO Social: Loaded ${allLocalEnvelopes.length} envelopes from local store.`);
         
         if (allLocalEnvelopes.length > 0) {
-          const { fItems, rItems, followSet, dmMap, reactionMap, repostMap } = await processEnvelopes(allLocalEnvelopes, myProfile, profileMap, identity);
+          const { feedItems, replyItems, followSet, dmMap, reactionMap, repostMap } = await processEnvelopes(allLocalEnvelopes, myProfile, profileMap, identity);
           
-          console.log(`VCO Social: Successfully processed ${fItems.length} posts and ${reactionMap.size} reaction targets.`);
-          setFeed(fItems.sort((a,b) => {
+          console.log(`VCO Social: Successfully processed ${feedItems.length} posts and ${reactionMap.size} reaction targets.`);
+          setFeed(feedItems.sort((a,b) => {
             const aTime = a.repostBy ? Number(a.repostBy.timestampMs) : Number(a.data.timestampMs);
             const bTime = b.repostBy ? Number(b.repostBy.timestampMs) : Number(b.data.timestampMs);
             return bTime - aTime;
           }));
-          setReplies(rItems);
+          setReplies(replyItems);
           setFollowing(followSet);
           setReactions(reactionMap);
           setReposts(repostMap);
@@ -589,7 +507,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         payloadType: 0x50,
         creatorId: identity.creatorId,
         privateKey: identity.signingPrivateKey,
-        powDifficulty: calculateDifficulty(postEncoded)
+        powDifficulty: PoWService.calculateTargetDifficulty(postEncoded.length, networkLoad)
       }, crypto);
 
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
@@ -631,7 +549,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         payloadType: 0x50,
         creatorId: identity.creatorId,
         privateKey: identity.signingPrivateKey,
-        powDifficulty: calculateDifficulty(replyEncoded)
+        powDifficulty: PoWService.calculateTargetDifficulty(replyEncoded.length, networkLoad)
       }, crypto);
 
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
@@ -682,7 +600,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         payloadType: 0x50,
         creatorId: identity.creatorId,
         privateKey: identity.signingPrivateKey,
-        powDifficulty: calculateDifficulty(dmEncoded)
+        powDifficulty: PoWService.calculateTargetDifficulty(dmEncoded.length, networkLoad)
       }, crypto);
 
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
@@ -730,7 +648,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const followData = { schema: Constants.FOLLOW_SCHEMA_URI, subjectKey, action: "follow" as const, timestampMs: BigInt(Date.now()) };
       const payload = encodeFollow(followData);
       
-      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
+      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
@@ -752,7 +670,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const followData = { schema: Constants.FOLLOW_SCHEMA_URI, subjectKey, action: "unfollow" as const, timestampMs: BigInt(Date.now()) };
       const payload = encodeFollow(followData);
       
-      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
+      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
@@ -785,7 +703,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           payloadType: 0x50,
           creatorId: identity.creatorId,
           privateKey: identity.signingPrivateKey,
-          powDifficulty: calculateDifficulty(payload)
+          powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad)
         }, crypto);
         
         const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
@@ -800,7 +718,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   };
 
   const markNotificationAsRead = (cid: Uint8Array) => {
-    setNotifications(prev => prev.filter(n => n.targetCid !== cid));
+    setNotifications(prev => prev.filter(n => n.cid !== cid));
     vcoStore.deleteNotificationByTarget(cid);
   };
 
@@ -812,7 +730,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const crypto = createNobleCryptoProvider();
       const tombstoneData = { schema: Constants.TOMBSTONE_SCHEMA_URI, targetCid: cid, reason: "User requested deletion", timestampMs: BigInt(Date.now()) };
       const payload = encodeTombstone(tombstoneData);
-      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
+      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       await vcoStore.putEnvelope({ cid: btoa(String.fromCharCode(...envelope.headerHash)), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
@@ -830,7 +748,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const crypto = createNobleCryptoProvider();
       const reactionData = { schema: Constants.REACTION_SCHEMA_URI, targetCid: cid, emoji: "❤️", timestampMs: BigInt(Date.now()) };
       const payload = encodeReaction(reactionData);
-      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
+      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       
@@ -858,7 +776,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       if (!originalPost) return;
       const repostData: RepostData = { schema: Constants.REPOST_SCHEMA_URI, originalPostCid: cid, originalAuthorCid: originalPost.authorId, commentary, timestampMs: BigInt(Date.now()) };
       const payload = encodeRepost(repostData);
-      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
+      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       
@@ -884,7 +802,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const crypto = createNobleCryptoProvider();
       const reportData = { schema: Constants.REPORT_SCHEMA_URI, targetCid: cid, reason: reason, timestampMs: BigInt(Date.now()) };
       const payload = encodeReport(reportData);
-      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
+      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
       NodeClient.getInstance().publish(Constants.MODERATION_REPORTS_CHANNEL, btoa(String.fromCharCode(...encodeCore(envelope))));
       toast("Verifiable report broadcast to network", "success");
     } catch (err) {
