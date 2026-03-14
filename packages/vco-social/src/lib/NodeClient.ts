@@ -5,7 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 export type NodeEvent = 
   | { type: 'ready', peerId: string, multiaddrs: string[] }
   | { type: 'envelope', channelId: string, envelope: string }
-  | { type: 'stats', peerId: string, multiaddrs: string[], peers: string[], connections: { remotePeer: string, remoteAddr: string, tags: string[] }[] }
+  | { type: 'stats', peerId: string, multiaddrs: string[], peers: string[], connections: { remotePeer: string, remoteAddr: string, tags: string[] }[], networkLoad: number }
   | { type: 'resolving', cid: string, channelId: string }
   | { type: 'dial_success', addr: string }
   | { type: 'error', message: string };
@@ -167,7 +167,8 @@ export class NodeClient {
         peerId: this.peerId!,
         multiaddrs: this.multiaddrs,
         peers: [],
-        connections: []
+        connections: [],
+        networkLoad: 1.0
       });
     }, 5000);
   }

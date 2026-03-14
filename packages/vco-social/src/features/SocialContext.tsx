@@ -461,7 +461,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         if (event.type === 'envelope') {
           handleInboundEnvelope(event.envelope, event.channelId);
         } else if (event.type === 'stats') {
-          setNetworkLoad((event as any).network_load || 1.0);
+          setNetworkLoad(event.networkLoad || 1.0);
           if (!isNodeReadyRef.current) {
             setIsNodeReady(true);
             setPeerId(event.peerId);

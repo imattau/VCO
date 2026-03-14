@@ -103,19 +103,17 @@ struct VcoBehaviour {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct CachedPeer {
     peer_id: String,
     addrs: Vec<String>,
 }
 
 #[derive(Serialize, Clone)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum NodeEvent {
-    #[serde(rename = "ready")]
     Ready { peer_id: String, multiaddrs: Vec<String> },
-    #[serde(rename = "envelope")]
     Envelope { channel_id: String, envelope: String },
-    #[serde(rename = "stats")]
     Stats {
         peer_id: String,
         multiaddrs: Vec<String>,
@@ -123,15 +121,13 @@ pub enum NodeEvent {
         connections: Vec<ConnectionInfo>,
         network_load: f32,
     },
-    #[serde(rename = "error")]
     Error { message: String },
-    #[serde(rename = "resolving")]
     Resolving { cid: String },
-    #[serde(rename = "dial_success")]
     DialSuccess { addr: String },
 }
 
 #[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectionInfo {
     pub remote_peer: String,
     pub remote_addr: String,
