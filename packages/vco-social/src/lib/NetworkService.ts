@@ -14,20 +14,27 @@ export class NetworkService {
   /**
    * Starts periodic polling of node statistics.
    */
+  private static eventUnsub: (() => void) | null = null;
+
   static startPolling(callback: (stats: NetworkStats) => void, ms: number = 5000) {
     if (this.pollInterval) return;
 
     const client = NodeClient.getInstance();
-    
+
+    const snapshot = () => ({
+      peerId: client.peerId,
+      multiaddrs: client.multiaddrs,
+      peers: client.peers,
+      connections: client.connections,
+      isReady: client.isReady
+    });
+
+    // Push update immediately whenever the node emits any event
+    this.eventUnsub = client.onEvent(() => callback(snapshot()));
+
     const poll = () => {
       client.getStats();
-      callback({
-        peerId: client.peerId,
-        multiaddrs: client.multiaddrs,
-        peers: client.peers,
-        connections: client.connections,
-        isReady: client.isReady
-      });
+      callback(snapshot());
     };
 
     poll();
@@ -38,6 +45,10 @@ export class NetworkService {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
+    }
+    if (this.eventUnsub) {
+      this.eventUnsub();
+      this.eventUnsub = null;
     }
   }
 

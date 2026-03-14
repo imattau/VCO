@@ -12,7 +12,8 @@ const mockClient = {
   peers: ['peer1'],
   connections: [],
   isReady: true,
-  resolve: vi.fn()
+  resolve: vi.fn(),
+  onEvent: vi.fn(() => () => {})
 };
 
 vi.mock('../lib/NodeClient', () => {
