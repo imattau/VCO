@@ -17,7 +17,7 @@ interface PostCardProps {
 }
 
 export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardProps) {
-  const { reactToPost, repost, deletePost, publishReport, reactions, reposts, replies, identity } = useSocial();
+  const { reactToPost, repost, deletePost, publishReport, reactions, reposts, replies, identity, setFilter } = useSocial();
   const [showMenu, setShowMenu] = useState(false);
   const [showReport, setShowReport] = useState(false);
   
@@ -101,7 +101,25 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
         <ReactMarkdown
           components={{
             p: ({ children }) => <p className="m-0 break-words">{children}</p>,
-            a: ({ children, href }) => <a href={href} className="text-blue-500 no-underline hover:underline break-all">#{children}</a>
+            a: ({ children, href }) => {
+              const isHashtag = href?.startsWith('#') || (typeof children === 'string' && children.startsWith('#'));
+              return (
+                <a 
+                  href={href} 
+                  className="text-blue-500 no-underline hover:underline break-all"
+                  onClick={(e) => {
+                    if (isHashtag) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const tag = (typeof children === 'string' ? children : href || '').replace('#', '');
+                      setFilter({ type: 'tag', value: tag });
+                    }
+                  }}
+                >
+                  {children}
+                </a>
+              );
+            }
           }}
         >
           {data.content}
