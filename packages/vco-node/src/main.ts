@@ -1,8 +1,11 @@
 import { createVcoLibp2pNode, handleSyncSessionChannels } from "@vco/vco-transport";
 import { identify } from "@libp2p/identify";
-import { kadDHT } from "@libp2p/kad-dht";
+import { kadDHT, type KadDHT } from "@libp2p/kad-dht";
 import { decodeEnvelopeProto } from "@vco/vco-core";
 import { createInterface } from "node:readline";
+import { CID } from "multiformats/cid";
+import * as raw from "multiformats/codecs/raw";
+import { identity } from "multiformats/hashes/identity";
 
 // channel subscriptions: channelId → set of listeners (in-process only — one process = one "peer")
 const subscriptions = new Set<string>();
@@ -156,10 +159,25 @@ async function main() {
       // Trigger DHT peer discovery for this CID
       void (async () => {
         try {
-          // DHT provider lookup — node.services.dht.findProviders not yet available
-          process.stderr.write(`[vco-node] resolve requested for ${cid} — DHT findProviders not yet implemented\n`);
+          const dht = (node.services as any).dht as KadDHT;
+          const cidBytes = Buffer.from(cid, "hex");
+          const mh = identity.digest(cidBytes);
+          const key = CID.createV1(raw.code, mh);
+          for await (const event of dht.findProviders(key)) {
+            if (event.name === "PROVIDER") {
+              for (const provider of event.providers) {
+                if (provider.multiaddrs.length > 0) {
+                  try {
+                    await node.dial(provider.id);
+                  } catch {
+                    // peer unreachable, try next
+                  }
+                }
+              }
+            }
+          }
         } catch (err) {
-          process.stderr.write(`[vco-node] DHT resolve failed for ${cid}: ${err}\n`);
+          process.stderr.write(`[vco-node] DHT findProviders failed for ${cid}: ${err}\n`);
         }
       })();
     } else if (msg.type === "shutdown") {
