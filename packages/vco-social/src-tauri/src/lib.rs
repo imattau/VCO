@@ -37,12 +37,21 @@ async fn publish(channel_id: String, envelope_base64: String, state: State<'_, V
 }
 
 #[tauri::command]
-async fn get_stats(state: State<'_, VcoNodeState>) -> Result<(), String> {
+async fn get_stats(app_handle: tauri::AppHandle, state: State<'_, VcoNodeState>) -> Result<(), String> {
     let tx_lock = state.swarm_tx.lock().await;
     if let Some(tx) = &*tx_lock {
         tx.send(NodeCommand::GetStats).map_err(|e| e.to_string())
     } else {
-        Err("Node not initialized".to_string())
+        // Explicitly notify UI that node is not ready yet
+        let _ = app_handle.emit("vco-node-event", serde_json::json!({
+            "type": "stats",
+            "peerId": "Initializing...",
+            "multiaddrs": [],
+            "peers": [],
+            "connections": [],
+            "networkLoad": 1.0
+        }));
+        Ok(())
     }
 }
 
@@ -116,16 +125,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_log::Builder::default()
+            .level(log::LevelFilter::Info)
+            .build())
         .setup(|app| {
             let handle = app.handle().clone();
-            
-            // Initialize logging early
-            app.handle().plugin(
-                tauri_plugin_log::Builder::default()
-                    .level(log::LevelFilter::Info)
-                    .build(),
-            )?;
-
             log::info!("VCO: App setup starting...");
 
             // Initialize state with None

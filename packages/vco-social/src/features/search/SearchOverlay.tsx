@@ -3,6 +3,7 @@ import { Search, Hash, Users, Activity, X } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { useSocial } from '../SocialContext';
 import { useToast } from '../../components/ToastProvider';
+import { SearchLogic } from '../../lib/SearchLogic';
 
 export function SearchOverlay() {
   const [isOpen, setIsOpen] = useState(false);
@@ -37,27 +38,14 @@ export function SearchOverlay() {
   };
 
   // Derive trending tags from feed
-  const trendingTags = useMemo(() => {
-    const counts = new Map<string, number>();
-    feed.forEach(item => {
-      (item.data.tags || []).forEach(tag => {
-        counts.set(tag, (counts.get(tag) || 0) + 1);
-      });
-    });
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([tag]) => `#${tag.toUpperCase()}`);
-  }, [feed]);
+  const trendingTags = useMemo(() => 
+    SearchLogic.deriveTrendingTags(feed), 
+  [feed]);
 
   // Filter peers from state
-  const foundPeers = useMemo(() => {
-    if (!query) return [];
-    const normalizedQuery = query.toLowerCase();
-    return Array.from(peerProfiles.entries())
-      .filter(([id, p]) => p.displayName.toLowerCase().includes(normalizedQuery) || id.toLowerCase().includes(normalizedQuery))
-      .map(([id, p]) => ({ name: p.displayName, creatorId: id }));
-  }, [peerProfiles, query]);
+  const foundPeers = useMemo(() => 
+    SearchLogic.filterPeers(peerProfiles, query), 
+  [peerProfiles, query]);
 
   return (
     <div className="relative max-w-md w-full hidden md:block" ref={overlayRef}>

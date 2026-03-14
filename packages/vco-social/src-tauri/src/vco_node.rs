@@ -196,13 +196,11 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
             let mut kad_config = kad::Config::new(StreamProtocol::new("/vco/kad/1.0.0"));
             kad_config.set_query_timeout(Duration::from_secs(10));
             
-            let mut kad = kad::Behaviour::with_config(
+            let kad = kad::Behaviour::with_config(
                 local_peer_id,
                  sled_store,
                 kad_config,
             );
-            
-            kad.set_mode(Some(kad::Mode::Server));
             
             let identify = identify::Behaviour::new(identify::Config::new(
                 "/vco/1.0.0".into(),
@@ -244,13 +242,15 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
         )
         .build();
 
-    // QUIC is best-effort — Android/emulators may not support UDP binding
+    // Android/restrictive environments may fail UDP/TCP binding
     if let Err(e) = swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?) {
-        log::warn!("VCO: QUIC transport unavailable (non-fatal): {:?}", e);
+        log::warn!("VCO: QUIC listen failed (non-fatal): {:?}", e);
     }
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+    if let Err(e) = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?) {
+        log::warn!("VCO: TCP listen failed (non-fatal): {:?}", e);
+    }
     if let Err(e) = swarm.listen_on("/ip4/0.0.0.0/tcp/0/ws".parse()?) {
-        log::warn!("VCO: WebSocket transport unavailable (non-fatal): {:?}", e);
+        log::warn!("VCO: WebSocket listen failed (non-fatal): {:?}", e);
     }
 
     let handle = app_handle.clone();
@@ -281,7 +281,6 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
     let mut last_minute = tokio::time::Instant::now();
 
     tokio::spawn(async move {
-        // Move the relay transport here to keep its channel open for the behaviour
         let _keep_alive = relay_transport;
         
         loop {
