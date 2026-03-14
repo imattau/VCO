@@ -14,7 +14,7 @@ import { E2EEService } from '@/lib/E2EEService';
 import { ProfileService } from '@/lib/ProfileService';
 import { NotificationService } from '@/lib/NotificationService';
 import { useToast } from '@/components/ToastProvider';
-import { toHex } from '@/lib/encoding';
+import { mockCid, toHex } from '@vco/vco-testing';
 import { blake3 } from '@vco/vco-crypto';
 import { SocialTab } from '@/App';
 import { KeyringService, IdentityKeys } from '@/lib/KeyringService';
@@ -218,9 +218,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
               dmData.nonce,
               dmData.encryptedPayload
             );
-          } catch(e) {
-            console.warn("E2EE decrypt failed for DM, showing placeholder", e);
-          }
+          } catch(e) {}
 
           const msg: MessageWithMetadata = {
             cid,
@@ -249,6 +247,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const { decodeEnvelopeProto, verifyEnvelope } = await import('@vco/vco-core');
       const { createNobleCryptoProvider, blake3 } = await import('@vco/vco-crypto');
+      const { toHex } = await import('@vco/vco-testing');
       
       const crypto = createNobleCryptoProvider();
       const envelope = decodeEnvelopeProto(bytes);
@@ -404,11 +403,16 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         const storedNotifs = await vcoStore.getAllNotifications();
         setNotifications(storedNotifs.sort((a,b) => Number(b.timestampMs - a.timestampMs)));
 
+        // Load ALL local envelopes first to ensure persistence
+        const allLocalEnvelopes = await vcoStore.getAllEnvelopes();
+        
+        // Then load paginated feed for UI
         const initialEnvelopes = await vcoStore.getEnvelopesPaged(Constants.FEED_PAGE_SIZE * 2);
         if (initialEnvelopes.length < Constants.FEED_PAGE_SIZE * 2) setHasMoreFeed(false);
 
-        if (initialEnvelopes.length > 0) {
-          const { fItems, rItems, followSet, dmMap, reactionMap, repostMap } = await processEnvelopes(initialEnvelopes, myProfile, profileMap, identity);
+        // Process all local envelopes to build full state (reactions, reposts, etc)
+        if (allLocalEnvelopes.length > 0) {
+          const { fItems, rItems, followSet, dmMap, reactionMap, repostMap } = await processEnvelopes(allLocalEnvelopes, myProfile, profileMap, identity);
           
           setFeed(fItems.sort((a,b) => Number(b.data.timestampMs - a.data.timestampMs)));
           setReplies(rItems);
