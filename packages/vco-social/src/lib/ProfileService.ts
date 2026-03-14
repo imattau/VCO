@@ -36,7 +36,7 @@ export class ProfileService {
     // Publish profile envelope to the network via Tauri IPC
     try {
       const envelopeBase64 = btoa(String.fromCharCode(...encoded));
-      await invoke('publish', { channelId: 'vco/profiles/v1', envelopeBase64 });
+      await invoke('publish', { channelId: 'vco://channels/profiles/v1', envelopeBase64 });
     } catch (err) {
       console.error("Failed to publish profile to network:", err);
       // Profile is still created locally even if publish fails
