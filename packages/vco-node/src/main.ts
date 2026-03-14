@@ -1,51 +1,17 @@
 import { createVcoLibp2pNode, handleSyncSessionChannels } from "@vco/vco-transport";
 import { identify } from "@libp2p/identify";
-import { kadDHT, type KadDHT } from "@libp2p/kad-dht";
+import { kadDHT } from "@libp2p/kad-dht";
 import { decodeEnvelopeProto } from "@vco/vco-core";
 import { createInterface } from "node:readline";
-import { CID } from "multiformats/cid";
-import * as raw from "multiformats/codecs/raw";
-import { identity } from "multiformats/hashes/identity";
-
-// channel subscriptions: channelId → set of listeners (in-process only — one process = one "peer")
-const subscriptions = new Set<string>();
-
-// channel → inbound envelope listeners
-const inboundListeners = new Map<string, Array<(encoded: Uint8Array) => void>>();
-
-// in-memory store: channel → ordered list of envelopes for replay on re-subscribe
-const channelStore = new Map<string, Uint8Array[]>();
-
-function storeEnvelope(channelId: string, encoded: Uint8Array): void {
-  if (!channelStore.has(channelId)) channelStore.set(channelId, []);
-  channelStore.get(channelId)!.push(encoded);
-}
-
-function replayChannel(channelId: string): void {
-  const stored = channelStore.get(channelId);
-  if (!stored) return;
-  for (const encoded of stored) {
-    emit({ type: "envelope", channelId, envelope: uint8ArrayToBase64(encoded) });
-  }
-}
+import {
+  createIpcState,
+  storeEnvelope,
+  registerChannelListener,
+  handleMessage,
+} from "./ipc-handler.js";
 
 function emit(obj: Record<string, unknown>): void {
   process.stdout.write(JSON.stringify(obj) + "\n");
-}
-
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64");
-}
-
-function base64ToUint8Array(b64: string): Uint8Array {
-  return Uint8Array.from(Buffer.from(b64, "base64"));
-}
-
-function registerChannelListener(channelId: string): void {
-  if (inboundListeners.has(channelId)) return; // idempotent — only one emitter per channel
-  inboundListeners.set(channelId, [(encoded) => {
-    emit({ type: "envelope", channelId, envelope: uint8ArrayToBase64(encoded) });
-  }]);
 }
 
 async function main() {
@@ -63,6 +29,8 @@ async function main() {
   });
 
   await node.start();
+
+  const state = createIpcState();
 
   emit({
     type: "ready",
@@ -88,15 +56,14 @@ async function main() {
         const encoded = await channel.receive();
         decodeEnvelopeProto(encoded); // validate
         // Broadcast to all subscribed channels and persist for replay
-        for (const [channelId, listeners] of inboundListeners) {
-          if (subscriptions.has(channelId)) {
-            storeEnvelope(channelId, encoded);
+        for (const [channelId, listeners] of state.inboundListeners) {
+          if (state.subscriptions.has(channelId)) {
+            storeEnvelope(state, channelId, encoded);
             for (const fn of listeners) fn(encoded);
           }
         }
       }
     } catch (err: any) {
-      // Distinguish clean stream close from unexpected errors
       const isCleanClose = err?.code === 'ERR_STREAM_RESET' || err?.message?.includes('closed') || err?.message?.includes('reset') || err?.message?.includes('aborted');
       if (!isCleanClose) {
         process.stderr.write(`[vco-node] sync session error: ${err}\n`);
@@ -106,84 +73,8 @@ async function main() {
 
   // Read commands from stdin
   const rl = createInterface({ input: process.stdin });
-
-  rl.on("line", async (line) => {
-    let msg: Record<string, unknown>;
-    try {
-      msg = JSON.parse(line) as Record<string, unknown>;
-    } catch {
-      emit({ type: "error", message: "invalid JSON on stdin" });
-      return;
-    }
-
-    if (msg.type === "subscribe") {
-      const channelId = msg.channelId as string;
-      subscriptions.add(channelId);
-      registerChannelListener(channelId);
-      replayChannel(channelId); // send stored envelopes to renderer
-    } else if (msg.type === "unsubscribe") {
-      subscriptions.delete(msg.channelId as string);
-    } else if (msg.type === "publish") {
-      const channelId = msg.channelId as string;
-      const encoded = base64ToUint8Array(msg.envelope as string);
-      storeEnvelope(channelId, encoded);
-      const listeners = inboundListeners.get(channelId);
-      if (listeners) {
-        for (const fn of listeners) fn(encoded);
-      }
-    } else if (msg.type === "get_stats") {
-      emit({
-        type: "stats",
-        peerId: node.peerId.toString(),
-        multiaddrs: node.getMultiaddrs().map((a) => a.toString()),
-        peers: node.getPeers().map(p => p.toString()),
-        connections: node.getConnections().map(c => ({
-          remotePeer: c.remotePeer.toString(),
-          remoteAddr: c.remoteAddr.toString(),
-          tags: node.getPeers().includes(c.remotePeer) ? ["connected"] : []
-        }))
-      });
-    } else if (msg.type === "dial") {
-      const addr = msg.addr as string;
-      const { multiaddr } = await import("@multiformats/multiaddr");
-      node.dial(multiaddr(addr) as any)
-        .then(() => emit({ type: "dial_success", addr }))
-        .catch(err => emit({ type: "error", message: `Dial failed: ${String(err)}` }));
-    } else if (msg.type === "resolve") {
-      const cid = msg.cid as string;
-      const channelId = `vco://objects/${cid}`;
-      subscriptions.add(channelId);
-      registerChannelListener(channelId);
-      replayChannel(channelId);
-      emit({ type: "resolving", cid, channelId });
-      // Trigger DHT peer discovery for this CID
-      void (async () => {
-        try {
-          const dht = (node.services as any).dht as KadDHT;
-          const cidBytes = Buffer.from(cid, "hex");
-          const mh = identity.digest(cidBytes);
-          const key = CID.createV1(raw.code, mh);
-          for await (const event of dht.findProviders(key)) {
-            if (event.name === "PROVIDER") {
-              for (const provider of event.providers) {
-                if (provider.multiaddrs.length > 0) {
-                  try {
-                    await node.dial(provider.id);
-                  } catch {
-                    // peer unreachable, try next
-                  }
-                }
-              }
-            }
-          }
-        } catch (err) {
-          process.stderr.write(`[vco-node] DHT findProviders failed for ${cid}: ${err}\n`);
-        }
-      })();
-    } else if (msg.type === "shutdown") {
-      void Promise.resolve(node.stop()).then(() => process.exit(0)).catch(() => process.exit(1));
-    }
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rl.on("line", (line) => { void handleMessage(line, state, node as any, emit); });
 
   process.on("SIGINT", async () => { await node.stop(); process.exit(0); });
   process.on("SIGTERM", async () => { await node.stop(); process.exit(0); });

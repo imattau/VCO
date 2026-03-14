@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist .tsbuildinfo",
-    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@libp2p/identify": "^3.0.0",
@@ -17,5 +18,8 @@
     "@vco/vco-transport": "0.1.0",
     "libp2p": "^2.10.0",
     "multiformats": "^13.4.2"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0"
   }
 }
