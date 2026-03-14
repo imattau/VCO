@@ -188,7 +188,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     const reactionMap = new Map<string, Set<string>>();
     const repostMap = new Map<string, Set<string>>();
     
-    // First pass: extract all posts so reposts can find them
+    // First pass: cache all posts
     const allPostsByCid = new Map<string, { authorId: Uint8Array, data: PostData, authorProfile: ProfileData }>();
     for (const e of envelopes) {
       try {
@@ -214,7 +214,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       } catch(err) {}
     }
 
-    // Second pass: process everything including reposts
+    // Second pass: full process
     for (const e of envelopes) {
       try {
         const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
@@ -252,16 +252,13 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           } else if (payloadRaw.includes(Constants.REPOST_SCHEMA_URI)) {
             const repostData = decodeRepost(coreEnvelope.payload);
             const targetHex = toHex(repostData.originalPostCid);
-            
-            // Interaction count
             if (!repostMap.has(targetHex)) repostMap.set(targetHex, new Set());
             repostMap.get(targetHex)!.add(creatorIdHex);
 
-            // Add to timeline if original post is found
             const original = allPostsByCid.get(targetHex);
             if (original) {
               fItems.push({
-                cid: repostData.originalPostCid, // Key by original CID
+                cid: repostData.originalPostCid,
                 authorId: original.authorId,
                 data: original.data,
                 authorProfile: original.authorProfile,
@@ -477,8 +474,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         if (allLocalEnvelopes.length > 0) {
           const { fItems, rItems, followSet, dmMap, reactionMap, repostMap } = await processEnvelopes(allLocalEnvelopes, myProfile, profileMap, identity);
           
-          console.log(`VCO Social: Successfully processed ${fItems.length} posts from local storage.`);
-          // Sort by event time (repost time if it's a repost, else original time)
+          console.log(`VCO Social: Successfully processed ${fItems.length} posts and ${reactionMap.size} reaction targets.`);
           setFeed(fItems.sort((a,b) => {
             const aTime = a.repostBy ? Number(a.repostBy.timestampMs) : Number(a.data.timestampMs);
             const bTime = b.repostBy ? Number(b.repostBy.timestampMs) : Number(b.data.timestampMs);
