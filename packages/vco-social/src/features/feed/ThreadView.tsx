@@ -13,13 +13,16 @@ interface ThreadViewProps {
 }
 
 export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
-  const { replies, createReply } = useSocial();
+  const { replies, reactions, reposts, createReply } = useSocial();
   const [replyText, setReplyText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!parentPost) return null;
 
   const threadReplies = replies.filter(r => toHex(r.data.parentCid) === toHex(parentPost.cid));
+  const cidHex = toHex(parentPost.cid);
+  const repostCount = reposts.get(cidHex)?.size ?? 0;
+  const likeCount = reactions.get(cidHex)?.size ?? 0;
 
   const handleReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,8 +76,8 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
 
               <div className="flex items-center gap-4 text-xs font-black text-zinc-500 uppercase tracking-widest border-t border-zinc-800/50 pt-4 mb-4 mt-6">
                  <span>{threadReplies.length} Replies</span>
-                 <span>5 Reposts</span>
-                 <span>42 Likes</span>
+                 <span>{repostCount} Reposts</span>
+                 <span>{likeCount} Likes</span>
               </div>
 
               <div className="flex items-center justify-around py-2">
