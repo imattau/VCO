@@ -199,24 +199,25 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         };
 
         if (e.channelId === Constants.GLOBAL_SOCIAL_CHANNEL) {
-          const payloadJson = JSON.parse(new TextDecoder().decode(coreEnvelope.payload));
+          const payloadRaw = new TextDecoder().decode(coreEnvelope.payload);
           
-          if (payloadJson.schema === Constants.REPLY_SCHEMA_URI) {
+          // Heuristic identification of schema type
+          if (payloadRaw.includes(Constants.REPLY_SCHEMA_URI)) {
             rItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: decodeReply(coreEnvelope.payload), authorProfile });
-          } else if (payloadJson.schema === Constants.FOLLOW_SCHEMA_URI) {
+          } else if (payloadRaw.includes(Constants.FOLLOW_SCHEMA_URI)) {
             const followData = decodeFollow(coreEnvelope.payload);
             if (creatorIdHex === identity.creatorIdHex) {
               if (followData.action === "follow") followSet.add(toHex(followData.subjectKey));
               else followSet.delete(toHex(followData.subjectKey));
             }
-          } else if (payloadJson.schema === Constants.POST_SCHEMA_URI) {
+          } else if (payloadRaw.includes(Constants.POST_SCHEMA_URI)) {
             fItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: decodePost(coreEnvelope.payload), authorProfile });
-          } else if (payloadJson.schema === Constants.REACTION_SCHEMA_URI) {
+          } else if (payloadRaw.includes(Constants.REACTION_SCHEMA_URI)) {
             const reactionData = decodeReaction(coreEnvelope.payload);
             const targetHex = toHex(reactionData.targetCid);
             if (!reactionMap.has(targetHex)) reactionMap.set(targetHex, new Set());
             reactionMap.get(targetHex)!.add(creatorIdHex);
-          } else if (payloadJson.schema === Constants.REPOST_SCHEMA_URI) {
+          } else if (payloadRaw.includes(Constants.REPOST_SCHEMA_URI)) {
             const repostData = decodeRepost(coreEnvelope.payload);
             const targetHex = toHex(repostData.originalPostCid);
             if (!repostMap.has(targetHex)) repostMap.set(targetHex, new Set());

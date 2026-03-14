@@ -15,22 +15,39 @@ export interface StoredEnvelope {
 export class VcoStore {
   private db: IDBDatabase | null = null;
   private dbPromise: Promise<IDBDatabase> | null = null;
-  private currentProfile: string | null = null;
+  private profile: string | null = null;
 
+  /**
+   * Internal helper to get the active storage profile.
+   * Retries if Tauri isn't ready yet.
+   */
   private async getStorageProfile(): Promise<string> {
-    if (this.currentProfile) return this.currentProfile;
+    if (this.profile && this.profile !== "default") return this.profile;
     
-    let profile = "default";
-    try {
-      // Check if we are in Tauri and have access to invoke
-      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
-        profile = await invoke<string>("get_vco_profile");
-      }
-    } catch (e) {
-      console.warn("VcoStore: Failed to get profile via invoke, using default", e);
+    // If not in Tauri, return default immediately
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      this.profile = "default";
+      return "default";
     }
-    this.currentProfile = profile;
-    return profile;
+
+    // Attempt to get profile with retries
+    for (let i = 0; i < 5; i++) {
+      try {
+        const p = await invoke<string>("get_vco_profile");
+        if (p) {
+          console.log(`VcoStore: Resolved profile [${p}] on attempt ${i+1}`);
+          this.profile = p;
+          return p;
+        }
+      } catch (e) {
+        console.warn(`VcoStore: Profile resolution attempt ${i+1} failed`, e);
+        await new Promise(r => setTimeout(r, 100 * (i + 1)));
+      }
+    }
+
+    console.error("VcoStore: Failed to resolve profile after retries, falling back to default");
+    this.profile = "default";
+    return "default";
   }
 
   private async getDB(): Promise<IDBDatabase> {
