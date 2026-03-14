@@ -4,17 +4,13 @@ import { loadConfig } from "../src/config.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createVcoLibp2pNode, handleSyncSessionChannels } from "@vco/vco-transport";
+import { createVcoLibp2pNode, openSyncSessionChannel } from "@vco/vco-transport";
 import { NobleCryptoProvider, deriveEd25519Multikey } from "@vco/vco-crypto";
-import { createEnvelope, encodeEnvelopeProto, decodeEnvelopeProto, assertEnvelopeIntegrity } from "@vco/vco-core";
-import { SyncRangeProofProtocol } from "@vco/vco-sync";
-import type { Libp2pNode } from "@vco/vco-transport";
+import { createEnvelope, encodeEnvelopeProto } from "@vco/vco-core";
 import http from "node:http";
 
 let tmpDir: string;
 let server: RelayServer;
-let serverPort: number;
-let httpPort: number;
 
 const crypto = new NobleCryptoProvider();
 const PRIVATE_KEY = new Uint8Array(32).fill(0x42);
@@ -32,29 +28,21 @@ function makeEnvelope(payloadText: string = "hello relay") {
   );
 }
 
-beforeEach(async () => {
-  tmpDir = mkdtempSync(join(tmpdir(), "vco-relay-e2e-"));
-  // Use 0 to let OS pick random available ports
-  const config = loadConfig({
+function makeConfig(dir: string, httpPort?: number) {
+  return loadConfig({
     configPath: undefined,
     env: {
-      VCO_DATA_DIR: tmpDir,
+      VCO_DATA_DIR: dir,
       VCO_LISTEN_ADDRS: "/ip4/127.0.0.1/udp/0/quic-v1",
-      VCO_HTTP_PORT: "0",
-      VCO_HTTP_HOST: "127.0.0.1",
+      ...(httpPort !== undefined ? { VCO_HTTP_PORT: httpPort.toString(), VCO_HTTP_HOST: "127.0.0.1" } : {}),
     },
   });
-  server = new RelayServer(config);
+}
+
+beforeEach(async () => {
+  tmpDir = mkdtempSync(join(tmpdir(), "vco-relay-e2e-"));
+  server = new RelayServer(makeConfig(tmpDir));
   await server.start();
-  
-  // Extract assigned ports
-  const multiaddr = server.multiaddrs[0];
-  serverPort = parseInt(multiaddr.nodeAddress().port.toString());
-  
-  // We need to wait a bit for the HTTP server to start and get its port if we used 0
-  // Since RelayServer doesn't expose the httpServer or its port yet, 
-  // we'll assume the installer/production use specific ports, 
-  // but for E2E we might want to verify it's up.
 }, 30000);
 
 afterEach(async () => {
@@ -63,7 +51,7 @@ afterEach(async () => {
 }, 30000);
 
 describe("Relay Server E2E", () => {
-  it("allows a client to connect, sync an envelope, and retrieve it", async () => {
+  it("stores a submitted envelope in the relay's LevelDB store", async () => {
     const clientNode = await createVcoLibp2pNode({
       addresses: { listen: ["/ip4/127.0.0.1/udp/0/quic-v1"] },
     });
@@ -71,58 +59,87 @@ describe("Relay Server E2E", () => {
 
     try {
       const serverAddr = server.multiaddrs[0];
-      const stream = await clientNode.dialProtocol(serverAddr, "/vco/sync/3.2.0");
-      const protocol = new SyncRangeProofProtocol(stream as any);
+      const conn = await clientNode.dial(serverAddr);
+      const channel = await openSyncSessionChannel(conn);
 
-      // 1. Send an envelope to the relay
-      const envelope = makeEnvelope("relay e2e test");
+      const envelope = makeEnvelope("store verification test");
       const encoded = encodeEnvelopeProto(envelope);
-      
-      // The relay's sync-handler handles the inbound envelopes
-      // In a real sync, we'd do the range proof first, but here we test the transport
-      await (stream as any).sink([encoded]);
+      await channel.send(encoded);
 
-      // Give the relay a moment to process and store
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Close the channel so the relay's receive loop terminates cleanly
+      await channel.close();
 
-      // 2. Verify health check is working (integration of the new HTTP feature)
-      // Since we can't easily get the random HTTP port from the server yet, 
-      // we'll skip the actual fetch in this test or update RelayServer to expose it.
-      // But we know it started because it didn't throw.
+      // Give the relay time to process and persist
+      await new Promise(resolve => setTimeout(resolve, 300));
 
+      const store = server.storeForTest!;
+      expect(await store.hasEnvelope(envelope.headerHash)).toBe(true);
+
+      const retrieved = await store.get(envelope.headerHash);
+      expect(retrieved).toBeDefined();
+      expect(retrieved!.payload).toEqual(envelope.payload);
+    } finally {
+      await clientNode.stop();
+    }
+  }, 30000);
+
+  it("deduplicates envelopes — submitting the same envelope twice stores it once", async () => {
+    const clientNode = await createVcoLibp2pNode({
+      addresses: { listen: ["/ip4/127.0.0.1/udp/0/quic-v1"] },
+    });
+    await clientNode.start();
+
+    try {
+      const serverAddr = server.multiaddrs[0];
+      const envelope = makeEnvelope("dedup test");
+      const encoded = encodeEnvelopeProto(envelope);
+
+      // First submission
+      const conn1 = await clientNode.dial(serverAddr);
+      const ch1 = await openSyncSessionChannel(conn1);
+      await ch1.send(encoded);
+      await ch1.close();
+
+      // Second submission (same envelope)
+      const conn2 = await clientNode.dial(serverAddr);
+      const ch2 = await openSyncSessionChannel(conn2);
+      await ch2.send(encoded);
+      await ch2.close();
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const store = server.storeForTest!;
+      // Collect all hashes — should only have one entry for this envelope
+      const hashes: Uint8Array[] = [];
+      for await (const h of store.allHeaderHashes()) hashes.push(h);
+      const matchingHashes = hashes.filter(h =>
+        h.length === envelope.headerHash.length &&
+        h.every((b, i) => b === envelope.headerHash[i])
+      );
+      expect(matchingHashes).toHaveLength(1);
     } finally {
       await clientNode.stop();
     }
   }, 30000);
 
   it("responds to health check", async () => {
-      // For this test, let's use a fixed port to verify the HTTP server
-      const testHttpPort = 4567;
-      const tmpDir2 = mkdtempSync(join(tmpdir(), "vco-relay-health-"));
-      const config = loadConfig({
-        configPath: undefined,
-        env: {
-          VCO_DATA_DIR: tmpDir2,
-          VCO_LISTEN_ADDRS: "/ip4/127.0.0.1/udp/0/quic-v1",
-          VCO_HTTP_PORT: testHttpPort.toString(),
-          VCO_HTTP_HOST: "127.0.0.1",
-        },
-      });
-      const healthServer = new RelayServer(config);
-      await healthServer.start();
+    const testHttpPort = 14568;
+    const tmpDir2 = mkdtempSync(join(tmpdir(), "vco-relay-health-"));
+    const healthServer = new RelayServer(makeConfig(tmpDir2, testHttpPort));
+    await healthServer.start();
 
-      try {
-        const res = await new Promise<string>((resolve, reject) => {
-          http.get(`http://127.0.0.1:${testHttpPort}/health`, (res) => {
-            let data = "";
-            res.on("data", (chunk) => data += chunk);
-            res.on("end", () => resolve(data));
-          }).on("error", reject);
-        });
-        expect(res).toBe("OK");
-      } finally {
-        await healthServer.stop();
-        rmSync(tmpDir2, { recursive: true });
-      }
-  });
+    try {
+      const res = await new Promise<string>((resolve, reject) => {
+        http.get(`http://127.0.0.1:${testHttpPort}/health`, (res) => {
+          let data = "";
+          res.on("data", (chunk) => data += chunk);
+          res.on("end", () => resolve(data));
+        }).on("error", reject);
+      });
+      expect(res).toBe("OK");
+    } finally {
+      await healthServer.stop();
+      rmSync(tmpDir2, { recursive: true });
+    }
+  }, 30000);
 });

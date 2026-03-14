@@ -78,4 +78,6 @@ export class RelayServer {
 
   get peerId() { return this.node?.peerId; }
   get multiaddrs() { return this.node?.getMultiaddrs() ?? []; }
+  /** Exposed for integration tests only — do not use in production code. */
+  get storeForTest(): IRelayStore | undefined { return this.store; }
 }
