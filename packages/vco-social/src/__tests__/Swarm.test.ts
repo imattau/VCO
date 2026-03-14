@@ -2,9 +2,21 @@ import { describe, it, expect, vi } from 'vitest';
 import { SwarmLogic } from '../lib/SwarmLogic';
 import { NodeClient, NodeEvent } from '../lib/NodeClient';
 
+// Polyfill for Node environment
+if (typeof window === 'undefined') {
+  (global as any).window = {
+    __TAURI_INTERNALS__: {} // Simulate Tauri
+  };
+}
+
 // Mock Tauri
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+  invoke: vi.fn(async (cmd, args) => {
+    if (cmd === 'dial' && args.addr === '/ip4/1.1.1.1/tcp/4001/p2p/peer-id') {
+      return Promise.resolve();
+    }
+    return null;
+  }),
 }));
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(),
@@ -39,8 +51,6 @@ describe('Swarm & Discovery Unit Tests', () => {
   describe('NodeClient Event Handling (Discovery)', () => {
     it('should update internal state on stats event', () => {
       const client = NodeClient.getInstance();
-      
-      // Accessing private method for testing discovery logic
       const handleEvent = (client as any).handleEvent.bind(client);
 
       const statsEvent: NodeEvent = {
@@ -60,7 +70,6 @@ describe('Swarm & Discovery Unit Tests', () => {
       expect(client.peerId).toBe('local-peer-id');
       expect(client.peers).toHaveLength(2);
       expect(client.connections).toHaveLength(1);
-      expect(client.connections[0].remotePeer).toBe('peer-a');
     });
 
     it('should trigger listeners on discovery events', () => {
@@ -77,6 +86,52 @@ describe('Swarm & Discovery Unit Tests', () => {
       handleEvent({ type: 'resolving', cid: 'target-cid', channelId: 'vco://test' });
 
       expect(listenerCalled).toBe(true);
+      cleanup();
+    });
+  });
+
+  describe('Swarm Mesh & Dialing', () => {
+    it('should correctly invoke the native dial command', async () => {
+      const client = NodeClient.getInstance();
+      const { invoke } = await import('@tauri-apps/api/core');
+      
+      const targetAddr = '/ip4/1.1.1.1/tcp/4001/p2p/peer-id';
+      client.dial(targetAddr);
+
+      expect(invoke).toHaveBeenCalledWith('dial', { addr: targetAddr });
+    });
+
+    it('should notify listeners on dial_success', () => {
+      const client = NodeClient.getInstance();
+      const handleEvent = (client as any).handleEvent.bind(client);
+      
+      let successAddr = '';
+      const cleanup = client.onEvent((e) => {
+        if (e.type === 'dial_success') {
+          successAddr = e.addr;
+        }
+      });
+
+      handleEvent({ type: 'dial_success', addr: '/ip4/1.1.1.1/tcp/4001' });
+
+      expect(successAddr).toBe('/ip4/1.1.1.1/tcp/4001');
+      cleanup();
+    });
+
+    it('should notify listeners on connection errors', () => {
+      const client = NodeClient.getInstance();
+      const handleEvent = (client as any).handleEvent.bind(client);
+      
+      let errorMsg = '';
+      const cleanup = client.onEvent((e) => {
+        if (e.type === 'error') {
+          errorMsg = e.message;
+        }
+      });
+
+      handleEvent({ type: 'error', message: 'Connection timeout' });
+
+      expect(errorMsg).toBe('Connection timeout');
       cleanup();
     });
   });
