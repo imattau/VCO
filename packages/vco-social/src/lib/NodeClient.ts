@@ -61,7 +61,12 @@ export class NodeClient {
       console.log('VCO NodeClient: Registering vco-node-event listener...');
       await listen<NodeEvent>('vco-node-event', (event) => {
         console.log('VCO NodeClient: Raw event received:', JSON.stringify(event.payload));
-        this.handleEvent(event.payload);
+        // Normalize snake_case keys from Rust serde to camelCase
+        const p = event.payload as any;
+        if (p.peer_id !== undefined) { p.peerId = p.peer_id; }
+        if (p.network_load !== undefined) { p.networkLoad = p.network_load; }
+        if (p.channel_id !== undefined) { p.channelId = p.channel_id; }
+        this.handleEvent(p as NodeEvent);
       });
 
       console.log('VCO NodeClient: Listener registered. Requesting initial stats...');
