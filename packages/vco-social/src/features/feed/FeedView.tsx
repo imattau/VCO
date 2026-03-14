@@ -19,11 +19,11 @@ export function FeedView() {
   }
 
   return (
-    <div className="flex flex-col space-y-8 animate-in fade-in duration-1000 pb-20">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-2">
-        <div className="space-y-2">
-          <h2 className="text-5xl font-black text-white tracking-tighter italic uppercase">Your Swarm</h2>
-          <p className="text-zinc-500 text-xl font-medium">Synced in real-time across the VCO network.</p>
+    <div className="flex flex-col space-y-6 md:space-y-8 animate-in fade-in duration-1000 pb-24 md:pb-20">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 px-2">
+        <div className="space-y-1 md:space-y-2">
+          <h2 className="text-3xl md:text-5xl font-black text-white tracking-tighter italic uppercase">Your Swarm</h2>
+          <p className="text-zinc-500 text-base md:text-xl font-medium">Synced in real-time across the VCO network.</p>
         </div>
 
         {filter && (

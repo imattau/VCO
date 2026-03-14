@@ -28,33 +28,33 @@ export function NotificationView() {
   };
 
   return (
-    <div className="space-y-12 animate-in fade-in duration-1000">
-      <div className="space-y-2 mb-10">
-        <h2 className="text-5xl font-black text-white tracking-tighter italic uppercase">Notifications</h2>
-        <p className="text-zinc-500 text-xl font-medium">Real-time sync events from the VCO network.</p>
+    <div className="space-y-8 md:space-y-12 animate-in fade-in duration-1000 pb-24 md:pb-20 px-2 md:px-0">
+      <div className="space-y-1 md:space-y-2 mb-6 md:mb-10">
+        <h2 className="text-3xl md:text-5xl font-black text-white tracking-tighter italic uppercase">Notifications</h2>
+        <p className="text-zinc-500 text-base md:text-xl font-medium">Real-time sync events from the VCO network.</p>
       </div>
 
       {notifications.length > 0 ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] overflow-hidden shadow-2xl">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl md:rounded-[3rem] overflow-hidden shadow-2xl">
            {notifications.map((n, i) => (
-             <NotificationItem 
-               key={i} 
-               type={n.type} 
+             <NotificationItem
+               key={i}
+               type={n.type}
                actor={getActorName(n.actorCid)}
-               content={n.summary.split(' ').slice(1).join(' ')} 
+               content={n.summary.split(' ').slice(1).join(' ')}
                time={new Date(Number(n.timestampMs)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                onClick={() => handleNotificationClick(n)}
              />
            ))}
         </div>
       ) : (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-20 flex flex-col items-center justify-center text-center space-y-6 shadow-2xl">
-           <div className="w-20 h-20 rounded-[2rem] bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-700 shadow-inner">
-              <Bell size={32} />
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl md:rounded-[3rem] p-10 md:p-20 flex flex-col items-center justify-center text-center space-y-4 md:space-y-6 shadow-2xl">
+           <div className="w-16 h-16 md:w-20 md:h-20 rounded-[1.5rem] md:rounded-[2rem] bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-700 shadow-inner">
+              <Bell size={28} />
            </div>
            <div className="space-y-2">
-              <h3 className="text-xl font-black text-white tracking-tighter italic uppercase">All clear in the swarm</h3>
-              <p className="text-zinc-500 text-sm font-medium">No new sync events detected on your monitored channels.</p>
+              <h3 className="text-base md:text-xl font-black text-white tracking-tighter italic uppercase">All clear in the swarm</h3>
+              <p className="text-zinc-500 text-xs md:text-sm font-medium">No new sync events detected on your monitored channels.</p>
            </div>
         </div>
       )}
@@ -74,21 +74,21 @@ function NotificationItem({ type, actor, content, time, onClick }: any) {
   };
 
   return (
-    <div 
+    <div
       onClick={onClick}
-      className="p-6 border-b border-zinc-800 hover:bg-zinc-800/30 transition-all flex items-center gap-6 group cursor-pointer"
+      className="p-4 md:p-6 border-b border-zinc-800 hover:bg-zinc-800/30 transition-all flex items-center gap-3 md:gap-6 group cursor-pointer"
     >
-       <div className="p-3 bg-zinc-950 rounded-2xl border border-zinc-800 group-hover:border-zinc-700 transition-all shadow-inner text-zinc-400 group-hover:text-white">
+       <div className="p-2.5 md:p-3 bg-zinc-950 rounded-xl md:rounded-2xl border border-zinc-800 group-hover:border-zinc-700 transition-all shadow-inner text-zinc-400 group-hover:text-white shrink-0">
           {getIcon()}
        </div>
-       <div className="flex-1">
-          <div className="flex items-center gap-2">
-             <span className="font-black text-white text-lg tracking-tight italic">{actor}</span>
-             <span className="text-zinc-500 font-medium">{content}</span>
+       <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+             <span className="font-black text-white text-sm md:text-lg tracking-tight italic">{actor}</span>
+             <span className="text-zinc-500 text-sm font-medium truncate">{content}</span>
           </div>
           <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{time}</span>
        </div>
-       <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+       <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
     </div>
   );
 }
