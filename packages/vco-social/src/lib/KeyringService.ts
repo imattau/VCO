@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { 
   deriveEd25519Multikey, 
   deriveEd25519PublicKey, 
@@ -15,10 +16,20 @@ export interface IdentityKeys {
   encryptionPublicKey: ByteArray;
 }
 
-const STORAGE_KEY = "vco_social_identity_encrypted_keys";
+const STORAGE_KEY_BASE = "vco_social_identity_encrypted_keys";
 const PBKDF2_ITERATIONS = 100000;
 
 export class KeyringService {
+  private static async getStorageKey(): Promise<string> {
+    let profile = "default";
+    try {
+      if ((window as any).__TAURI_INTERNALS__) {
+        profile = await invoke<string>("get_vco_profile");
+      }
+    } catch (e) {}
+    return `${STORAGE_KEY_BASE}_${profile}`;
+  }
+
   /**
    * Generates a complete new set of keys (Signing + Encryption),
    * encrypts them with a password, and persists them.
@@ -50,7 +61,8 @@ export class KeyringService {
    * Attempts to decrypt and load the identity using the provided password.
    */
   static async unlockIdentity(password: string): Promise<IdentityKeys | null> {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const key = await this.getStorageKey();
+    const saved = localStorage.getItem(key);
     if (!saved) return null;
 
     try {
@@ -84,15 +96,33 @@ export class KeyringService {
   /**
    * Wipes the local identity.
    */
-  static revokeIdentity(): void {
-    localStorage.removeItem(STORAGE_KEY);
+  static async revokeIdentity(): Promise<void> {
+    const key = await this.getStorageKey();
+    localStorage.removeItem(key);
   }
 
   /**
    * Checks if an identity exists (even if locked).
    */
-  static hasIdentity(): boolean {
-    return localStorage.getItem(STORAGE_KEY) !== null;
+  static async hasIdentity(): Promise<boolean> {
+    const key = await this.getStorageKey();
+    return localStorage.getItem(key) !== null;
+  }
+
+  /**
+   * Exports the encrypted identity package as a string.
+   */
+  static async exportEncryptedPackage(): Promise<string | null> {
+    const key = await this.getStorageKey();
+    return localStorage.getItem(key);
+  }
+
+  /**
+   * Imports an encrypted identity package.
+   */
+  static async importEncryptedPackage(pkgJson: string): Promise<void> {
+    const key = await this.getStorageKey();
+    localStorage.setItem(key, pkgJson);
   }
 
   private static async persistIdentity(identity: IdentityKeys, password: string) {
@@ -121,7 +151,8 @@ export class KeyringService {
       ciphertext: toHex(new Uint8Array(ciphertext))
     };
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pkg));
+    const key = await this.getStorageKey();
+    localStorage.setItem(key, JSON.stringify(pkg));
   }
 
   private static async deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {

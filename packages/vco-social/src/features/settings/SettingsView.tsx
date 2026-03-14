@@ -19,6 +19,8 @@ import { useToast } from '../../components/ToastProvider';
 import { twMerge } from 'tailwind-merge';
 import { NetworkService, NetworkStats } from '../../lib/NetworkService';
 import { NodeClient } from '../../lib/NodeClient';
+import { KeyringService } from '../../lib/KeyringService';
+import { vcoStore } from '../../lib/VcoStore';
 
 export function SettingsView() {
   const { toast } = useToast();
@@ -51,6 +53,22 @@ export function SettingsView() {
     NodeClient.getInstance().dial(dialAddr.trim());
     toast(`Dialing swarm address...`, "info");
     setDialAddr('');
+  };
+
+  const handleExportIdentity = async () => {
+    const pkg = await KeyringService.exportEncryptedPackage();
+    if (pkg) {
+      navigator.clipboard.writeText(pkg);
+      toast("Encrypted identity package copied to clipboard", "success");
+    }
+  };
+
+  const handleWipe = async () => {
+    if (confirm("CRITICAL: This will permanently delete your identity and all local data from this device. Are you sure?")) {
+      KeyringService.revokeIdentity();
+      await vcoStore.clearAll();
+      window.location.reload();
+    }
   };
 
   return (
@@ -197,6 +215,44 @@ export function SettingsView() {
                     </div>
                  </div>
                )}
+            </div>
+         </div>
+      </div>
+
+      {/* Recovery & Danger Zone */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-10 space-y-10 shadow-2xl overflow-hidden relative">
+         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-zinc-800 to-red-500" />
+         
+         <div className="flex items-center gap-4">
+            <div className="bg-red-600/10 p-4 rounded-3xl border border-red-500/20">
+               <Zap className="text-red-500 w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-black text-white uppercase tracking-widest italic">Identity Recovery & Danger Zone</h3>
+         </div>
+
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+               <h4 className="text-lg font-bold text-white">Export Identity</h4>
+               <p className="text-zinc-500 text-sm">Copy your encrypted identity package. You can use this string to recover your account on another device if you have your password.</p>
+               <button 
+                 onClick={handleExportIdentity}
+                 className="flex items-center gap-3 bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all border border-zinc-700 shadow-lg"
+               >
+                  <Copy size={14} />
+                  Copy Encrypted Package
+               </button>
+            </div>
+
+            <div className="space-y-4">
+               <h4 className="text-lg font-bold text-red-500">Wipe All Data</h4>
+               <p className="text-zinc-500 text-sm">Revoke your identity and wipe all synced objects, messages, and profiles from this device.</p>
+               <button 
+                 onClick={handleWipe}
+                 className="flex items-center gap-3 bg-red-600/10 hover:bg-red-600/20 text-red-500 px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all border border-red-500/20 shadow-lg"
+               >
+                  <Unplug size={14} />
+                  Revoke & Wipe Device
+               </button>
             </div>
          </div>
       </div>

@@ -12,6 +12,11 @@ export type NodeEvent =
 
 type EventListener = (event: NodeEvent) => void;
 
+/**
+ * Checks if the application is running inside Tauri.
+ */
+const isTauri = () => !!(window as any).__TAURI_INTERNALS__;
+
 export class NodeClient {
   private static instance: NodeClient;
   private listeners: Set<EventListener> = new Set();
@@ -32,8 +37,15 @@ export class NodeClient {
 
   /**
    * Connects to the native Rust libp2p node via Tauri IPC.
+   * Fallback to a mock node if running in a standard browser.
    */
   public async connect(): Promise<void> {
+    if (!isTauri()) {
+      console.warn('NodeClient: Running in browser mode. Using mock networking.');
+      this.startMockNode();
+      return;
+    }
+
     try {
       // Listen for events from the native Rust node
       await listen<NodeEvent>('vco-node-event', (event) => {
@@ -46,43 +58,45 @@ export class NodeClient {
       this.getStats();
     } catch (error) {
       console.error('NodeClient: Failed to connect to native node.', error);
+      this.startMockNode();
     }
   }
 
   public subscribe(channelId: string) {
-    invoke('subscribe', { channelId }).catch(console.error);
+    if (isTauri()) invoke('subscribe', { channelId }).catch(console.error);
   }
 
   public unsubscribe(channelId: string) {
-    invoke('unsubscribe', { channelId }).catch(console.error);
+    if (isTauri()) invoke('unsubscribe', { channelId }).catch(console.error);
   }
 
   public publish(channelId: string, envelopeBase64: string) {
-    invoke('publish', { channelId, envelopeBase64 }).catch(console.error);
+    if (isTauri()) invoke('publish', { channelId, envelopeBase64 }).catch(console.error);
   }
 
   public resolve(cidHex: string) {
-    invoke('resolve', { cid: cidHex }).catch(console.error);
+    if (isTauri()) invoke('resolve', { cid: cidHex }).catch(console.error);
   }
 
   public putRecord(cidHex: string, payloadBase64: string) {
-    invoke('put_record', { cid: cidHex, payloadBase64 }).catch(console.error);
+    if (isTauri()) invoke('put_record', { cid: cidHex, payloadBase64 }).catch(console.error);
   }
 
   public dial(addr: string) {
-    invoke('dial', { addr }).catch(console.error);
+    if (isTauri()) invoke('dial', { addr }).catch(console.error);
   }
 
   public bootstrap(addrs: string[]) {
-    invoke('bootstrap', { addrs }).catch(console.error);
+    if (isTauri()) invoke('bootstrap', { addrs }).catch(console.error);
   }
 
   public getStats() {
-    invoke('get_stats').catch(console.error);
+    if (isTauri()) invoke('get_stats').catch(console.error);
   }
 
   public async shutdown() {
     this.isReady = false;
+    if (isTauri()) await invoke('shutdown').catch(console.error);
   }
 
   public onEvent(listener: EventListener) {
@@ -96,12 +110,38 @@ export class NodeClient {
       this.peerId = event.peerId;
       this.multiaddrs = event.multiaddrs;
     } else if (event.type === 'stats') {
-      this.isReady = true; // If we get stats, the node is definitely alive
+      this.isReady = true; 
       this.peerId = event.peerId;
       this.multiaddrs = event.multiaddrs;
       this.peers = event.peers;
       this.connections = event.connections;
     }
     this.listeners.forEach(l => l(event));
+  }
+
+  private startMockNode() {
+    this.isReady = true;
+    this.peerId = "browser-mock-peer";
+    this.multiaddrs = ["/ip4/127.0.0.1/tcp/0/ws"];
+    
+    // Emit ready event
+    setTimeout(() => {
+      this.handleEvent({
+        type: 'ready',
+        peerId: this.peerId!,
+        multiaddrs: this.multiaddrs
+      });
+    }, 100);
+
+    // Periodically emit mock stats
+    setInterval(() => {
+      this.handleEvent({
+        type: 'stats',
+        peerId: this.peerId!,
+        multiaddrs: this.multiaddrs,
+        peers: [],
+        connections: []
+      });
+    }, 5000);
   }
 }

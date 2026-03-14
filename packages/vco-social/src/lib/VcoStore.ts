@@ -1,14 +1,24 @@
+import { invoke } from "@tauri-apps/api/core";
 import { toHex } from "@vco/vco-testing";
 
-const DB_NAME = "vco_social_db";
-const DB_VERSION = 2; // Bumped for migrations
+const DB_NAME_BASE = "vco_social_db";
+const DB_VERSION = 3; // Bumped for blob eviction index
 
 export interface StoredEnvelope {
   cid: string;
   channelId: string;
   payload: string; // Base64 or JSON
   timestamp: number;
-  syncStatus?: 'synced' | 'pending' | 'failed'; // Added in v2
+  syncStatus?: 'pending' | 'synced';
+}
+
+export interface StoredNotification {
+  cid: Uint8Array;
+  type: number;
+  authorId: Uint8Array;
+  targetCid: Uint8Array;
+  content: string;
+  timestampMs: bigint;
 }
 
 export class VcoStore {
@@ -17,48 +27,35 @@ export class VcoStore {
   private async getDB(): Promise<IDBDatabase> {
     if (this.db) return this.db;
 
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let profile = "default";
+    try {
+      if ((window as any).__TAURI_INTERNALS__) {
+        profile = await invoke<string>("get_vco_profile");
+      }
+    } catch (e) {
+      console.warn("VcoStore: Failed to get profile, using default", e);
+    }
 
-      request.onupgradeneeded = (event) => {
+    const dbName = `${DB_NAME_BASE}_${profile}`;
+
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(dbName, DB_VERSION);
+
+      request.onupgradeneeded = (event: any) => {
         const db = request.result;
         const oldVersion = event.oldVersion;
-        const newVersion = event.newVersion;
 
-        console.log(`VCO Store: Migrating from v${oldVersion} to v${newVersion}`);
-
-        // Version 1: Initial schema
         if (oldVersion < 1) {
-          // Store for all verifiable objects (envelopes)
-          if (!db.objectStoreNames.contains("envelopes")) {
-            const store = db.createObjectStore("envelopes", { keyPath: "cid" });
-            store.createIndex("by_channel", "channelId", { unique: false });
-            store.createIndex("by_timestamp", "timestamp", { unique: false });
-          }
-          // Store for peer profiles
-          if (!db.objectStoreNames.contains("profiles")) {
-            db.createObjectStore("profiles", { keyPath: "creatorId" });
-          }
-          // Store for media blobs
-          if (!db.objectStoreNames.contains("blobs")) {
-            db.createObjectStore("blobs", { keyPath: "cid" });
-          }
-          // Store for notifications
-          if (!db.objectStoreNames.contains("notifications")) {
-            const store = db.createObjectStore("notifications", { keyPath: "id", autoIncrement: true });
-            store.createIndex("by_timestamp", "timestampMs", { unique: false });
-          }
+          const envelopeStore = db.createObjectStore("envelopes", { keyPath: "cid" });
+          envelopeStore.createIndex("by_channel", "channelId", { unique: false });
+          envelopeStore.createIndex("by_timestamp", "timestamp", { unique: false });
+
+          db.createObjectStore("profiles", { keyPath: "creatorId" });
+          db.createObjectStore("blobs", { keyPath: "cid" });
+          db.createObjectStore("notifications", { keyPath: "cid" });
         }
 
-        // Version 2: Added Contacts store and SyncStatus index
         if (oldVersion < 2) {
-          if (!db.objectStoreNames.contains("contacts")) {
-            const store = db.createObjectStore("contacts", { keyPath: "creatorIdHex" });
-            store.createIndex("by_name", "displayName", { unique: false });
-            store.createIndex("by_follow_status", "isFollowing", { unique: false });
-          }
-
-          // Add sync index to existing envelopes store
           const tx = request.transaction;
           if (tx) {
             const envelopeStore = tx.objectStore("envelopes");
@@ -68,8 +65,15 @@ export class VcoStore {
           }
         }
 
-        // Future migrations go here...
-        // if (oldVersion < 3) { ... }
+        if (oldVersion < 3) {
+          const tx = request.transaction;
+          if (tx) {
+            const blobStore = tx.objectStore("blobs");
+            if (!blobStore.indexNames.contains("by_updated")) {
+              blobStore.createIndex("by_updated", "updatedAt", { unique: false });
+            }
+          }
+        }
       };
 
       request.onsuccess = () => {
@@ -81,26 +85,17 @@ export class VcoStore {
     });
   }
 
-  /**
-   * Saves an envelope to the local store.
-   */
   async putEnvelope(envelope: StoredEnvelope): Promise<void> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("envelopes", "readwrite");
       const store = tx.objectStore("envelopes");
-      const request = store.put({
-        syncStatus: 'synced', // Default to synced for inbound, can be overridden
-        ...envelope
-      });
+      const request = store.put(envelope);
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   }
 
-  /**
-   * Retrieves all envelopes for a specific channel, sorted by timestamp.
-   */
   async getEnvelopesByChannel(channelId: string): Promise<StoredEnvelope[]> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
@@ -117,37 +112,52 @@ export class VcoStore {
     });
   }
 
-  /**
-   * Retrieves all envelopes from the store.
-   */
+  async getEnvelopesPaged(limit: number, beforeTimestamp?: number): Promise<StoredEnvelope[]> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("envelopes", "readonly");
+      const store = tx.objectStore("envelopes");
+      const index = store.index("by_timestamp");
+      
+      const results: StoredEnvelope[] = [];
+      const range = beforeTimestamp ? IDBKeyRange.upperBound(beforeTimestamp, true) : null;
+      const request = index.openCursor(range, "prev");
+
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor && results.length < limit) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   async getAllEnvelopes(): Promise<StoredEnvelope[]> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("envelopes", "readonly");
       const store = tx.objectStore("envelopes");
       const request = store.getAll();
-      request.onsuccess = () => resolve(request.result || []);
+      request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   }
 
-  /**
-   * Saves a peer profile to the store.
-   */
-  async putProfile(creatorId: string, profileData: any): Promise<void> {
+  async putProfile(creatorId: string, data: any): Promise<void> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("profiles", "readwrite");
       const store = tx.objectStore("profiles");
-      const request = store.put({ creatorId, data: profileData, updatedAt: Date.now() });
+      const request = store.put({ creatorId, data });
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   }
 
-  /**
-   * Retrieves a profile by creator ID.
-   */
   async getProfile(creatorId: string): Promise<any | null> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
@@ -159,13 +169,12 @@ export class VcoStore {
     });
   }
 
-  /**
-   * Saves a media blob to the store.
-   */
   async putBlob(cid: string | Uint8Array, blob: Blob): Promise<void> {
     const db = await this.getDB();
     const cidHex = typeof cid === 'string' ? cid : toHex(cid);
     
+    this.evictOldBlobs(200).catch(console.warn);
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction("blobs", "readwrite");
       const store = tx.objectStore("blobs");
@@ -175,9 +184,6 @@ export class VcoStore {
     });
   }
 
-  /**
-   * Retrieves a media blob by CID.
-   */
   async getBlob(cid: string | Uint8Array): Promise<Blob | null> {
     const db = await this.getDB();
     const cidHex = typeof cid === 'string' ? cid : toHex(cid);
@@ -191,23 +197,56 @@ export class VcoStore {
     });
   }
 
-  /**
-   * Retrieves all known peer profiles.
-   */
+  async getBlobCount(): Promise<number> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("blobs", "readonly");
+      const store = tx.objectStore("blobs");
+      const request = store.count();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async evictOldBlobs(maxCount: number = 200): Promise<void> {
+    const db = await this.getDB();
+    const count = await this.getBlobCount();
+    if (count <= maxCount) return;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("blobs", "readwrite");
+      const store = tx.objectStore("blobs");
+      const index = store.index("by_updated");
+      const request = index.openCursor(null, "next");
+      
+      let deleted = 0;
+      const toDelete = count - maxCount;
+
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor && deleted < toDelete) {
+          cursor.delete();
+          deleted++;
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   async getAllProfiles(): Promise<{ creatorId: string, data: any }[]> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("profiles", "readonly");
       const store = tx.objectStore("profiles");
       const request = store.getAll();
-      request.onsuccess = () => resolve(request.result || []);
+      request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   }
 
-  /**
-   * Saves a notification to the store.
-   */
   async putNotification(notification: any): Promise<void> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
@@ -219,46 +258,41 @@ export class VcoStore {
     });
   }
 
-  /**
-   * Retrieves all notifications.
-   */
   async getAllNotifications(): Promise<any[]> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction("notifications", "readonly");
       const store = tx.objectStore("notifications");
       const request = store.getAll();
-      request.onsuccess = () => resolve(request.result || []);
+      request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   }
 
-  /**
-   * Deletes a notification by target CID.
-   */
   async deleteNotificationByTarget(targetCid: Uint8Array): Promise<void> {
     const db = await this.getDB();
-    const hex = toHex(targetCid);
-    const all = await this.getAllNotifications();
-    const target = all.find(n => toHex(n.targetCid) === hex);
-    
-    if (target) {
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction("notifications", "readwrite");
-        const store = tx.objectStore("notifications");
-        const request = store.delete(target.id);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-      });
-    }
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("notifications", "readwrite");
+      const store = tx.objectStore("notifications");
+      const request = store.openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          if (toHex(cursor.value.targetCid) === toHex(targetCid)) {
+            cursor.delete();
+          }
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
-  /**
-   * Wipes all local data.
-   */
   async clearAll(): Promise<void> {
     const db = await this.getDB();
-    const stores = Array.from(db.objectStoreNames);
+    const stores = ["envelopes", "profiles", "blobs", "notifications"];
     const tx = db.transaction(stores, "readwrite");
     stores.forEach(s => tx.objectStore(s).clear());
     return new Promise((resolve) => {

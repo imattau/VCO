@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { PostData, ProfileData } from '@vco/vco-schemas';
 import { MessageSquare, Repeat2, Heart, Share, MoreHorizontal, Trash2, ShieldAlert } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -6,6 +6,7 @@ import { twMerge } from 'tailwind-merge';
 import { MediaGallery } from './MediaGallery';
 import { useSocial } from '../SocialContext';
 import { ReportDialog } from '../moderation/ReportDialog';
+import { toHex } from '@vco/vco-testing';
 
 interface PostCardProps {
   data: PostData;
@@ -15,9 +16,24 @@ interface PostCardProps {
 }
 
 export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardProps) {
-  const { reactToPost, repost, deletePost, publishReport } = useSocial();
+  const { reactToPost, repost, deletePost, publishReport, reactions, reposts, replies, identity } = useSocial();
   const [showMenu, setShowMenu] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  
+  const hexCid = useMemo(() => toHex(cid), [cid]);
+  
+  const replyCount = useMemo(() => 
+    replies.filter(r => toHex(r.data.parentCid) === hexCid).length,
+  [replies, hexCid]);
+
+  const reactionSet = reactions.get(hexCid);
+  const reactionCount = reactionSet?.size || 0;
+  const isLiked = identity ? reactionSet?.has(identity.creatorIdHex) : false;
+
+  const repostSet = reposts.get(hexCid);
+  const repostCount = repostSet?.size || 0;
+  const isReposted = identity ? repostSet?.has(identity.creatorIdHex) : false;
+
   const relativeTime = new Intl.RelativeTimeFormat('en', { style: 'short' });
   const timeStr = relativeTime.format(
     Math.round((Number(data.timestampMs) - Date.now()) / 60000), 
@@ -98,19 +114,26 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
       <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
         <ActionButton 
           icon={<MessageSquare size={18} />} 
+          count={replyCount > 0 ? replyCount : undefined}
           color="group-hover:text-blue-500" 
           label="Reply to post" 
           onClick={(e) => { e.stopPropagation(); onOpenThread?.(); }}
         />
         <ActionButton 
           icon={<Repeat2 size={18} />} 
+          count={repostCount > 0 ? repostCount : undefined}
+          active={isReposted}
           color="group-hover:text-emerald-500" 
+          activeColor="text-emerald-500"
           label="Repost" 
           onClick={(e) => { e.stopPropagation(); repost(cid); }}
         />
         <ActionButton 
-          icon={<Heart size={18} />} 
+          icon={<Heart size={18} className={isLiked ? "fill-current" : ""} />} 
+          count={reactionCount > 0 ? reactionCount : undefined}
+          active={isLiked}
           color="group-hover:text-rose-500" 
+          activeColor="text-rose-500"
           label="Like post" 
           onClick={(e) => { e.stopPropagation(); reactToPost(cid); }}
         />
@@ -133,10 +156,29 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
   );
 }
 
-function ActionButton({ icon, count, color, label, onClick }: { icon: React.ReactNode, count?: number, color: string, label: string, onClick?: (e: React.MouseEvent) => void }) {
+function ActionButton({ icon, count, color, activeColor, active, label, onClick }: { 
+  icon: React.ReactNode, 
+  count?: number, 
+  color: string, 
+  activeColor?: string,
+  active?: boolean,
+  label: string, 
+  onClick?: (e: React.MouseEvent) => void 
+}) {
   return (
-    <button className={twMerge("flex items-center gap-2 text-zinc-500 transition-all", color)} aria-label={label} onClick={onClick}>
-      <div className="p-2 rounded-full hover:bg-zinc-800 transition-all">
+    <button 
+      className={twMerge(
+        "flex items-center gap-2 transition-all", 
+        active ? (activeColor || "text-white") : "text-zinc-500",
+        !active && color
+      )} 
+      aria-label={label} 
+      onClick={onClick}
+    >
+      <div className={twMerge(
+        "p-2 rounded-full transition-all",
+        active ? "bg-white/5" : "hover:bg-zinc-800"
+      )}>
         {icon}
       </div>
       {count !== undefined && <span className="text-xs font-black tracking-widest">{count}</span>}

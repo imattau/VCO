@@ -23,6 +23,7 @@ import { MobileNav } from './components/MobileNav';
 import { SearchOverlay } from './features/search/SearchOverlay';
 import { NavItem } from '@vco/vco-ui';
 import { ToastProvider } from './components/ToastProvider';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { SwarmPulse } from './components/SwarmPulse';
 
@@ -44,7 +45,13 @@ function MainContent() {
     hasExistingIdentity
   } = useSocial();
 
-  if (isLoading) {
+  const [hasExisting, setHasExisting] = useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    hasExistingIdentity().then(setHasExisting);
+  }, [hasExistingIdentity]);
+
+  if (isLoading || hasExisting === null) {
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center animate-pulse">
         <Shield className="text-zinc-800 w-16 h-16 mb-4" />
@@ -58,7 +65,7 @@ function MainContent() {
       <AuthView 
         onUnlock={unlock} 
         onCreate={createIdentity} 
-        hasExisting={hasExistingIdentity()} 
+        hasExisting={hasExisting} 
       />
     );
   }
@@ -180,11 +187,13 @@ function MainContent() {
 
 function App() {
   return (
-    <ToastProvider>
-      <SocialProvider>
-         <MainContent />
-      </SocialProvider>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <SocialProvider>
+           <MainContent />
+        </SocialProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
 

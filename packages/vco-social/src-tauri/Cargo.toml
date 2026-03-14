@@ -24,10 +24,12 @@ log = "0.4"
 tauri = { version = "2", features = ["test"] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
-libp2p = { version = "0.54", features = ["tcp", "quic", "noise", "yamux", "kad", "identify", "gossipsub", "macros", "tokio", "mdns"] }
+libp2p = { version = "0.54", features = ["tcp", "dns", "quic", "websocket", "tls", "noise", "yamux", "kad", "identify", "gossipsub", "macros", "tokio", "mdns", "autonat", "relay"] }
 tokio = { version = "1.37", features = ["full"] }
 futures = "0.3"
 async-trait = "0.1"
 anyhow = "1.0"
 base64 = "0.22"
 parking_lot = "0.12"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+sled = "0.34"

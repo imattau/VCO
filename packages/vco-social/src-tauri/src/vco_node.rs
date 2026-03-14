@@ -2,27 +2,110 @@ use libp2p::{
     gossipsub, identify, kad, tcp,
     swarm::{NetworkBehaviour, SwarmEvent},
     Multiaddr, PeerId, StreamProtocol,
+    autonat, relay,
 };
 #[cfg(not(mobile))]
 use libp2p::mdns;
 use futures::StreamExt;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, Mutex};
 use base64::{Engine as _, engine::general_purpose};
-use libp2p::kad::store::MemoryStore;
 use libp2p::kad::RecordKey;
 use libp2p::kad::Record;
 use std::fs;
+use std::collections::HashMap;
+
+use libp2p::kad::store::RecordStore;
+use std::borrow::Cow;
+
+pub struct SledStore {
+    db: sled::Tree,
+}
+
+impl SledStore {
+    pub fn new(app_handle: &AppHandle) -> anyhow::Result<Self> {
+        let profile = std::env::var("VCO_PROFILE").unwrap_or_else(|_| "default".to_string());
+        let path = app_handle.path().app_config_dir()?.join(&profile).join("dht_records");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let db = sled::open(path)?;
+        let tree = db.open_tree("records")?;
+        Ok(Self { db: tree })
+    }
+}
+
+impl RecordStore for SledStore {
+    type RecordsIter<'a> = std::vec::IntoIter<Cow<'a, Record>>;
+    type ProvidedIter<'a> = std::vec::IntoIter<Cow<'a, kad::ProviderRecord>>;
+
+    fn get(&self, k: &RecordKey) -> Option<Cow<'_, Record>> {
+        self.db.get(k.as_ref()).ok().flatten().and_then(|v| {
+            Some(Cow::Owned(Record {
+                key: k.clone(),
+                value: v.to_vec(),
+                publisher: None,
+                expires: None,
+            }))
+        })
+    }
+
+    fn put(&mut self, r: Record) -> kad::store::Result<()> {
+        let _ = self.db.insert(r.key.as_ref(), r.value);
+        Ok(())
+    }
+
+    fn remove(&mut self, k: &RecordKey) {
+        let _ = self.db.remove(k.as_ref());
+    }
+
+    fn records(&self) -> Self::RecordsIter<'_> {
+        let mut records = Vec::new();
+        for item in self.db.iter() {
+            if let Ok((k, v)) = item {
+                records.push(Cow::Owned(Record {
+                    key: RecordKey::new(&k),
+                    value: v.to_vec(),
+                    publisher: None,
+                    expires: None,
+                }));
+            }
+        }
+        records.into_iter()
+    }
+
+    fn add_provider(&mut self, _record: kad::ProviderRecord) -> kad::store::Result<()> {
+        Ok(())
+    }
+
+    fn providers(&self, _key: &RecordKey) -> Vec<kad::ProviderRecord> {
+        Vec::new()
+    }
+
+    fn provided(&self) -> Self::ProvidedIter<'_> {
+        Vec::<Cow<'_, kad::ProviderRecord>>::new().into_iter()
+    }
+
+    fn remove_provider(&mut self, _key: &RecordKey, _provider: &PeerId) {}
+}
 
 #[derive(NetworkBehaviour)]
 struct VcoBehaviour {
     identify: identify::Behaviour,
-    kad: kad::Behaviour<MemoryStore>,
+    kad: kad::Behaviour<SledStore>,
     gossipsub: gossipsub::Behaviour,
+    autonat: autonat::Behaviour,
+    relay_client: relay::client::Behaviour,
     #[cfg(not(mobile))]
     mdns: mdns::tokio::Behaviour,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct CachedPeer {
+    peer_id: String,
+    addrs: Vec<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -38,6 +121,7 @@ pub enum NodeEvent {
         multiaddrs: Vec<String>,
         peers: Vec<String>,
         connections: Vec<ConnectionInfo>,
+        network_load: f32,
     },
     #[serde(rename = "error")]
     Error { message: String },
@@ -67,10 +151,12 @@ pub enum NodeCommand {
     PutRecord(String, Vec<u8>),
     GetStats,
     Bootstrap(Vec<String>),
+    Shutdown,
 }
 
 fn load_or_generate_keypair<R: tauri::Runtime>(app_handle: &AppHandle<R>) -> anyhow::Result<libp2p::identity::Keypair> {
-    let config_dir = app_handle.path().app_config_dir()?;
+    let profile = std::env::var("VCO_PROFILE").unwrap_or_else(|_| "default".to_string());
+    let config_dir = app_handle.path().app_config_dir()?.join(&profile);
     if !config_dir.exists() {
         fs::create_dir_all(&config_dir)?;
     }
@@ -93,18 +179,27 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
     let local_key = load_or_generate_keypair(&app_handle)?;
     let local_peer_id = PeerId::from(local_key.public());
 
+    let (relay_transport, relay_client) = relay::client::new(local_peer_id);
+
+    let sled_store = SledStore::new(&app_handle)?;
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
         .with_tokio()
         .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default)?
         .with_quic()
-        .with_behaviour(|key| {
+        .with_dns()?
+        .with_websocket(libp2p::tls::Config::new, libp2p::yamux::Config::default)
+        .await?
+        .with_behaviour(|key: &libp2p::identity::Keypair| {
             let mut kad_config = kad::Config::new(StreamProtocol::new("/vco/kad/1.0.0"));
             kad_config.set_query_timeout(Duration::from_secs(10));
-            let kad = kad::Behaviour::with_config(
+            
+            let mut kad = kad::Behaviour::with_config(
                 local_peer_id,
-                MemoryStore::new(local_peer_id),
+                sled_store,
                 kad_config,
             );
+            
+            kad.set_mode(Some(kad::Mode::Server));
             
             let identify = identify::Behaviour::new(identify::Config::new(
                 "/vco/1.0.0".into(),
@@ -113,7 +208,7 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
             
             let mut gossipsub_config = gossipsub::Config::default();
             gossipsub_config = gossipsub::ConfigBuilder::from(gossipsub_config)
-                .max_transmit_size(2 * 1024 * 1024) // 2MB to support chunks
+                .max_transmit_size(2 * 1024 * 1024) 
                 .build()
                 .expect("Valid gossipsub config");
 
@@ -122,6 +217,8 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                 gossipsub_config,
             )
             .expect("Valid gossipsub config");
+
+            let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
             
             #[cfg(not(mobile))]
             let mdns = mdns::tokio::Behaviour::new(
@@ -133,38 +230,83 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                 identify, 
                 kad, 
                 gossipsub, 
+                autonat,
+                relay_client,
                 #[cfg(not(mobile))]
                 mdns 
             }
         })?
-        .with_swarm_config(|c| c
+        .with_swarm_config(|c: libp2p::swarm::Config| c
             .with_idle_connection_timeout(Duration::from_secs(60))
         )
         .build();
 
     swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0/ws".parse()?)?;
 
     let handle = app_handle.clone();
+    let profile = std::env::var("VCO_PROFILE").unwrap_or_else(|_| "default".to_string());
+    let cache_path = app_handle.path().app_config_dir()?.join(&profile).join("peer_cache.json");
+
+    // Load cached peers
+    if cache_path.exists() {
+        if let Ok(data) = fs::read_to_string(&cache_path) {
+            if let Ok(cached_peers) = serde_json::from_str::<Vec<CachedPeer>>(&data) {
+                for cp in cached_peers {
+                    if let Ok(peer_id) = cp.peer_id.parse::<PeerId>() {
+                        for addr_str in cp.addrs {
+                            if let Ok(addr) = addr_str.parse::<Multiaddr>() {
+                                swarm.behaviour_mut().kad.add_address(&peer_id, addr);
+                            }
+                        }
+                    }
+                }
+                let _ = swarm.behaviour_mut().kad.bootstrap();
+            }
+        }
+    }
 
     let mut stats_interval = tokio::time::interval(Duration::from_secs(5));
+    let mut peer_addresses: HashMap<PeerId, String> = HashMap::new();
+    let mut message_count: u32 = 0;
+    let mut last_minute = tokio::time::Instant::now();
 
     tokio::spawn(async move {
+        // Move the relay transport here to keep its channel open for the behaviour
+        let _keep_alive = relay_transport;
+        
         loop {
             tokio::select! {
                 _ = stats_interval.tick() => {
-                    let peers: Vec<String> = swarm.connected_peers().map(|p| p.to_string()).collect();
-                    let connections: Vec<ConnectionInfo> = peers.iter().map(|p| ConnectionInfo {
-                        remote_peer: p.clone(),
-                        remote_addr: "unknown".to_string(),
-                        tags: vec![],
+                    let now = tokio::time::Instant::now();
+                    let elapsed = now.duration_since(last_minute).as_secs_f32();
+                    let network_load = 1.0 + (message_count as f32 / (elapsed / 60.0).max(1.0) / 100.0).min(4.0);
+                    
+                    if elapsed > 60.0 {
+                        message_count = 0;
+                        last_minute = now;
+                    }
+
+                    let peers: Vec<String> = swarm.connected_peers().map(|p: &PeerId| p.to_string()).collect();
+                    let connections: Vec<ConnectionInfo> = peers.iter().map(|p: &String| {
+                        let addr = p.parse::<PeerId>().ok()
+                            .and_then(|id| peer_addresses.get(&id))
+                            .cloned()
+                            .unwrap_or_else(|| "unknown".to_string());
+                        ConnectionInfo {
+                            remote_peer: p.clone(),
+                            remote_addr: addr,
+                            tags: vec![],
+                        }
                     }).collect();
 
                     let _ = handle.emit("vco-node-event", NodeEvent::Stats {
                         peer_id: local_peer_id.to_string(),
-                        multiaddrs: swarm.listeners().map(|a| a.to_string()).collect(),
+                        multiaddrs: swarm.listeners().map(|a: &Multiaddr| a.to_string()).collect(),
                         peers,
                         connections,
+                        network_load,
                     });
                 }
                 event = swarm.select_next_some() => match event {
@@ -191,10 +333,14 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                             swarm.behaviour_mut().kad.add_address(&peer_id, addr);
                         }
                     }
+                    SwarmEvent::Behaviour(VcoBehaviourEvent::Autonat(autonat::Event::StatusChanged { old: _, new })) => {
+                        log::info!("VCO: AutoNAT status changed to {:?}", new);
+                    }
                     SwarmEvent::Behaviour(VcoBehaviourEvent::Gossipsub(gossipsub::Event::Message {
                         message,
                         ..
                     })) => {
+                        message_count += 1;
                         let channel_id = message.topic.as_str().to_string();
                         let envelope = general_purpose::STANDARD.encode(&message.data);
                         let _ = handle.emit("vco-node-event", NodeEvent::Envelope {
@@ -222,9 +368,35 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                         });
                     }
                     SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
+                        let addr = endpoint.get_remote_address().to_string();
+                        peer_addresses.insert(peer_id, addr.clone());
+                        
+                        if let Ok(data) = fs::read_to_string(&cache_path) {
+                            if let Ok(mut cached) = serde_json::from_str::<Vec<CachedPeer>>(&data) {
+                                let peer_id_str = peer_id.to_string();
+                                if let Some(cp) = cached.iter_mut().find(|c| c.peer_id == peer_id_str) {
+                                    if !cp.addrs.contains(&addr) {
+                                        cp.addrs.push(addr.clone());
+                                    }
+                                } else {
+                                    cached.push(CachedPeer { peer_id: peer_id_str, addrs: vec![addr.clone()] });
+                                }
+                                if cached.len() > 100 {
+                                    cached.remove(0);
+                                }
+                                let _ = fs::write(&cache_path, serde_json::to_string(&cached).unwrap_or_default());
+                            }
+                        } else {
+                            let cached = vec![CachedPeer { peer_id: peer_id.to_string(), addrs: vec![addr.clone()] }];
+                            let _ = fs::write(&cache_path, serde_json::to_string(&cached).unwrap_or_default());
+                        }
+
                         let _ = handle.emit("vco-node-event", NodeEvent::DialSuccess {
-                            addr: format!("{} ({})", peer_id, endpoint.get_remote_address()),
+                            addr: format!("{} ({})", peer_id, addr),
                         });
+                    }
+                    SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                        peer_addresses.remove(&peer_id);
                     }
                     _ => {}
                 },
@@ -238,6 +410,7 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                         let _ = swarm.behaviour_mut().gossipsub.unsubscribe(&topic);
                     }
                     Some(NodeCommand::Publish(channel_id, data)) => {
+                        message_count += 1;
                         let topic = gossipsub::IdentTopic::new(&channel_id);
                         let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
                     }
@@ -259,7 +432,7 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                             publisher: None,
                             expires: None,
                         };
-                        let _ = swarm.behaviour_mut().kad.put_record(record, kad::Quorum::One);
+                        let _ = swarm.behaviour_mut().kad.put_record(record, kad::Quorum::Majority);
                     }
                     Some(NodeCommand::Bootstrap(addrs)) => {
                         for addr in addrs {
@@ -276,19 +449,33 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                         let _ = swarm.behaviour_mut().kad.bootstrap();
                     }
                     Some(NodeCommand::GetStats) => {
-                        let peers: Vec<String> = swarm.connected_peers().map(|p| p.to_string()).collect();
-                        let connections: Vec<ConnectionInfo> = peers.iter().map(|p| ConnectionInfo {
-                            remote_peer: p.clone(),
-                            remote_addr: "unknown".to_string(),
-                            tags: vec![],
+                        let now = tokio::time::Instant::now();
+                        let elapsed = now.duration_since(last_minute).as_secs_f32();
+                        let network_load = 1.0 + (message_count as f32 / (elapsed / 60.0).max(1.0) / 100.0).min(4.0);
+
+                        let peers: Vec<String> = swarm.connected_peers().map(|p: &PeerId| p.to_string()).collect();
+                        let connections: Vec<ConnectionInfo> = peers.iter().map(|p: &String| {
+                            let addr = p.parse::<PeerId>().ok()
+                                .and_then(|id| peer_addresses.get(&id))
+                                .cloned()
+                                .unwrap_or_else(|| "unknown".to_string());
+                            ConnectionInfo {
+                                remote_peer: p.clone(),
+                                remote_addr: addr,
+                                tags: vec![],
+                            }
                         }).collect();
 
                         let _ = handle.emit("vco-node-event", NodeEvent::Stats {
                             peer_id: local_peer_id.to_string(),
-                            multiaddrs: swarm.listeners().map(|a| a.to_string()).collect(),
+                            multiaddrs: swarm.listeners().map(|a: &Multiaddr| a.to_string()).collect(),
                             peers,
                             connections,
+                            network_load,
                         });
+                    }
+                    Some(NodeCommand::Shutdown) => {
+                        break;
                     }
                     None => break,
                 }
@@ -305,7 +492,7 @@ mod tests {
     use libp2p::identity::Keypair;
     use libp2p::SwarmBuilder;
     use libp2p::kad::Quorum;
-    use libp2p::kad::store::RecordStore;
+    use libp2p::kad::store::MemoryStore;
     use std::time::Duration;
 
     #[tokio::test]
@@ -351,6 +538,8 @@ mod tests {
                     identify, 
                     kad, 
                     gossipsub,
+                    autonat: autonat::Behaviour::new(local_peer_id, autonat::Config::default()),
+                    relay_client: relay::client::new(local_peer_id).1,
                     #[cfg(not(mobile))]
                     mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id).unwrap()
                 }
@@ -366,10 +555,8 @@ mod tests {
             expires: None,
         };
 
-        // Put record
         swarm.behaviour_mut().kad.put_record(record, Quorum::One).expect("Failed to put record");
         
-        // Get record
         let record_from_store = swarm.behaviour_mut().kad.store_mut().get(&key).expect("Record not found in store");
         assert_eq!(record_from_store.value, value);
     }
@@ -378,7 +565,6 @@ mod tests {
     async fn test_kad_multi_node_exchange() {
         let protocol = StreamProtocol::new("/vco/kad/1.0.0");
         
-        // Node 1 (Storage Node)
         let key1 = Keypair::generate_ed25519();
         let peer1 = PeerId::from(key1.public());
         let mut swarm1 = SwarmBuilder::with_existing_identity(key1)
@@ -387,19 +573,20 @@ mod tests {
             .with_behaviour(|key| {
                 let mut kad_config = kad::Config::new(protocol.clone());
                 let mut kad = kad::Behaviour::with_config(peer1, MemoryStore::new(peer1), kad_config);
-                kad.set_mode(Some(kad::Mode::Server)); // CRITICAL for local tests
+                kad.set_mode(Some(kad::Mode::Server)); 
                 let identify = identify::Behaviour::new(identify::Config::new("/vco/1.0.0".into(), key.public()));
                 let gossipsub = gossipsub::Behaviour::new(gossipsub::MessageAuthenticity::Signed(key.clone()), gossipsub::Config::default()).unwrap();
                 VcoBehaviour { 
                     identify, 
                     kad, 
                     gossipsub,
+                    autonat: autonat::Behaviour::new(peer1, autonat::Config::default()),
+                    relay_client: relay::client::new(peer1).1,
                     #[cfg(not(mobile))]
                     mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), peer1).unwrap()
                 }
             }).unwrap().build();
 
-        // Node 2 (Requester Node)
         let key2 = Keypair::generate_ed25519();
         let peer2 = PeerId::from(key2.public());
         let mut swarm2 = SwarmBuilder::with_existing_identity(key2)
@@ -408,19 +595,20 @@ mod tests {
             .with_behaviour(|key| {
                 let mut kad_config = kad::Config::new(protocol.clone());
                 let mut kad = kad::Behaviour::with_config(peer2, MemoryStore::new(peer2), kad_config);
-                kad.set_mode(Some(kad::Mode::Server)); // CRITICAL for local tests
+                kad.set_mode(Some(kad::Mode::Server)); 
                 let identify = identify::Behaviour::new(identify::Config::new("/vco/1.0.0".into(), key.public()));
                 let gossipsub = gossipsub::Behaviour::new(gossipsub::MessageAuthenticity::Signed(key.clone()), gossipsub::Config::default()).unwrap();
                 VcoBehaviour { 
                     identify, 
                     kad, 
                     gossipsub,
+                    autonat: autonat::Behaviour::new(peer2, autonat::Config::default()),
+                    relay_client: relay::client::new(peer2).1,
                     #[cfg(not(mobile))]
                     mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), peer2).unwrap()
                 }
             }).unwrap().build();
 
-        // Node 1 Listen
         swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
         let addr1 = loop {
             if let SwarmEvent::NewListenAddr { address, .. } = swarm1.select_next_some().await {
@@ -428,7 +616,6 @@ mod tests {
             }
         };
 
-        // Node 2 Listen (IMPORTANT: so Node 1 can route to it)
         swarm2.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
         let addr2 = loop {
             if let SwarmEvent::NewListenAddr { address, .. } = swarm2.select_next_some().await {
@@ -436,15 +623,12 @@ mod tests {
             }
         };
 
-        // Node 2 Knowledge of Node 1
         swarm2.behaviour_mut().kad.add_address(&peer1, addr1.clone());
-        // Node 1 Knowledge of Node 2 (CRITICAL: make it mutual)
         swarm1.behaviour_mut().kad.add_address(&peer2, addr2.clone());
 
         let record_key = RecordKey::new(&"shared-cid");
         let record_value = b"swarm-data".to_vec();
         
-        // Manually put the record into Node 1's store
         swarm1.behaviour_mut().kad.store_mut().put(Record {
             key: record_key.clone(),
             value: record_value.clone(),
@@ -455,7 +639,6 @@ mod tests {
         let mut found = false;
         let mut connected = false;
 
-        // Drive both swarms
         for i in 0..300 {
             tokio::select! {
                 event = swarm1.select_next_some() => {
@@ -466,7 +649,6 @@ mod tests {
                     if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event {
                         if peer_id == peer1 {
                             connected = true;
-                            // Once connected, trigger the Get query
                             swarm2.behaviour_mut().kad.get_record(record_key.clone());
                         }
                     }
@@ -484,11 +666,9 @@ mod tests {
                 }
                 _ = tokio::time::sleep(Duration::from_millis(20)) => {
                     if i == 0 {
-                        // Trigger initial connection
                         swarm2.dial(peer1).unwrap();
                     }
                     if i > 50 && connected && !found && i % 50 == 0 {
-                        // Retry Get if needed
                         swarm2.behaviour_mut().kad.get_record(record_key.clone());
                     }
                 }

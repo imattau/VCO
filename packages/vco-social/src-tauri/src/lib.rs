@@ -87,6 +87,21 @@ async fn bootstrap(addrs: Vec<String>, state: State<'_, VcoNodeState>) -> Result
     }
 }
 
+#[tauri::command]
+async fn shutdown(state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::Shutdown).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_vco_profile() -> String {
+    std::env::var("VCO_PROFILE").unwrap_or_else(|_| "default".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Redirect panics to logcat/stdout
@@ -142,7 +157,9 @@ pub fn run() {
             dial,
             resolve,
             put_record,
-            bootstrap
+            bootstrap,
+            shutdown,
+            get_vco_profile
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
