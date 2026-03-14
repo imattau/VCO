@@ -58,12 +58,14 @@ export class NodeClient {
 
     try {
       // Listen for events from the native Rust node
+      console.log('NodeClient: Registering vco-node-event listener...');
       await listen<NodeEvent>('vco-node-event', (event) => {
+        console.log('NodeClient: Raw event received:', JSON.stringify(event.payload));
         this.handleEvent(event.payload);
       });
 
-      console.log('NodeClient: Connected to native Rust node.');
-      
+      console.log('NodeClient: Listener registered. Requesting initial stats...');
+
       // Initial stats request
       this.getStats();
     } catch (error) {
@@ -119,13 +121,18 @@ export class NodeClient {
       this.isReady = true;
       this.peerId = event.peerId;
       this.multiaddrs = event.multiaddrs;
+      console.log('NodeClient: Node ready. peerId:', event.peerId, 'multiaddrs:', event.multiaddrs);
     } else if (event.type === 'stats') {
-      this.isReady = true; 
+      this.isReady = true;
       this.peerId = event.peerId;
       this.multiaddrs = event.multiaddrs;
       this.peers = event.peers;
       this.connections = event.connections;
+      console.log('NodeClient: Stats updated. peerId:', event.peerId, 'peers:', event.peers.length, 'isReady:', this.isReady);
+    } else if (event.type === 'error') {
+      console.error('NodeClient: Error event:', event.message);
     }
+    console.log('NodeClient: Notifying', this.listeners.size, 'listeners');
     this.listeners.forEach(l => l(event));
   }
 
