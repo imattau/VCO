@@ -13,7 +13,8 @@ import {
   Database,
   ArrowRightLeft,
   Plus,
-  Unplug
+  Unplug,
+  Activity
 } from 'lucide-react';
 import { useToast } from '../../components/ToastProvider';
 import { twMerge } from 'tailwind-merge';
@@ -72,6 +73,11 @@ export function SettingsView() {
     }
   };
 
+  // Improved status calculation
+  const hasSwarmConn = stats.peers.length > 0;
+  const networkStatus = !stats.isReady ? "OFFLINE" : (hasSwarmConn ? "ACTIVE" : "CONNECTING");
+  const reachability = hasSwarmConn ? "PUBLIC_SWARM" : "LOCAL_ONLY";
+
   return (
     <div className="space-y-8 md:space-y-12 animate-in fade-in duration-1000 pb-24 md:pb-20 px-2 md:px-0">
       <div className="space-y-2 mb-6 md:mb-10">
@@ -124,7 +130,7 @@ export function SettingsView() {
             </div>
          </div>
 
-         {/* Connection Health */}
+         {/* Sync Health - Verification Fixes applied here */}
          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl md:rounded-[3rem] p-6 md:p-10 space-y-6 md:space-y-8 shadow-2xl">
             <div className="flex items-center gap-4">
                <div className="bg-emerald-600/10 p-3 md:p-4 rounded-2xl md:rounded-3xl border border-emerald-500/20 shrink-0">
@@ -134,11 +140,11 @@ export function SettingsView() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-               <div className="bg-zinc-950 border border-zinc-800 rounded-2xl md:rounded-3xl p-4 md:p-6 shadow-inner space-y-1">
+               <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-4 md:p-6 shadow-inner space-y-1">
                   <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Protocol</span>
-                  <div className="text-base md:text-xl font-black text-emerald-500 italic">QUIC-v1</div>
+                  <div className="text-base md:text-xl font-black text-emerald-500 italic">Hybrid-v3</div>
                </div>
-               <div className="bg-zinc-950 border border-zinc-800 rounded-2xl md:rounded-3xl p-4 md:p-6 shadow-inner space-y-1">
+               <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-4 md:p-6 shadow-inner space-y-1">
                   <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">DHT Peers</span>
                   <div className="text-base md:text-xl font-black text-white italic">{stats.peers.length}</div>
                </div>
@@ -147,20 +153,29 @@ export function SettingsView() {
             <div className="space-y-4">
                <div className="flex items-center justify-between text-[10px] md:text-xs font-bold px-2">
                   <span className="text-zinc-500 uppercase tracking-widest">Network Status</span>
-                  <span className={stats.isReady ? "text-emerald-500" : "text-amber-500"}>
-                    {stats.isReady ? "READY" : "CONNECTING"}
+                  <span className={twMerge(
+                    networkStatus === "ACTIVE" ? "text-emerald-500" : "text-amber-500"
+                  )}>
+                    {networkStatus}
                   </span>
                </div>
                <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
-                  <div className={twMerge("h-full transition-all duration-1000", stats.isReady ? "bg-emerald-500 w-full" : "bg-amber-500 w-1/3 animate-pulse")} />
+                  <div className={twMerge(
+                    "h-full transition-all duration-1000", 
+                    networkStatus === "ACTIVE" ? "bg-emerald-500 w-full" : 
+                    networkStatus === "CONNECTING" ? "bg-amber-500 w-1/3 animate-pulse" : "bg-zinc-800 w-0"
+                  )} />
                </div>
                
                <div className="flex items-center justify-between text-[10px] md:text-xs font-bold px-2 pt-2">
-                  <span className="text-zinc-500 uppercase tracking-widest">DHT Reachability</span>
-                  <span className="text-blue-500">{stats.peers.length > 0 ? "PUBLIC" : "LOCAL_ONLY"}</span>
+                  <span className="text-zinc-500 uppercase tracking-widest">Swarm Reachability</span>
+                  <span className={hasSwarmConn ? "text-blue-500" : "text-zinc-600"}>{reachability}</span>
                </div>
                <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
-                  <div className={twMerge("h-full transition-all duration-1000 bg-blue-500", stats.peers.length > 0 ? "w-[80%]" : "w-[10%]")} />
+                  <div className={twMerge(
+                    "h-full transition-all duration-1000 bg-blue-500", 
+                    hasSwarmConn ? "w-[80%]" : "w-[10%] bg-zinc-800"
+                  )} />
                </div>
             </div>
          </div>
@@ -225,7 +240,7 @@ export function SettingsView() {
          </div>
       </div>
 
-      {/* Recovery & Danger Zone */}
+      {/* Recovery & Security */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-3xl md:rounded-[3rem] p-6 md:p-10 space-y-8 md:space-y-10 shadow-2xl overflow-hidden relative">
          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-zinc-800 to-red-500" />
          
