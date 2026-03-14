@@ -9,6 +9,7 @@ import { vcoStore } from '../../lib/VcoStore';
 import { useToast } from '../../components/ToastProvider';
 import { KeyringService } from '../../lib/KeyringService';
 import { Card } from '@vco/vco-ui';
+import { SwarmLogic } from '../../lib/SwarmLogic';
 
 export function ProfileView() {
   const { profile, updateProfile, feed, conversations, notifications, identity, peerProfiles, resolvePeerProfile, following } = useSocial();
@@ -34,6 +35,8 @@ export function ProfileView() {
   }, [profile]);
 
   if (!profile || !identity) return null;
+
+  const stats = SwarmLogic.calculateStats(following, feed.length, notifications.length, conversations.length);
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -204,10 +207,10 @@ export function ProfileView() {
                   Swarm Activity
                </h4>
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <StatCard label="Following" value={following.size.toString()} subValue="Active swarm contacts" />
-                  <StatCard label="Posts Published" value={feed.length.toString()} subValue="Verifiable objects" />
-                  <StatCard label="Inbound Syncs" value={notifications.length.toString()} subValue="Recent events" />
-                  <StatCard label="E2EE Sessions" value={conversations.length.toString()} subValue="Active secure channels" />
+                  <StatCard label="Following" value={stats.followingCount.toString()} subValue="Active swarm contacts" />
+                  <StatCard label="Posts Published" value={stats.postsCount.toString()} subValue="Verifiable objects" />
+                  <StatCard label="Inbound Syncs" value={stats.syncCount.toString()} subValue="Recent events" />
+                  <StatCard label="E2EE Sessions" value={stats.sessionCount.toString()} subValue="Active secure channels" />
                </div>
             </div>
          </div>

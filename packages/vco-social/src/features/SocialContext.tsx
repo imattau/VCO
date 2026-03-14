@@ -217,8 +217,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       }
 
       // 2. PoW Verification
-      const requiredDiff = PoWService.calculateTargetDifficulty(envelope.payload.length, networkLoad);
-      if (!PoWService.verify(envelope.headerHash, envelope.header.powDifficulty)) {
+      if (!PoWService.verify(envelope.headerHash, (envelope.header as any).powDifficulty)) {
         console.warn("VCO: Rejected envelope with insufficient Proof-of-Work");
         return;
       }
