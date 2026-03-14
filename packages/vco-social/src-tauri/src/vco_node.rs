@@ -185,62 +185,66 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
     let (relay_transport, relay_client) = relay::client::new(local_peer_id);
 
     let sled_store = SledStore::new(&app_handle)?;
-    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
-        .with_tokio()
-        .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default)?
-        .with_quic()
-        .with_dns()?
-        .with_websocket(libp2p::tls::Config::new, libp2p::yamux::Config::default)
-        .await?
-        .with_behaviour(|key: &libp2p::identity::Keypair| {
-            let mut kad_config = kad::Config::new(StreamProtocol::new("/vco/kad/1.0.0"));
-            kad_config.set_query_timeout(Duration::from_secs(10));
-            
-            let kad = kad::Behaviour::with_config(
-                local_peer_id,
-                 sled_store,
-                kad_config,
-            );
-            
-            let identify = identify::Behaviour::new(identify::Config::new(
-                "/vco/1.0.0".into(),
-                key.public(),
-            ));
-            
-            let mut gossipsub_config = gossipsub::Config::default();
-            gossipsub_config = gossipsub::ConfigBuilder::from(gossipsub_config)
-                .max_transmit_size(2 * 1024 * 1024) 
-                .build()
-                .expect("Valid gossipsub config");
 
-            let gossipsub = gossipsub::Behaviour::new(
-                gossipsub::MessageAuthenticity::Signed(key.clone()),
-                gossipsub_config,
-            )
-            .expect("Valid gossipsub config");
+    // On mobile, with_dns() reads /etc/resolv.conf which doesn't exist on Android.
+    // with_websocket() depends on DNS. Use TCP-only transport on mobile.
+    #[cfg(mobile)]
+    let mut swarm = {
+        libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
+            .with_tokio()
+            .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default)?
+            .with_behaviour(|key: &libp2p::identity::Keypair| {
+                let mut kad_config = kad::Config::new(StreamProtocol::new("/vco/kad/1.0.0"));
+                kad_config.set_query_timeout(Duration::from_secs(10));
+                let kad = kad::Behaviour::with_config(local_peer_id, sled_store, kad_config);
+                let identify = identify::Behaviour::new(identify::Config::new("/vco/1.0.0".into(), key.public()));
+                let mut gossipsub_config = gossipsub::Config::default();
+                gossipsub_config = gossipsub::ConfigBuilder::from(gossipsub_config)
+                    .max_transmit_size(2 * 1024 * 1024)
+                    .build()
+                    .expect("Valid gossipsub config");
+                let gossipsub = gossipsub::Behaviour::new(
+                    gossipsub::MessageAuthenticity::Signed(key.clone()),
+                    gossipsub_config,
+                ).expect("Valid gossipsub config");
+                let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
+                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client }
+            })?
+            .with_swarm_config(|c: libp2p::swarm::Config| c.with_idle_connection_timeout(Duration::from_secs(60)))
+            .build()
+    };
 
-            let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
-            
-            #[cfg(not(mobile))]
-            let mdns = mdns::tokio::Behaviour::new(
-                mdns::Config::default(),
-                local_peer_id,
-            ).expect("Valid mdns config");
-            
-            VcoBehaviour { 
-                identify, 
-                kad, 
-                gossipsub, 
-                autonat,
-                relay_client,
-                #[cfg(not(mobile))]
-                mdns 
-            }
-        })?
-        .with_swarm_config(|c: libp2p::swarm::Config| c
-            .with_idle_connection_timeout(Duration::from_secs(60))
-        )
-        .build();
+    #[cfg(not(mobile))]
+    let mut swarm = {
+        libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
+            .with_tokio()
+            .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default)?
+            .with_quic()
+            .with_dns()?
+            .with_websocket(libp2p::tls::Config::new, libp2p::yamux::Config::default)
+            .await?
+            .with_behaviour(|key: &libp2p::identity::Keypair| {
+                let mut kad_config = kad::Config::new(StreamProtocol::new("/vco/kad/1.0.0"));
+                kad_config.set_query_timeout(Duration::from_secs(10));
+                let kad = kad::Behaviour::with_config(local_peer_id, sled_store, kad_config);
+                let identify = identify::Behaviour::new(identify::Config::new("/vco/1.0.0".into(), key.public()));
+                let mut gossipsub_config = gossipsub::Config::default();
+                gossipsub_config = gossipsub::ConfigBuilder::from(gossipsub_config)
+                    .max_transmit_size(2 * 1024 * 1024)
+                    .build()
+                    .expect("Valid gossipsub config");
+                let gossipsub = gossipsub::Behaviour::new(
+                    gossipsub::MessageAuthenticity::Signed(key.clone()),
+                    gossipsub_config,
+                ).expect("Valid gossipsub config");
+                let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
+                let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)
+                    .expect("Valid mdns config");
+                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client, mdns }
+            })?
+            .with_swarm_config(|c: libp2p::swarm::Config| c.with_idle_connection_timeout(Duration::from_secs(60)))
+            .build()
+    };
 
     // Android/restrictive environments may fail UDP/TCP binding
     if let Err(e) = swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?) {
