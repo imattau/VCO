@@ -14,9 +14,13 @@ interface PostCardProps {
   authorProfile: ProfileData;
   cid: Uint8Array;
   onOpenThread?: () => void;
+  repostBy?: {
+    profile: ProfileData;
+    timestampMs: bigint;
+  };
 }
 
-export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardProps) {
+export function PostCard({ data, authorProfile, onOpenThread, cid, repostBy }: PostCardProps) {
   const { reactToPost, repost, deletePost, publishReport, reactions, reposts, replies, identity, setFilter } = useSocial();
   const [showMenu, setShowMenu] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -41,6 +45,15 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-3xl p-4 md:p-6 space-y-3 md:space-y-4 hover:border-zinc-700 transition-all group shadow-xl shadow-black/20 cursor-pointer relative overflow-hidden" onClick={onOpenThread}>
+      {repostBy && (
+        <div className="flex items-center gap-2 mb-2 px-1 animate-in fade-in slide-in-from-left-2 duration-500 border-b border-zinc-800/50 pb-2">
+           <Repeat2 size={12} className="text-emerald-500" />
+           <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+             Reposted by <span className="text-emerald-500 italic">{repostBy.profile.displayName}</span>
+           </span>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <Avatar avatarCid={authorProfile.avatarCid} displayName={authorProfile.displayName} size="md" />

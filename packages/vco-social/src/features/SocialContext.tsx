@@ -3,6 +3,7 @@ import {
   ProfileData, 
   PostData, 
   ReplyData,
+  RepostData,
   DirectMessageData, 
   NotificationData,
   NotificationType,
@@ -60,6 +61,10 @@ interface FeedItem {
   authorId: Uint8Array;
   data: PostData;
   authorProfile: ProfileData;
+  repostBy?: {
+    profile: ProfileData;
+    timestampMs: bigint;
+  };
 }
 
 interface ReplyItem {
@@ -182,7 +187,34 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     const dmMap = new Map<string, MessageWithMetadata[]>();
     const reactionMap = new Map<string, Set<string>>();
     const repostMap = new Map<string, Set<string>>();
+    
+    // First pass: extract all posts so reposts can find them
+    const allPostsByCid = new Map<string, { authorId: Uint8Array, data: PostData, authorProfile: ProfileData }>();
+    for (const e of envelopes) {
+      try {
+        const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
+        const coreEnvelope = decodeCore(bytes);
+        const payloadRaw = new TextDecoder().decode(coreEnvelope.payload);
+        
+        if (payloadRaw.includes(Constants.POST_SCHEMA_URI)) {
+          const creatorIdHex = toHex(coreEnvelope.header.creatorId);
+          const authorProfile = creatorIdHex === identity.creatorIdHex ? myProfile : profileMap.get(creatorIdHex) || {
+            schema: Constants.PROFILE_SCHEMA_URI,
+            displayName: `Peer ${creatorIdHex.substring(0, 6)}`,
+            avatarCid: new Uint8Array(0),
+            previousManifest: new Uint8Array(0),
+            bio: "Offline identity"
+          };
+          allPostsByCid.set(toHex(coreEnvelope.headerHash), {
+            authorId: coreEnvelope.header.creatorId,
+            data: decodePost(coreEnvelope.payload),
+            authorProfile
+          });
+        }
+      } catch(err) {}
+    }
 
+    // Second pass: process everything including reposts
     for (const e of envelopes) {
       try {
         const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
@@ -201,7 +233,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         if (e.channelId === Constants.GLOBAL_SOCIAL_CHANNEL) {
           const payloadRaw = new TextDecoder().decode(coreEnvelope.payload);
           
-          // Heuristic identification of schema type
           if (payloadRaw.includes(Constants.REPLY_SCHEMA_URI)) {
             rItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: decodeReply(coreEnvelope.payload), authorProfile });
           } else if (payloadRaw.includes(Constants.FOLLOW_SCHEMA_URI)) {
@@ -211,7 +242,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
               else followSet.delete(toHex(followData.subjectKey));
             }
           } else if (payloadRaw.includes(Constants.POST_SCHEMA_URI)) {
-            fItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: decodePost(coreEnvelope.payload), authorProfile });
+            const postData = decodePost(coreEnvelope.payload);
+            fItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: postData, authorProfile });
           } else if (payloadRaw.includes(Constants.REACTION_SCHEMA_URI)) {
             const reactionData = decodeReaction(coreEnvelope.payload);
             const targetHex = toHex(reactionData.targetCid);
@@ -220,8 +252,25 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           } else if (payloadRaw.includes(Constants.REPOST_SCHEMA_URI)) {
             const repostData = decodeRepost(coreEnvelope.payload);
             const targetHex = toHex(repostData.originalPostCid);
+            
+            // Interaction count
             if (!repostMap.has(targetHex)) repostMap.set(targetHex, new Set());
             repostMap.get(targetHex)!.add(creatorIdHex);
+
+            // Add to timeline if original post is found
+            const original = allPostsByCid.get(targetHex);
+            if (original) {
+              fItems.push({
+                cid: repostData.originalPostCid, // Key by original CID
+                authorId: original.authorId,
+                data: original.data,
+                authorProfile: original.authorProfile,
+                repostBy: {
+                  profile: authorProfile,
+                  timestampMs: repostData.timestampMs
+                }
+              });
+            }
           }
         } else if (e.channelId.startsWith("vco://channels/dm/")) {
           const dmData = decodeDirectMessage(coreEnvelope.payload);
@@ -356,7 +405,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     if (moreEnvelopes.length === 0) return;
 
     const { fItems, reactionMap, repostMap } = await processEnvelopes(moreEnvelopes, currentProfile, peerProfilesRef.current, currentIdentity);
-    setFeed(prev => [...prev, ...fItems.sort((a,b) => Number(b.data.timestampMs - a.data.timestampMs))]);
+    setFeed(prev => [...prev, ...fItems.sort((a,b) => {
+      const aTime = a.repostBy ? Number(a.repostBy.timestampMs) : Number(a.data.timestampMs);
+      const bTime = b.repostBy ? Number(b.repostBy.timestampMs) : Number(b.data.timestampMs);
+      return bTime - aTime;
+    })]);
     
     if (reactionMap.size > 0) {
       setReactions(prev => {
@@ -425,7 +478,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           const { fItems, rItems, followSet, dmMap, reactionMap, repostMap } = await processEnvelopes(allLocalEnvelopes, myProfile, profileMap, identity);
           
           console.log(`VCO Social: Successfully processed ${fItems.length} posts from local storage.`);
-          setFeed(fItems.sort((a,b) => Number(b.data.timestampMs - a.data.timestampMs)));
+          // Sort by event time (repost time if it's a repost, else original time)
+          setFeed(fItems.sort((a,b) => {
+            const aTime = a.repostBy ? Number(a.repostBy.timestampMs) : Number(a.data.timestampMs);
+            const bTime = b.repostBy ? Number(b.repostBy.timestampMs) : Number(b.data.timestampMs);
+            return bTime - aTime;
+          }));
           setReplies(rItems);
           setFollowing(followSet);
           setReactions(reactionMap);
@@ -802,7 +860,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const crypto = createNobleCryptoProvider();
       const originalPost = feed.find(f => toHex(f.cid) === toHex(cid));
       if (!originalPost) return;
-      const repostData = { schema: Constants.REPOST_SCHEMA_URI, originalPostCid: cid, originalAuthorCid: originalPost.authorId, commentary, timestampMs: BigInt(Date.now()) };
+      const repostData: RepostData = { schema: Constants.REPOST_SCHEMA_URI, originalPostCid: cid, originalAuthorCid: originalPost.authorId, commentary, timestampMs: BigInt(Date.now()) };
       const payload = encodeRepost(repostData);
       const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
