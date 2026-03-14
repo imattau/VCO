@@ -7,6 +7,7 @@ import { MediaGallery } from './MediaGallery';
 import { useSocial } from '../SocialContext';
 import { ReportDialog } from '../moderation/ReportDialog';
 import { toHex } from '@/lib/encoding';
+import { Avatar } from '@/components/Avatar';
 
 interface PostCardProps {
   data: PostData;
@@ -42,9 +43,7 @@ export function PostCard({ data, authorProfile, onOpenThread, cid }: PostCardPro
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-3xl p-4 md:p-6 space-y-3 md:space-y-4 hover:border-zinc-700 transition-all group shadow-xl shadow-black/20 cursor-pointer relative overflow-hidden" onClick={onOpenThread}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
-          <div className="shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-[10px] md:text-xs font-black text-blue-400">
-            {authorProfile.displayName[0]}
-          </div>
+          <Avatar avatarCid={authorProfile.avatarCid} displayName={authorProfile.displayName} size="md" />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0">
               <span className="font-black text-white tracking-tight truncate max-w-[120px] md:max-w-none text-sm md:text-base">{authorProfile.displayName}</span>

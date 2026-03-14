@@ -6,6 +6,7 @@ import { twMerge } from 'tailwind-merge';
 import { useSocial } from '../SocialContext';
 import { MediaGallery } from './MediaGallery';
 import { toHex } from '@/lib/encoding';
+import { Avatar } from '@/components/Avatar';
 
 interface ThreadViewProps {
   parentPost: { data: PostData; cid: Uint8Array; authorProfile: ProfileData } | null;
@@ -54,9 +55,7 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
            {/* Parent Post (Expanded) */}
            <div className="p-6 border-b border-zinc-800 bg-zinc-900">
               <div className="flex items-center gap-3 mb-4">
-                 <div className="w-12 h-12 rounded-full bg-blue-600/20 border border-blue-500/20 flex items-center justify-center text-sm font-black text-blue-400">
-                    {parentPost.authorProfile.displayName[0]}
-                 </div>
+                 <Avatar avatarCid={parentPost.authorProfile.avatarCid} displayName={parentPost.authorProfile.displayName} size="lg" />
                  <div>
                     <div className="flex items-center gap-2">
                        <span className="font-black text-white text-lg tracking-tight">{parentPost.authorProfile.displayName}</span>
@@ -95,9 +94,7 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
            <div className="p-6 space-y-8">
               {threadReplies.length > 0 ? threadReplies.map(reply => (
                  <div key={toHex(reply.cid)} className="flex gap-4 group">
-                    <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-black text-zinc-400 shrink-0">
-                       {reply.authorProfile.displayName[0]}
-                    </div>
+                    <Avatar avatarCid={reply.authorProfile.avatarCid} displayName={reply.authorProfile.displayName} size="md" />
                     <div className="flex-1 space-y-1.5">
                        <div className="flex items-center gap-2">
                           <span className="font-black text-white text-sm tracking-tight italic">{reply.authorProfile.displayName}</span>

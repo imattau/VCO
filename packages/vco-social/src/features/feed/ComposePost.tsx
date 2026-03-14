@@ -3,6 +3,7 @@ import { useSocial } from '../SocialContext';
 import { useToast } from '../../components/ToastProvider';
 import { Send, Image, Smile, MapPin, Hash, Loader2, X } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { Avatar } from '@/components/Avatar';
 
 export function ComposePost() {
   const { createPost, profile } = useSocial();
@@ -74,9 +75,7 @@ export function ComposePost() {
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-[2rem] p-4 md:p-6 space-y-4 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500 relative max-w-full overflow-hidden">
       <div className="flex items-start gap-3 md:gap-4">
-        <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-800 border border-zinc-700 flex items-center justify-center text-[10px] md:text-xs font-black text-white shadow-lg flex-shrink-0 italic uppercase">
-          {profile?.displayName[0] || 'V'}
-        </div>
+        <Avatar avatarCid={profile?.avatarCid} displayName={profile?.displayName || 'V'} size="md" />
         <div className="flex-1 min-w-0 space-y-4">
            <textarea
              value={content}
