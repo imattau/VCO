@@ -47,6 +47,9 @@ function registerChannelListener(channelId: string): void {
 
 async function main() {
   const relayAddr = process.env.VCO_RELAY_ADDR ?? "";
+  if (!relayAddr) {
+    process.stderr.write("[vco-node] VCO_RELAY_ADDR not set — running without relay connection\n");
+  }
 
   const node = await createVcoLibp2pNode({
     addresses: { listen: ["/ip4/0.0.0.0/udp/0/quic-v1"] },
@@ -89,8 +92,12 @@ async function main() {
           }
         }
       }
-    } catch {
-      // session ended
+    } catch (err: any) {
+      // Distinguish clean stream close from unexpected errors
+      const isCleanClose = err?.code === 'ERR_STREAM_RESET' || err?.message?.includes('closed') || err?.message?.includes('reset') || err?.message?.includes('aborted');
+      if (!isCleanClose) {
+        process.stderr.write(`[vco-node] sync session error: ${err}\n`);
+      }
     }
   });
 
@@ -145,8 +152,16 @@ async function main() {
       subscriptions.add(channelId);
       registerChannelListener(channelId);
       replayChannel(channelId);
-      // In a real implementation, this would trigger a DHT findProviders call
       emit({ type: "resolving", cid, channelId });
+      // Trigger DHT peer discovery for this CID
+      void (async () => {
+        try {
+          // DHT provider lookup — node.services.dht.findProviders not yet available
+          process.stderr.write(`[vco-node] resolve requested for ${cid} — DHT findProviders not yet implemented\n`);
+        } catch (err) {
+          process.stderr.write(`[vco-node] DHT resolve failed for ${cid}: ${err}\n`);
+        }
+      })();
     } else if (msg.type === "shutdown") {
       void Promise.resolve(node.stop()).then(() => process.exit(0)).catch(() => process.exit(1));
     }
