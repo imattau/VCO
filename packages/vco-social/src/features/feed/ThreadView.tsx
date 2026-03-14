@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { PostData, ProfileData } from '@vco/vco-schemas';
 import { X, MessageSquare, Repeat2, Heart, Share, Shield } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -13,16 +13,19 @@ interface ThreadViewProps {
 }
 
 export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
-  const { replies, reactions, reposts, createReply } = useSocial();
+  const { replies, reactions, reposts, createReply, reactToPost, repost, identity } = useSocial();
   const [replyText, setReplyText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const replyInputRef = useRef<HTMLInputElement>(null);
 
   if (!parentPost) return null;
 
-  const threadReplies = replies.filter(r => toHex(r.data.parentCid) === toHex(parentPost.cid));
   const cidHex = toHex(parentPost.cid);
+  const threadReplies = replies.filter(r => toHex(r.data.parentCid) === cidHex);
   const repostCount = reposts.get(cidHex)?.size ?? 0;
   const likeCount = reactions.get(cidHex)?.size ?? 0;
+  const hasLiked = identity ? (reactions.get(cidHex)?.has(toHex(identity.creatorId)) ?? false) : false;
+  const hasReposted = identity ? (reposts.get(cidHex)?.has(toHex(identity.creatorId)) ?? false) : false;
 
   const handleReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,10 +84,10 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
               </div>
 
               <div className="flex items-center justify-around py-2">
-                 <ActionButton icon={<MessageSquare size={20} />} color="hover:text-blue-500 hover:bg-blue-500/10" label="Reply" />
-                 <ActionButton icon={<Repeat2 size={20} />} color="hover:text-emerald-500 hover:bg-emerald-500/10" label="Repost" />
-                 <ActionButton icon={<Heart size={20} />} color="hover:text-rose-500 hover:bg-rose-500/10" label="Like" />
-                 <ActionButton icon={<Share size={20} />} color="hover:text-blue-500 hover:bg-blue-500/10" label="Share" />
+                 <ActionButton icon={<MessageSquare size={20} />} color="hover:text-blue-500 hover:bg-blue-500/10" label="Reply" onClick={() => replyInputRef.current?.focus()} />
+                 <ActionButton icon={<Repeat2 size={20} />} color={hasReposted ? "text-emerald-500" : "hover:text-emerald-500 hover:bg-emerald-500/10"} label="Repost" onClick={() => repost(parentPost.cid)} />
+                 <ActionButton icon={<Heart size={20} />} color={hasLiked ? "text-rose-500" : "hover:text-rose-500 hover:bg-rose-500/10"} label="Like" onClick={() => reactToPost(parentPost.cid)} />
+                 <ActionButton icon={<Share size={20} />} color="hover:text-blue-500 hover:bg-blue-500/10" label="Share" onClick={() => navigator.clipboard.writeText(cidHex)} />
               </div>
            </div>
 
@@ -132,7 +135,8 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
              value={replyText}
              onChange={e => setReplyText(e.target.value)}
              disabled={isSubmitting}
-             placeholder="Post your reply to the swarm..." 
+             ref={replyInputRef}
+             placeholder="Post your reply to the swarm..."
              className="w-full bg-zinc-900 border border-zinc-800 rounded-full py-3 px-6 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-inner disabled:opacity-50"
            />
         </form>
@@ -141,9 +145,9 @@ export function ThreadView({ parentPost, onClose }: ThreadViewProps) {
   );
 }
 
-function ActionButton({ icon, color, label }: { icon: React.ReactNode, color: string, label: string }) {
+function ActionButton({ icon, color, label, onClick }: { icon: React.ReactNode, color: string, label: string, onClick?: () => void }) {
   return (
-    <button className={twMerge("p-2.5 rounded-xl text-zinc-500 transition-all", color)} aria-label={label}>
+    <button onClick={onClick} className={twMerge("p-2.5 rounded-xl text-zinc-500 transition-all", color)} aria-label={label}>
       {icon}
     </button>
   );
