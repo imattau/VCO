@@ -21,6 +21,7 @@ import { NetworkService, NetworkStats } from '../../lib/NetworkService';
 import { NodeClient } from '../../lib/NodeClient';
 import { KeyringService } from '../../lib/KeyringService';
 import { vcoStore } from '../../lib/VcoStore';
+import { SwarmPulse } from '../../components/SwarmPulse';
 
 export function SettingsView() {
   const { toast } = useToast();
@@ -76,6 +77,11 @@ export function SettingsView() {
       <div className="space-y-2 mb-10">
         <h2 className="text-5xl font-black text-white tracking-tighter italic uppercase">Node Settings</h2>
         <p className="text-zinc-500 text-xl font-medium">Control your decentralized bridge to the VCO swarm.</p>
+      </div>
+
+      {/* Swarm Pulse - Visible on mobile only here */}
+      <div className="md:hidden bg-zinc-900 border border-zinc-800 rounded-[3rem] p-10 shadow-2xl overflow-hidden">
+         <SwarmPulse />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

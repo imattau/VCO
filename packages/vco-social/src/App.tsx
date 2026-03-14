@@ -148,11 +148,11 @@ function MainContent() {
           </div>
           <div className="flex items-center gap-4">
              <div className={twMerge(
-               "hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest transition-all",
+               "flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest transition-all",
                isNodeReady ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" : "bg-amber-500/10 border-amber-500/20 text-amber-500"
              )} title={peerId || "Connecting..."}>
                 <div className={twMerge("w-1.5 h-1.5 rounded-full", isNodeReady ? "bg-emerald-500" : "bg-amber-500 animate-pulse")} />
-                {isNodeReady ? "Swarm Connected" : "Connecting..."}
+                <span className="hidden sm:inline">{isNodeReady ? "Swarm Connected" : "Connecting..."}</span>
              </div>
              
              <button className="bg-blue-600 hover:bg-blue-700 text-white p-2 md:px-4 md:py-1.5 rounded-full md:rounded-xl flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 active:translate-y-0.5">

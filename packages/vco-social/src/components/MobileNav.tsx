@@ -3,9 +3,9 @@ import {
   Users, 
   MessageSquare, 
   Bell, 
-  LayoutDashboard
+  LayoutDashboard,
+  Settings
 } from 'lucide-react';
-import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { SocialTab } from '../App';
 
@@ -36,6 +36,11 @@ export function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
         icon={<Users size={24} />} 
         active={activeTab === 'profile'} 
         onClick={() => onTabChange('profile')} 
+      />
+      <MobileNavItem 
+        icon={<Settings size={24} />} 
+        active={activeTab === 'settings'} 
+        onClick={() => onTabChange('settings')} 
       />
     </div>
   );
