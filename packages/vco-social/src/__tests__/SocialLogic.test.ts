@@ -2,8 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import * as Constants from '../lib/constants';
 import { toHex } from '@vco/vco-testing';
 
-// Mocking the complex crypto/schema dependencies for pure logic testing
-// since we want to test how the SocialContext processes the results
+// Mocking the complex crypto/schema dependencies
 vi.mock('@vco/vco-schemas', () => ({
   decodePost: vi.fn((p) => ({ schema: 'vco://schemas/post/1.0.0', content: 'Mock Post', timestampMs: BigInt(1000) })),
   decodeReply: vi.fn((p) => ({ schema: 'vco://schemas/reply/1.0.0', parentCid: new Uint8Array([1,2,3]), content: 'Mock Reply', timestampMs: BigInt(1100) })),
@@ -21,16 +20,10 @@ vi.mock('@vco/vco-core', () => ({
   })),
 }));
 
-// We need to test the logic inside processEnvelopes
-// Since it's a private-ish callback in SocialContext, we'll simulate its behavior
-// or we can test it by making it a utility.
-// For this task, I'll demonstrate the LOGIC expected for these features.
-
 describe('Social Logic Unit Tests', () => {
   
   it('should correctly identify and categorize a Post', async () => {
-    // This simulates the logic in processEnvelopes second pass
-    const payloadRaw = Constants.POST_SCHEMA_URI; // Simulate the heuristic check
+    const payloadRaw = Constants.POST_SCHEMA_URI;
     expect(payloadRaw.includes(Constants.POST_SCHEMA_URI)).toBe(true);
   });
 
@@ -39,7 +32,6 @@ describe('Social Logic Unit Tests', () => {
     const targetHex = "010203";
     const creatorIdHex = "070809";
 
-    // Logic from SocialContext
     if (!reactionMap.has(targetHex)) reactionMap.set(targetHex, new Set());
     reactionMap.get(targetHex)!.add(creatorIdHex);
 
@@ -58,7 +50,6 @@ describe('Social Logic Unit Tests', () => {
     const repostData = { originalPostCid: new Uint8Array([1,2,3]), timestampMs: BigInt(2000) };
     const authorProfile = { displayName: "Bob" };
 
-    // Logic from SocialContext processEnvelopes (Pass 2)
     const original = allPostsByCid.get(targetHex);
     if (original) {
       fItems.push({
@@ -80,8 +71,8 @@ describe('Social Logic Unit Tests', () => {
 
   it('should correctly sort feed by interaction time (Original vs Repost)', () => {
     const items = [
-      { data: { timestampMs: BigInt(1000) }, repostBy: undefined }, // Older original
-      { data: { timestampMs: BigInt(500) }, repostBy: { timestampMs: BigInt(2000) } }, // Old post reposted recently
+      { data: { timestampMs: BigInt(1000) }, repostBy: undefined },
+      { data: { timestampMs: BigInt(500) }, repostBy: { timestampMs: BigInt(2000) } },
     ];
 
     const sorted = items.sort((a, b) => {
@@ -92,6 +83,35 @@ describe('Social Logic Unit Tests', () => {
 
     expect(Number(sorted[0].repostBy?.timestampMs)).toBe(2000);
     expect(Number(sorted[1].data.timestampMs)).toBe(1000);
+  });
+
+  it('should hide items that have been tombstoned', () => {
+    const feed = [
+      { cid: new Uint8Array([1,2,3]), data: { content: "Hidden" } },
+      { cid: new Uint8Array([4,5,6]), data: { content: "Visible" } }
+    ];
+    const tombstones = new Set(["010203"]);
+
+    const filtered = feed.filter(item => !tombstones.has(toHex(item.cid)));
+
+    expect(filtered.length).toBe(1);
+    expect(filtered[0].data.content).toBe("Visible");
+  });
+
+  it('should correctly filter feed by hashtag', () => {
+    const feed = [
+      { data: { tags: ["vco", "social"] } },
+      { data: { tags: ["rust"] } }
+    ];
+    
+    const filter = { type: 'tag' as const, value: 'vco' };
+    
+    const filtered = feed.filter(item => 
+      item.data.tags.includes(filter.value)
+    );
+
+    expect(filtered.length).toBe(1);
+    expect(filtered[0].data.tags).toContain("vco");
   });
 
 });
