@@ -58,15 +58,13 @@ else
 fi
 
 # 4. Detect Shell
-# Fallback to parent process if SHELL is not set or refers to something else
 CURRENT_SHELL=$(basename "$SHELL")
 if [[ "$CURRENT_SHELL" == "setup-android-env.sh" ]]; then
-    # Try to detect via parent process
     CURRENT_SHELL=$(ps -p $PPID -o comm= | sed 's/^-//')
 fi
 
 PROFILE_FILE=""
-SHELL_TYPE="posix" # bash, zsh
+SHELL_TYPE="posix"
 
 case "$CURRENT_SHELL" in
     zsh)
@@ -84,7 +82,6 @@ case "$CURRENT_SHELL" in
     fish)
         PROFILE_FILE="$HOME/.config/fish/config.fish"
         SHELL_TYPE="fish"
-        # Ensure directory exists
         mkdir -p "$(dirname "$PROFILE_FILE")"
         ;;
     *)
@@ -105,7 +102,8 @@ set -gx ANDROID_SDK_ROOT \"$DETECTED_SDK\""
 
     if [ -n "$DETECTED_NDK" ]; then
         CONFIG_BLOCK="$CONFIG_BLOCK
-set -gx ANDROID_NDK_HOME \"$DETECTED_NDK\""
+set -gx ANDROID_NDK_HOME \"$DETECTED_NDK\"
+set -gx NDK_HOME \"$DETECTED_NDK\""
     fi
 
     CONFIG_BLOCK="$CONFIG_BLOCK
@@ -120,7 +118,8 @@ export ANDROID_SDK_ROOT=\"$DETECTED_SDK\""
 
     if [ -n "$DETECTED_NDK" ]; then
         CONFIG_BLOCK="$CONFIG_BLOCK
-export ANDROID_NDK_HOME=\"$DETECTED_NDK\""
+export ANDROID_NDK_HOME=\"$DETECTED_NDK\"
+export NDK_HOME=\"$DETECTED_NDK\""
     fi
 
     CONFIG_BLOCK="$CONFIG_BLOCK
@@ -140,11 +139,7 @@ read -r response
 if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
     echo -e "$CONFIG_BLOCK" >> "$PROFILE_FILE"
     echo "✅ Configuration appended to $PROFILE_FILE."
-    if [[ "$SHELL_TYPE" == "fish" ]]; then
-        echo "👉 Run 'source $PROFILE_FILE' to apply changes to your current session."
-    else
-        echo "👉 Run 'source $PROFILE_FILE' to apply changes to your current session."
-    fi
+    echo "👉 CRITICAL: Run 'source $PROFILE_FILE' in your terminal or restart it to apply changes."
 else
     echo "ℹ️  No changes made. You can manually copy the block above."
 fi

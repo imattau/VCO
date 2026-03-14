@@ -61,6 +61,7 @@ $CONFIG_BLOCK = @"
 
 if ($DETECTED_NDK) {
     $CONFIG_BLOCK += "`n`$env:ANDROID_NDK_HOME = `"$DETECTED_NDK`""
+    $CONFIG_BLOCK += "`n`$env:NDK_HOME = `"$DETECTED_NDK`""
 }
 
 $CONFIG_BLOCK += "`n`$env:Path += `";`$env:ANDROID_HOME\cmdline-tools\latest\bin;`$env:ANDROID_HOME\platform-tools`"`n# -----------------------------------"
@@ -78,7 +79,7 @@ if ($response -eq "y" -or $response -eq "yes") {
     }
     Add-Content -Path $PROFILE_PATH -Value $CONFIG_BLOCK
     Write-Host "✅ Configuration appended to $PROFILE_PATH." -ForegroundColor Green
-    Write-Host "👉 Restart your terminal to apply changes."
+    Write-Host "👉 CRITICAL: Restart your terminal to apply changes."
 } else {
     Write-Host "ℹ️  No changes made. You can manually copy the block above."
 }
