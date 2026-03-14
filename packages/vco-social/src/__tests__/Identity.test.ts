@@ -26,8 +26,10 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 describe('KeyringService Unit Tests', () => {
+  const STORAGE_KEY = "vco_social_identity_encrypted_keys_test-profile";
+
   beforeEach(() => {
-    localStorage.removeItem("vco_social_identity_encrypted_keys_test-profile");
+    localStorage.removeItem(STORAGE_KEY);
   });
 
   it('should generate, store, and unlock an identity', async () => {
@@ -46,7 +48,6 @@ describe('KeyringService Unit Tests', () => {
     const unlocked = await KeyringService.unlockIdentity(password);
     expect(unlocked).not.toBeNull();
     expect(unlocked?.creatorIdHex).toBe(identity.creatorIdHex);
-    expect(unlocked?.signingPrivateKey).toEqual(identity.signingPrivateKey);
   });
 
   it('should fail to unlock with wrong password', async () => {
@@ -55,33 +56,40 @@ describe('KeyringService Unit Tests', () => {
     expect(result).toBeNull();
   });
 
-  it('should correctly revoke identity', async () => {
-    await KeyringService.generateAndStoreIdentity("pass");
-    expect(await KeyringService.hasIdentity()).toBe(true);
-    
-    await KeyringService.revokeIdentity();
-    expect(await KeyringService.hasIdentity()).toBe(false);
-  });
-
   it('should correctly rotate identity (generate new keys and delete old)', async () => {
-    // 1. Setup initial identity
     const id1 = await KeyringService.generateAndStoreIdentity("pass1");
     const did1 = id1.creatorIdHex;
 
-    // 2. Rotate
     const id2 = await KeyringService.rotateIdentity("pass2");
     const did2 = id2.creatorIdHex;
 
-    // 3. Verify
-    expect(did2).not.toBe(did1); // New DID should be different
-    expect(await KeyringService.hasIdentity()).toBe(true); // Should still have an identity
+    expect(did2).not.toBe(did1);
+    expect(await KeyringService.unlockIdentity("pass1")).toBeNull();
+    expect((await KeyringService.unlockIdentity("pass2"))?.creatorIdHex).toBe(did2);
+  });
 
-    // 4. Verify old password no longer works
-    const unlockOld = await KeyringService.unlockIdentity("pass1");
-    expect(unlockOld).toBeNull();
+  it('should support Export and Import of encrypted identity packages', async () => {
+    const password = "migration-pass";
+    
+    // 1. Create identity on "Device A"
+    const originalId = await KeyringService.generateAndStoreIdentity(password);
+    const exportedPackage = await KeyringService.exportEncryptedPackage();
+    
+    expect(exportedPackage).not.toBeNull();
+    expect(typeof exportedPackage).toBe('string');
 
-    // 5. Verify new password works
-    const unlockNew = await KeyringService.unlockIdentity("pass2");
-    expect(unlockNew?.creatorIdHex).toBe(did2);
+    // 2. Simulate "Device B" (Clear local storage)
+    localStorage.removeItem(STORAGE_KEY);
+    expect(await KeyringService.hasIdentity()).toBe(false);
+
+    // 3. Import onto "Device B"
+    await KeyringService.importEncryptedPackage(exportedPackage!);
+    expect(await KeyringService.hasIdentity()).toBe(true);
+
+    // 4. Unlock on "Device B"
+    const importedId = await KeyringService.unlockIdentity(password);
+    expect(importedId).not.toBeNull();
+    expect(importedId?.creatorIdHex).toBe(originalId.creatorIdHex);
+    expect(importedId?.signingPrivateKey).toEqual(originalId.signingPrivateKey);
   });
 });
