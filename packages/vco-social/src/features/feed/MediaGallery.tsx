@@ -41,34 +41,36 @@ export function MediaGallery({ mediaCids }: MediaGalleryProps) {
   const getGridClass = (count: number) => {
     switch (count) {
       case 1: return 'grid-cols-1';
-      case 2: return 'grid-cols-2 aspect-[2/1]';
-      case 3: return 'grid-cols-2 grid-rows-2 aspect-[3/2]';
+      case 2: return 'grid-cols-2';
+      case 3: return 'grid-cols-2';
       case 4:
-      default: return 'grid-cols-2 grid-rows-2 aspect-square';
+      default: return 'grid-cols-2';
     }
   };
 
+  // Each cell gets an aspect ratio so it has defined height without absolute positioning tricks
   const getItemClass = (count: number, index: number) => {
-    if (count === 3 && index === 0) return 'row-span-2';
-    return '';
+    if (count === 1) return 'aspect-video';
+    if (count === 3 && index === 0) return 'row-span-2 aspect-auto min-h-[200px]';
+    return 'aspect-square';
   };
 
   return (
     <>
-      <div 
+      <div
         className={twMerge("grid gap-1 rounded-2xl overflow-hidden border border-zinc-800", getGridClass(mediaUrls.length))}
-        onClick={(e) => e.stopPropagation()} // Prevent opening ThreadView when clicking media
+        onClick={(e) => e.stopPropagation()}
       >
         {mediaUrls.slice(0, 4).map((src, index) => (
-          <div 
+          <div
             key={index}
-            className={twMerge("relative group cursor-pointer bg-zinc-950", getItemClass(mediaUrls.length, index))}
+            className={twMerge("relative overflow-hidden group cursor-pointer bg-zinc-950", getItemClass(mediaUrls.length, index))}
             onClick={() => setExpandedIndex(index)}
           >
-            <img 
-              src={src} 
-              alt={`Decentralized media ${index}`} 
-              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+            <img
+              src={src}
+              alt={`Decentralized media ${index}`}
+              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
             {index === 3 && mediaUrls.length > 4 && (
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
