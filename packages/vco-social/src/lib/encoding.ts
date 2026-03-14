@@ -12,7 +12,8 @@ export function toHex(bytes: Uint8Array): string {
  * Converts a hex string to a Uint8Array.
  */
 export function fromHex(hex: string): Uint8Array {
-  const matches = hex.match(/.{1,2}/g);
-  if (!matches) return new Uint8Array(0);
+  if (hex.length % 2 !== 0) return new Uint8Array(0);
+  const matches = hex.match(/[0-9a-fA-F]{2}/g);
+  if (!matches || matches.length !== hex.length / 2) return new Uint8Array(0);
   return new Uint8Array(matches.map(b => parseInt(b, 16)));
 }

@@ -35,6 +35,13 @@ impl SledStore {
         let tree = db.open_tree("records")?;
         Ok(Self { db: tree })
     }
+
+    #[cfg(test)]
+    pub fn new_test(path: &std::path::Path) -> anyhow::Result<Self> {
+        let db = sled::open(path)?;
+        let tree = db.open_tree("records")?;
+        Ok(Self { db: tree })
+    }
 }
 
 impl RecordStore for SledStore {
@@ -191,7 +198,7 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
             
             let mut kad = kad::Behaviour::with_config(
                 local_peer_id,
-                sled_store,
+                 sled_store,
                 kad_config,
             );
             
@@ -488,8 +495,8 @@ mod tests {
     use libp2p::identity::Keypair;
     use libp2p::SwarmBuilder;
     use libp2p::kad::Quorum;
-    use libp2p::kad::store::MemoryStore;
     use std::time::Duration;
+    use tempfile::tempdir;
 
     #[tokio::test]
     async fn test_load_or_generate_keypair() {
@@ -503,7 +510,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_sled_persistence_across_restarts() {
+        let tmp = tempdir().unwrap();
+        let db_path = tmp.path().join("test_db");
+        
+        let key = RecordKey::new(&"persist-me");
+        let val = b"permanent-swarm-data".to_vec();
+
+        // 1. Initial write
+        {
+            let mut store = SledStore::new_test(&db_path).unwrap();
+            store.put(Record {
+                key: key.clone(),
+                value: val.clone(),
+                publisher: None,
+                expires: None,
+            }).unwrap();
+        }
+
+        // 2. Restart and verify
+        {
+            let store = SledStore::new_test(&db_path).unwrap();
+            let record = store.get(&key).expect("Record lost after restart");
+            assert_eq!(record.value, val);
+        }
+    }
+
+    #[tokio::test]
     async fn test_kademlia_put_get_local() {
+        let tmp = tempdir().unwrap();
+        let db_path = tmp.path().join("test_db");
+        let store = SledStore::new_test(&db_path).unwrap();
+
         let local_key = Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
         let protocol = StreamProtocol::new("/vco/kad/1.0.0");
@@ -512,11 +550,10 @@ mod tests {
             .with_tokio()
             .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default).unwrap()
             .with_behaviour(|key| {
-                let mut kad_config = kad::Config::new(protocol.clone());
-                kad_config.set_query_timeout(Duration::from_secs(5));
+                let kad_config = kad::Config::new(protocol.clone());
                 let kad = kad::Behaviour::with_config(
                     local_peer_id,
-                    MemoryStore::new(local_peer_id),
+                    store,
                     kad_config,
                 );
                 
@@ -530,14 +567,23 @@ mod tests {
                     gossipsub::Config::default(),
                 ).unwrap();
 
+                let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
+                let (_relay_transport, relay_client) = relay::client::new(local_peer_id);
+                
+                #[cfg(not(mobile))]
+                let mdns = mdns::tokio::Behaviour::new(
+                    mdns::Config::default(),
+                    local_peer_id,
+                ).unwrap();
+
                 VcoBehaviour { 
                     identify, 
                     kad, 
                     gossipsub,
-                    autonat: autonat::Behaviour::new(local_peer_id, autonat::Config::default()),
-                    relay_client: relay::client::new(local_peer_id).1,
+                    autonat,
+                    relay_client,
                     #[cfg(not(mobile))]
-                    mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id).unwrap()
+                    mdns 
                 }
             }).unwrap()
             .build();
@@ -560,49 +606,49 @@ mod tests {
     #[tokio::test]
     async fn test_kad_multi_node_exchange() {
         let protocol = StreamProtocol::new("/vco/kad/1.0.0");
+        let tmp1 = tempdir().unwrap();
+        let tmp2 = tempdir().unwrap();
         
         let key1 = Keypair::generate_ed25519();
         let peer1 = PeerId::from(key1.public());
+        let store1 = SledStore::new_test(&tmp1.path().join("db1")).unwrap();
+        
         let mut swarm1 = SwarmBuilder::with_existing_identity(key1)
             .with_tokio()
             .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default).unwrap()
             .with_behaviour(|key| {
-                let mut kad_config = kad::Config::new(protocol.clone());
-                let mut kad = kad::Behaviour::with_config(peer1, MemoryStore::new(peer1), kad_config);
+                let kad_config = kad::Config::new(protocol.clone());
+                let mut kad = kad::Behaviour::with_config(peer1, store1, kad_config);
                 kad.set_mode(Some(kad::Mode::Server)); 
                 let identify = identify::Behaviour::new(identify::Config::new("/vco/1.0.0".into(), key.public()));
                 let gossipsub = gossipsub::Behaviour::new(gossipsub::MessageAuthenticity::Signed(key.clone()), gossipsub::Config::default()).unwrap();
-                VcoBehaviour { 
-                    identify, 
-                    kad, 
-                    gossipsub,
-                    autonat: autonat::Behaviour::new(peer1, autonat::Config::default()),
-                    relay_client: relay::client::new(peer1).1,
-                    #[cfg(not(mobile))]
-                    mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), peer1).unwrap()
-                }
+                let autonat = autonat::Behaviour::new(peer1, autonat::Config::default());
+                let (_rt, relay_client) = relay::client::new(peer1);
+                std::mem::forget(_rt); // Keep alive
+                #[cfg(not(mobile))]
+                let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer1).unwrap();
+                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client, #[cfg(not(mobile))] mdns }
             }).unwrap().build();
 
         let key2 = Keypair::generate_ed25519();
         let peer2 = PeerId::from(key2.public());
+        let store2 = SledStore::new_test(&tmp2.path().join("db2")).unwrap();
+        
         let mut swarm2 = SwarmBuilder::with_existing_identity(key2)
             .with_tokio()
             .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default).unwrap()
             .with_behaviour(|key| {
-                let mut kad_config = kad::Config::new(protocol.clone());
-                let mut kad = kad::Behaviour::with_config(peer2, MemoryStore::new(peer2), kad_config);
+                let kad_config = kad::Config::new(protocol.clone());
+                let mut kad = kad::Behaviour::with_config(peer2, store2, kad_config);
                 kad.set_mode(Some(kad::Mode::Server)); 
                 let identify = identify::Behaviour::new(identify::Config::new("/vco/1.0.0".into(), key.public()));
                 let gossipsub = gossipsub::Behaviour::new(gossipsub::MessageAuthenticity::Signed(key.clone()), gossipsub::Config::default()).unwrap();
-                VcoBehaviour { 
-                    identify, 
-                    kad, 
-                    gossipsub,
-                    autonat: autonat::Behaviour::new(peer2, autonat::Config::default()),
-                    relay_client: relay::client::new(peer2).1,
-                    #[cfg(not(mobile))]
-                    mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), peer2).unwrap()
-                }
+                let autonat = autonat::Behaviour::new(peer2, autonat::Config::default());
+                let (_rt, relay_client) = relay::client::new(peer2);
+                std::mem::forget(_rt); // Keep alive
+                #[cfg(not(mobile))]
+                let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer2).unwrap();
+                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client, #[cfg(not(mobile))] mdns }
             }).unwrap().build();
 
         swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -635,16 +681,15 @@ mod tests {
         let mut found = false;
         let mut connected = false;
 
-        for i in 0..300 {
+        for i in 0..500 {
             tokio::select! {
-                event = swarm1.select_next_some() => {
-                    println!("Node 1: {:?}", event);
-                },
+                _event = swarm1.select_next_some() => {},
                 event = swarm2.select_next_some() => {
-                    println!("Node 2: {:?}", event);
                     if let SwarmEvent::ConnectionEstablished { peer_id, .. } = event {
                         if peer_id == peer1 {
                             connected = true;
+                            // Wait for commit
+                            tokio::time::sleep(Duration::from_millis(100)).await;
                             swarm2.behaviour_mut().kad.get_record(record_key.clone());
                         }
                     }
@@ -664,7 +709,7 @@ mod tests {
                     if i == 0 {
                         swarm2.dial(peer1).unwrap();
                     }
-                    if i > 50 && connected && !found && i % 50 == 0 {
+                    if i > 100 && connected && !found && i % 50 == 0 {
                         swarm2.behaviour_mut().kad.get_record(record_key.clone());
                     }
                 }
