@@ -47,10 +47,10 @@ export class NodeClient {
     if (!isTauri()) {
       const mockNetworkEnabled = typeof import.meta !== 'undefined' && typeof (import.meta as any).env !== 'undefined' && (import.meta as any).env.VITE_MOCK_NETWORK === 'true';
       if (mockNetworkEnabled) {
-        console.warn('NodeClient: VITE_MOCK_NETWORK=true — using mock networking (dev only).');
+        console.warn('VCO NodeClient: VITE_MOCK_NETWORK=true — using mock networking (dev only).');
         this.startMockNode();
       } else {
-        console.error('NodeClient: Not running in Tauri and VITE_MOCK_NETWORK is not set. Node unavailable.');
+        console.error('VCO NodeClient: Not running in Tauri and VITE_MOCK_NETWORK is not set. Node unavailable.');
         this.handleEvent({ type: 'error', message: 'Node requires Tauri runtime. Set VITE_MOCK_NETWORK=true for browser development.' });
       }
       return;
@@ -58,18 +58,18 @@ export class NodeClient {
 
     try {
       // Listen for events from the native Rust node
-      console.log('NodeClient: Registering vco-node-event listener...');
+      console.log('VCO NodeClient: Registering vco-node-event listener...');
       await listen<NodeEvent>('vco-node-event', (event) => {
-        console.log('NodeClient: Raw event received:', JSON.stringify(event.payload));
+        console.log('VCO NodeClient: Raw event received:', JSON.stringify(event.payload));
         this.handleEvent(event.payload);
       });
 
-      console.log('NodeClient: Listener registered. Requesting initial stats...');
+      console.log('VCO NodeClient: Listener registered. Requesting initial stats...');
 
       // Initial stats request
       this.getStats();
     } catch (error) {
-      console.error('NodeClient: Failed to connect to native node.', error);
+      console.error('VCO NodeClient: Failed to connect to native node.', error);
       this.handleEvent({ type: 'error', message: `Failed to connect to native node: ${error}` });
     }
   }
@@ -121,18 +121,18 @@ export class NodeClient {
       this.isReady = true;
       this.peerId = event.peerId;
       this.multiaddrs = event.multiaddrs;
-      console.log('NodeClient: Node ready. peerId:', event.peerId, 'multiaddrs:', event.multiaddrs);
+      console.log('VCO NodeClient: Node ready. peerId:', event.peerId, 'multiaddrs:', event.multiaddrs);
     } else if (event.type === 'stats') {
       this.isReady = true;
       this.peerId = event.peerId;
       this.multiaddrs = event.multiaddrs;
       this.peers = event.peers;
       this.connections = event.connections;
-      console.log('NodeClient: Stats updated. peerId:', event.peerId, 'peers:', event.peers.length, 'isReady:', this.isReady);
+      console.log('VCO NodeClient: Stats updated. peerId:', event.peerId, 'peers:', event.peers.length, 'isReady:', this.isReady);
     } else if (event.type === 'error') {
-      console.error('NodeClient: Error event:', event.message);
+      console.error('VCO NodeClient: Error event:', event.message);
     }
-    console.log('NodeClient: Notifying', this.listeners.size, 'listeners');
+    console.log('VCO NodeClient: Notifying', this.listeners.size, 'listeners');
     this.listeners.forEach(l => l(event));
   }
 

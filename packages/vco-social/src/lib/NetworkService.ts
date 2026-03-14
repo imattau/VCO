@@ -32,14 +32,14 @@ export class NetworkService {
     // Push update immediately whenever the node emits any event
     this.eventUnsub = client.onEvent((event) => {
       const s = snapshot();
-      console.log('NetworkService: event push →', event.type, '| isReady:', s.isReady, '| peerId:', s.peerId);
+      console.log('VCO NetworkService: event push →', event.type, '| isReady:', s.isReady, '| peerId:', s.peerId);
       callback(s);
     });
 
     const poll = () => {
       client.getStats();
       const s = snapshot();
-      console.log('NetworkService: poll snapshot → isReady:', s.isReady, '| peerId:', s.peerId, '| peers:', s.peers.length);
+      console.log('VCO NetworkService: poll snapshot → isReady:', s.isReady, '| peerId:', s.peerId, '| peers:', s.peers.length);
       callback(s);
     };
 
