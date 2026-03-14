@@ -3,7 +3,7 @@ import { useSocial } from '../SocialContext';
 import { Edit2, Shield, Fingerprint, ShieldAlert, Key, Zap, CheckCircle2, Users, Search, X } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { FollowButton } from './FollowButton';
-import { mockCid, toHex } from '@vco/vco-testing';
+import { toHex } from '@/lib/encoding';
 import { blake3 } from '@vco/vco-crypto';
 import { vcoStore } from '../../lib/VcoStore';
 import { useToast } from '../../components/ToastProvider';

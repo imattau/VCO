@@ -4,7 +4,7 @@ import {
   PostData,
   extractHashtags
 } from '@vco/vco-schemas';
-import { toHex } from '@vco/vco-testing';
+import { toHex } from '@/lib/encoding';
 import { blake3 } from '@vco/vco-crypto';
 import { vcoStore } from './VcoStore';
 

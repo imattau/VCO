@@ -14,7 +14,7 @@ import { E2EEService } from '@/lib/E2EEService';
 import { ProfileService } from '@/lib/ProfileService';
 import { NotificationService } from '@/lib/NotificationService';
 import { useToast } from '@/components/ToastProvider';
-import { mockCid, toHex } from '@vco/vco-testing';
+import { toHex } from '@/lib/encoding';
 import { blake3 } from '@vco/vco-crypto';
 import { SocialTab } from '@/App';
 import { KeyringService, IdentityKeys } from '@/lib/KeyringService';
@@ -218,7 +218,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
               dmData.nonce,
               dmData.encryptedPayload
             );
-          } catch(e) {}
+          } catch(e) {
+            console.warn("E2EE decrypt failed for DM, showing placeholder", e);
+          }
 
           const msg: MessageWithMetadata = {
             cid,
@@ -247,7 +249,6 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const { decodeEnvelopeProto, verifyEnvelope } = await import('@vco/vco-core');
       const { createNobleCryptoProvider, blake3 } = await import('@vco/vco-crypto');
-      const { toHex } = await import('@vco/vco-testing');
       
       const crypto = createNobleCryptoProvider();
       const envelope = decodeEnvelopeProto(bytes);

@@ -6,7 +6,7 @@ import { twMerge } from 'tailwind-merge';
 import { MediaGallery } from './MediaGallery';
 import { useSocial } from '../SocialContext';
 import { ReportDialog } from '../moderation/ReportDialog';
-import { toHex } from '@vco/vco-testing';
+import { toHex } from '@/lib/encoding';
 
 interface PostCardProps {
   data: PostData;

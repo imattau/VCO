@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { twMerge } from 'tailwind-merge';
 import { useSocial } from '../SocialContext';
 import { MediaGallery } from './MediaGallery';
-import { toHex } from '@vco/vco-testing';
+import { toHex } from '@/lib/encoding';
 
 interface ThreadViewProps {
   parentPost: { data: PostData; cid: Uint8Array; authorProfile: ProfileData } | null;

@@ -2,7 +2,7 @@ import React from 'react';
 import { useSocial } from '../SocialContext';
 import { Bell, Heart, MessageSquare, UserPlus, Zap, SwatchBook } from 'lucide-react';
 import { NotificationType } from '@vco/vco-schemas';
-import { toHex } from '@vco/vco-testing';
+import { toHex } from '@/lib/encoding';
 
 export function NotificationView() {
   const { notifications, markNotificationAsRead, navigateToPost, navigateToPeer, peerProfiles, setActiveTab } = useSocial();

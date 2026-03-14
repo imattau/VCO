@@ -5,7 +5,7 @@ import {
   generateX25519KeyPair,
   ByteArray
 } from "@vco/vco-crypto";
-import { toHex } from "@vco/vco-testing";
+import { toHex } from "@/lib/encoding";
 
 export interface IdentityKeys {
   signingPrivateKey: ByteArray;
@@ -26,7 +26,9 @@ export class KeyringService {
       if ((window as any).__TAURI_INTERNALS__) {
         profile = await invoke<string>("get_vco_profile");
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("KeyringService: failed to get profile name from Tauri", e);
+    }
     return `${STORAGE_KEY_BASE}_${profile}`;
   }
 
