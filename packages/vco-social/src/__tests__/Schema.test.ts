@@ -108,6 +108,7 @@ describe('VCO Schema Integrity Tests', () => {
       schema: POST_SCHEMA_URI,
       content: "test",
       timestampMs: BigInt(0),
+      mediaCids: [],
       tags: []
     });
 
