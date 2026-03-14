@@ -21,13 +21,19 @@ export class NetworkService {
 
     const client = NodeClient.getInstance();
 
-    const snapshot = () => ({
-      peerId: client.peerId,
-      multiaddrs: client.multiaddrs,
-      peers: client.peers,
-      connections: client.connections,
-      isReady: client.isReady
-    });
+    const snapshot = () => {
+      const peerId = client.peerId;
+      // Treat node as ready if it has a valid peer ID, regardless of isReady flag.
+      // The flag can lag behind due to async IPC timing on the poll path.
+      const isReady = client.isReady || (!!peerId && peerId !== 'Initializing...');
+      return {
+        peerId,
+        multiaddrs: client.multiaddrs,
+        peers: client.peers,
+        connections: client.connections,
+        isReady
+      };
+    };
 
     // Push update immediately whenever the node emits any event
     this.eventUnsub = client.onEvent((event) => {
