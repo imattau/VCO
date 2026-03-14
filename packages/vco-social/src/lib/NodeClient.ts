@@ -121,9 +121,36 @@ export class NodeClient {
 
   private startMockNode() {
     this.isReady = true;
-    this.peerId = "browser-mock-peer";
+    this.peerId = `browser-mock-${Math.floor(Math.random() * 1000)}`;
     this.multiaddrs = ["/ip4/127.0.0.1/tcp/0/ws"];
     
+    // Create a broadcast channel for cross-tab mock networking
+    const channel = new BroadcastChannel('vco-mock-mesh');
+    
+    channel.onmessage = (event) => {
+      if (event.data.sender !== this.peerId) {
+        this.handleEvent({
+          type: 'envelope',
+          channelId: event.data.channelId,
+          envelope: event.data.envelope
+        });
+      }
+    };
+
+    // Override publish for mock mode
+    const originalPublish = this.publish.bind(this);
+    this.publish = (channelId: string, envelopeBase64: string) => {
+      if (!isTauri()) {
+        channel.postMessage({
+          sender: this.peerId,
+          channelId,
+          envelope: envelopeBase64
+        });
+      } else {
+        originalPublish(channelId, envelopeBase64);
+      }
+    };
+
     // Emit ready event
     setTimeout(() => {
       this.handleEvent({

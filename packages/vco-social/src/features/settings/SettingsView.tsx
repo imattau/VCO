@@ -38,8 +38,20 @@ export function SettingsView() {
 
   useEffect(() => {
     NetworkService.startPolling(setStats);
-    return () => NetworkService.stopPolling();
-  }, []);
+    
+    const cleanup = NodeClient.getInstance().onEvent((event) => {
+      if (event.type === 'dial_success') {
+        toast(`Successfully connected to: ${event.addr}`, "success");
+      } else if (event.type === 'error' && event.message.includes('dial')) {
+        toast(`Failed to dial: ${event.message}`, "error");
+      }
+    });
+
+    return () => {
+      NetworkService.stopPolling();
+      cleanup();
+    };
+  }, [toast]);
 
   const copyToClipboard = (text: string) => {
     if (!text) return;
