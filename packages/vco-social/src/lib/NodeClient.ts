@@ -20,6 +20,7 @@ const isTauri = () => !!(window as any).__TAURI_INTERNALS__;
 export class NodeClient {
   private static instance: NodeClient;
   private listeners: Set<EventListener> = new Set();
+  private connected: boolean = false;
   public isReady: boolean = false;
   public peerId: string | null = null;
   public multiaddrs: string[] = [];
@@ -40,6 +41,9 @@ export class NodeClient {
    * Fallback to a mock node if running in a standard browser.
    */
   public async connect(): Promise<void> {
+    if (this.connected) return;
+    this.connected = true;
+
     if (!isTauri()) {
       const mockNetworkEnabled = typeof import.meta !== 'undefined' && typeof (import.meta as any).env !== 'undefined' && (import.meta as any).env.VITE_MOCK_NETWORK === 'true';
       if (mockNetworkEnabled) {

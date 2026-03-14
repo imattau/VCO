@@ -399,6 +399,13 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     bootstrapData();
   }, [identity, processEnvelopes]);
 
+  // Connect to the node immediately on mount — does not require identity.
+  // Ensures the Tauri event listener is registered before the Rust backend
+  // emits startup events (which can race ahead of identity loading on mobile).
+  useEffect(() => {
+    NodeClient.getInstance().connect();
+  }, []);
+
   useEffect(() => {
     if (!identity || isLoading) return;
 
@@ -406,7 +413,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     let eventCleanup: (() => void) | null = null;
 
     const connectNode = async () => {
-      await client.connect();
+      await client.connect(); // no-op if already connected
       client.subscribe(Constants.GLOBAL_SOCIAL_CHANNEL);
       client.subscribe(`vco://channels/dm/${toHex(identity.encryptionPublicKey)}`);
 
