@@ -58,12 +58,20 @@ else
 fi
 
 # 4. Detect Shell
+# Fallback to parent process if SHELL is not set or refers to something else
 CURRENT_SHELL=$(basename "$SHELL")
+if [[ "$CURRENT_SHELL" == "setup-android-env.sh" ]]; then
+    # Try to detect via parent process
+    CURRENT_SHELL=$(ps -p $PPID -o comm= | sed 's/^-//')
+fi
+
 PROFILE_FILE=""
+SHELL_TYPE="posix" # bash, zsh
 
 case "$CURRENT_SHELL" in
     zsh)
         PROFILE_FILE="$HOME/.zshrc"
+        SHELL_TYPE="posix"
         ;;
     bash)
         if [[ "$OS_TYPE" == "Darwin" ]]; then
@@ -71,9 +79,17 @@ case "$CURRENT_SHELL" in
         else
             PROFILE_FILE="$HOME/.bashrc"
         fi
+        SHELL_TYPE="posix"
+        ;;
+    fish)
+        PROFILE_FILE="$HOME/.config/fish/config.fish"
+        SHELL_TYPE="fish"
+        # Ensure directory exists
+        mkdir -p "$(dirname "$PROFILE_FILE")"
         ;;
     *)
         PROFILE_FILE="$HOME/.profile"
+        SHELL_TYPE="posix"
         ;;
 esac
 
@@ -81,19 +97,36 @@ echo "🐚 Shell Detected: $CURRENT_SHELL"
 echo "📝 Target Profile: $PROFILE_FILE"
 
 # 5. Generate configuration
-CONFIG_BLOCK="
+if [[ "$SHELL_TYPE" == "fish" ]]; then
+    CONFIG_BLOCK="
+# --- VCO Android Development Env ---
+set -gx ANDROID_HOME \"$DETECTED_SDK\"
+set -gx ANDROID_SDK_ROOT \"$DETECTED_SDK\""
+
+    if [ -n "$DETECTED_NDK" ]; then
+        CONFIG_BLOCK="$CONFIG_BLOCK
+set -gx ANDROID_NDK_HOME \"$DETECTED_NDK\""
+    fi
+
+    CONFIG_BLOCK="$CONFIG_BLOCK
+fish_add_path \$ANDROID_HOME/cmdline-tools/latest/bin
+fish_add_path \$ANDROID_HOME/platform-tools
+# -----------------------------------"
+else
+    CONFIG_BLOCK="
 # --- VCO Android Development Env ---
 export ANDROID_HOME=\"$DETECTED_SDK\"
 export ANDROID_SDK_ROOT=\"$DETECTED_SDK\""
 
-if [ -n "$DETECTED_NDK" ]; then
-    CONFIG_BLOCK="$CONFIG_BLOCK
+    if [ -n "$DETECTED_NDK" ]; then
+        CONFIG_BLOCK="$CONFIG_BLOCK
 export ANDROID_NDK_HOME=\"$DETECTED_NDK\""
-fi
+    fi
 
-CONFIG_BLOCK="$CONFIG_BLOCK
+    CONFIG_BLOCK="$CONFIG_BLOCK
 export PATH=\"\$PATH:\$ANDROID_HOME/cmdline-tools/latest/bin:\$ANDROID_HOME/platform-tools\"
 # -----------------------------------"
+fi
 
 echo -e "\n🚀 Suggested environment variables:"
 echo "--------------------------------------------------"
@@ -101,15 +134,17 @@ echo -e "$CONFIG_BLOCK"
 echo "--------------------------------------------------"
 
 echo -e "\nWould you like to append this configuration to $PROFILE_FILE? (y/n)"
-# In some non-interactive environments, read might fail or hang.
-# For a script like this, we assume the user is running it interactively.
 
 read -r response
 
 if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
     echo -e "$CONFIG_BLOCK" >> "$PROFILE_FILE"
     echo "✅ Configuration appended to $PROFILE_FILE."
-    echo "👉 Run 'source $PROFILE_FILE' to apply changes to your current session."
+    if [[ "$SHELL_TYPE" == "fish" ]]; then
+        echo "👉 Run 'source $PROFILE_FILE' to apply changes to your current session."
+    else
+        echo "👉 Run 'source $PROFILE_FILE' to apply changes to your current session."
+    fi
 else
     echo "ℹ️  No changes made. You can manually copy the block above."
 fi
