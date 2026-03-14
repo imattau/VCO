@@ -98,3 +98,113 @@ describe('FeedProcessor Unit Tests', () => {
     expect(results.notifications.length).toBe(0);
   });
 });
+
+describe('FeedProcessor state building', () => {
+  const myCreatorIdHex = "ff";
+  const myProfile: any = { displayName: "Me" };
+  const profileMap = new Map();
+
+  it('should add posts to feedItems', () => {
+    const postEnv = {
+      cid: btoa(String.fromCharCode(1,1,1)),
+      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+
+    const results = FeedProcessor.process([postEnv], myProfile, profileMap, myCreatorIdHex);
+
+    expect(results.feedItems).toHaveLength(1);
+    expect(results.feedItems[0].authorProfile.displayName).toBe('Me');
+  });
+
+  it('should add replies to replyItems (not feedItems)', () => {
+    const replyEnv = {
+      cid: btoa(String.fromCharCode(2,2,2)),
+      payload: btoa(String.fromCharCode(0xAA, 2) + Constants.REPLY_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+
+    const results = FeedProcessor.process([replyEnv], myProfile, profileMap, myCreatorIdHex);
+
+    expect(results.replyItems).toHaveLength(1);
+    expect(results.feedItems).toHaveLength(0);
+  });
+
+  it('should populate reactionMap with reactor creator IDs', () => {
+    const postEnv = {
+      cid: btoa(String.fromCharCode(1,1,1)),
+      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+    const reactionEnv = {
+      cid: btoa(String.fromCharCode(3,3,3)),
+      payload: btoa(String.fromCharCode(0xAA, 3) + Constants.REACTION_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+
+    const results = FeedProcessor.process([postEnv, reactionEnv], myProfile, profileMap, myCreatorIdHex);
+
+    // targetCid from decodeReaction mock is [1,1,1] → "010101"
+    const targetHex = '010101';
+    expect(results.reactionMap.has(targetHex)).toBe(true);
+    expect(results.reactionMap.get(targetHex)!.has('aa')).toBe(true);
+  });
+
+  it('should populate repostMap and add a repost feed item', () => {
+    const postEnv = {
+      cid: btoa(String.fromCharCode(1,1,1)),
+      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+    const repostEnv = {
+      cid: btoa(String.fromCharCode(5,5,5)),
+      payload: btoa(String.fromCharCode(0xAA, 5) + Constants.REPOST_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+
+    const results = FeedProcessor.process([postEnv, repostEnv], myProfile, profileMap, myCreatorIdHex);
+
+    // originalPostCid from decodeRepost mock is [1,1,1] → "010101"
+    const targetHex = '010101';
+    expect(results.repostMap.has(targetHex)).toBe(true);
+    expect(results.repostMap.get(targetHex)!.has('aa')).toBe(true);
+    // Repost creates a feed item with repostBy set
+    const repostItem = results.feedItems.find(f => f.repostBy !== undefined);
+    expect(repostItem).toBeDefined();
+    expect(repostItem!.repostBy!.profile.displayName).not.toBe('Me'); // from peer, not self
+  });
+
+  it('should handle mixed post+reaction+repost+reply in one batch', () => {
+    const postEnv = {
+      cid: btoa(String.fromCharCode(1,1,1)),
+      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+    const replyEnv = {
+      cid: btoa(String.fromCharCode(2,2,2)),
+      payload: btoa(String.fromCharCode(0xAA, 2) + Constants.REPLY_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+    const reactionEnv = {
+      cid: btoa(String.fromCharCode(3,3,3)),
+      payload: btoa(String.fromCharCode(0xAA, 3) + Constants.REACTION_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+    const repostEnv = {
+      cid: btoa(String.fromCharCode(5,5,5)),
+      payload: btoa(String.fromCharCode(0xAA, 5) + Constants.REPOST_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+
+    const results = FeedProcessor.process(
+      [postEnv, replyEnv, reactionEnv, repostEnv],
+      myProfile, profileMap, myCreatorIdHex
+    );
+
+    expect(results.feedItems.length).toBeGreaterThanOrEqual(1); // original post + repost copy
+    expect(results.replyItems).toHaveLength(1);
+    expect(results.reactionMap.size).toBe(1);
+    expect(results.repostMap.size).toBe(1);
+    expect(results.notifications.length).toBe(3); // reply + like + repost on my post
+  });
+});

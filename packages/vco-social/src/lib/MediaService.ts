@@ -1,5 +1,5 @@
 import { blake3 } from "@vco/vco-crypto";
-import { toHex } from "@vco/vco-testing";
+import { toHex } from "./encoding";
 import { vcoStore } from "./VcoStore";
 import { 
   SEQUENCE_MANIFEST_SCHEMA_URI, 

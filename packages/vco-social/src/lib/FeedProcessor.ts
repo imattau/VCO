@@ -10,7 +10,7 @@ import {
   decodeRepost
 } from '@vco/vco-schemas';
 import { decodeEnvelopeProto as decodeCore } from '@vco/vco-core';
-import { toHex } from '@vco/vco-testing';
+import { toHex } from './encoding';
 import * as Constants from './constants';
 
 export interface FeedItem {

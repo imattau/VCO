@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { toHex } from "@vco/vco-testing";
+import { toHex } from "./encoding";
 
 const DB_NAME_BASE = "vco_social_db";
 const DB_VERSION = 3; 

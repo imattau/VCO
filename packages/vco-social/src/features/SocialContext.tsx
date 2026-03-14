@@ -34,22 +34,16 @@ import { E2EEService } from '@/lib/E2EEService';
 import { ProfileService } from '@/lib/ProfileService';
 import { NotificationService } from '@/lib/NotificationService';
 import { useToast } from '@/components/ToastProvider';
-import { mockCid, toHex } from '@vco/vco-testing';
+import { toHex } from '@/lib/encoding';
 import { SocialTab } from '@/App';
 import { KeyringService, IdentityKeys } from '@/lib/KeyringService';
 import { NodeClient } from '@/lib/NodeClient';
 import { vcoStore } from '@/lib/VcoStore';
 import { MediaService } from '@/lib/MediaService';
 import { FeedProcessor, FeedItem, ReplyItem } from '@/lib/FeedProcessor';
+import { DMProcessor, MessageWithMetadata } from '@/lib/DMProcessor';
 import { PoWService } from '@/lib/PoWService';
 import * as Constants from '@/lib/constants';
-
-interface MessageWithMetadata {
-  cid: Uint8Array;
-  data: DirectMessageData;
-  payload: { content: string; mediaCids: Uint8Array[] };
-  isOwn: boolean;
-}
 
 interface Conversation {
   peerProfile: ProfileData;
@@ -141,6 +135,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   useEffect(() => { peerProfilesRef.current = peerProfiles; }, [peerProfiles]);
   useEffect(() => { isNodeReadyRef.current = isNodeReady; }, [isNodeReady]);
 
+  const calculateDifficulty = useCallback((payload: Uint8Array) => {
+    const sizeScaling = Math.floor(Math.log2(payload.length / 1024 + 1));
+    return Math.floor((Constants.DEFAULT_POW_DIFFICULTY + sizeScaling) * networkLoad);
+  }, [networkLoad]);
+
   const unlock = async (password: string) => {
     const id = await KeyringService.unlockIdentity(password);
     if (id) {
@@ -161,42 +160,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   const processEnvelopes = useCallback(async (envelopes: any[], myProfile: ProfileData, profileMap: Map<string, ProfileData>, identity: IdentityKeys) => {
     const results = FeedProcessor.process(envelopes, myProfile, profileMap, identity.creatorIdHex);
-    
-    // Logic for DMs remains here as it requires E2EEService
-    const dmMap = new Map<string, MessageWithMetadata[]>();
-    for (const e of envelopes) {
-      if (e.channelId.startsWith("vco://channels/dm/")) {
-        try {
-          const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
-          const coreEnvelope = decodeCore(bytes);
-          const cid = Uint8Array.from(atob(e.cid), c => c.charCodeAt(0));
-          const creatorIdHex = toHex(coreEnvelope.header.creatorId);
-          const dmData = decodeDirectMessage(coreEnvelope.payload);
-          
-          let decrypted: any = { content: "[Encrypted Message]", mediaCids: [] };
-          try {
-            decrypted = await E2EEService.decryptMessage(
-              identity.encryptionPrivateKey,
-              dmData.ephemeralPubkey,
-              dmData.nonce,
-              dmData.encryptedPayload
-            );
-          } catch {}
-
-          const msg: MessageWithMetadata = {
-            cid,
-            data: dmData,
-            payload: decrypted,
-            isOwn: creatorIdHex === identity.creatorIdHex
-          };
-
-          const peerKey = e.channelId.replace("vco://channels/dm/", "");
-          if (!dmMap.has(peerKey)) dmMap.set(peerKey, []);
-          dmMap.get(peerKey)!.push(msg);
-        } catch {}
-      }
-    }
-
+    const dmMap = await DMProcessor.process(envelopes, identity);
     return { ...results, dmMap };
   }, []);
 
@@ -263,9 +227,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       if (dmMap.size > 0) {
         for (const [peerKey, msgs] of dmMap.entries()) {
            setConversations(prev => {
-             const existing = prev.find(c => c.peerProfile.displayName === authorProfile!.displayName);
+             const existing = prev.find(c => toHex(c.peerProfile.encryptionPubkey || new Uint8Array(0)) === peerKey);
              if (existing) {
-               return prev.map(c => c.peerProfile.displayName === authorProfile!.displayName
+               return prev.map(c => toHex(c.peerProfile.encryptionPubkey || new Uint8Array(0)) === peerKey
                  ? { ...c, lastMessage: msgs[0], messages: [...c.messages, msgs[0]], unread: c.unread + 1 }
                  : c
                );
@@ -305,7 +269,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("Failed to process inbound envelope:", err);
     }
-  }, [processEnvelopes, networkLoad]);
+  }, [processEnvelopes]);
 
   const loadMoreFeed = useCallback(async () => {
     const currentIdentity = identityRef.current;
@@ -622,9 +586,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       };
 
       setConversations(prev => {
-        const existing = prev.find(c => c.peerProfile.displayName === recipientProfile.displayName);
+        const existing = prev.find(c => toHex(c.peerProfile.encryptionPubkey || new Uint8Array(0)) === toHex(recipientProfile.encryptionPubkey!));
         if (existing) {
-          return prev.map(c => c.peerProfile.displayName === recipientProfile.displayName 
+          return prev.map(c => toHex(c.peerProfile.encryptionPubkey || new Uint8Array(0)) === toHex(recipientProfile.encryptionPubkey!)
             ? { ...c, lastMessage: msg, messages: [...c.messages, msg] }
             : c
           );
@@ -747,7 +711,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const crypto = createNobleCryptoProvider();
       const reactionData = { schema: Constants.REACTION_SCHEMA_URI, targetCid: cid, emoji: "❤️", timestampMs: BigInt(Date.now()) };
       const payload = encodeReaction(reactionData);
-      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
+      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       
@@ -775,7 +739,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       if (!originalPost) return;
       const repostData: RepostData = { schema: Constants.REPOST_SCHEMA_URI, originalPostCid: cid, originalAuthorCid: originalPost.authorId, commentary, timestampMs: BigInt(Date.now()) };
       const payload = encodeRepost(repostData);
-      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
+      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
       
@@ -801,7 +765,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const crypto = createNobleCryptoProvider();
       const reportData = { schema: Constants.REPORT_SCHEMA_URI, targetCid: cid, reason: reason, timestampMs: BigInt(Date.now()) };
       const payload = encodeReport(reportData);
-      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
+      const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: calculateDifficulty(payload) }, crypto);
       NodeClient.getInstance().publish(Constants.MODERATION_REPORTS_CHANNEL, btoa(String.fromCharCode(...encodeCore(envelope))));
       toast("Verifiable report broadcast to network", "success");
     } catch (err) {
