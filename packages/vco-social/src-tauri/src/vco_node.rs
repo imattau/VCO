@@ -193,6 +193,7 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
         libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
             .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default)?
+            .with_quic()
             .with_behaviour(|key: &libp2p::identity::Keypair| {
                 let mut kad_config = kad::Config::new(StreamProtocol::new("/vco/kad/1.0.0"));
                 kad_config.set_query_timeout(Duration::from_secs(10));
