@@ -78,8 +78,9 @@ export class LevelDBRelayStore implements IRelayStore {
     try {
       await this.db.get(`nul:${nullifierHex}`);
       return true;
-    } catch {
-      return false;
+    } catch (err: any) {
+      if (err?.code === 'LEVEL_NOT_FOUND') return false;
+      throw err;
     }
   }
 
@@ -118,8 +119,9 @@ export class LevelDBRelayStore implements IRelayStore {
       this.envelopeCache.set(hashHex, envelope);
       this.existenceCache.set(hashHex, true);
       return envelope;
-    } catch {
-      return undefined;
+    } catch (err: any) {
+      if (err?.code === 'LEVEL_NOT_FOUND') return undefined;
+      throw err;
     }
   }
 
@@ -131,8 +133,9 @@ export class LevelDBRelayStore implements IRelayStore {
       await this.db.get(`env:${hashHex}`);
       this.existenceCache.set(hashHex, true);
       return true;
-    } catch {
-      return false;
+    } catch (err: any) {
+      if (err?.code === 'LEVEL_NOT_FOUND') return false;
+      throw err;
     }
   }
 

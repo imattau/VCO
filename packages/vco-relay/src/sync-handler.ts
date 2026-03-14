@@ -41,7 +41,13 @@ export async function handleSyncSession(
     let encoded: Uint8Array;
     try {
       encoded = await channel.receive();
-    } catch {
+    } catch (err: any) {
+      // Stream closed cleanly or timed out — normal session end
+      if (err?.code === 'ERR_STREAM_RESET' || err?.message?.includes('closed') || err?.message?.includes('reset') || err?.message?.includes('aborted')) {
+        break;
+      }
+      // Unexpected receive error — log and terminate session
+      process.stderr.write(`[vco-relay] sync-handler: unexpected receive error: ${err}\n`);
       break;
     }
 
@@ -79,7 +85,8 @@ export async function handleSyncSession(
           }
         }
       }
-    } catch {
+    } catch (err) {
+      process.stderr.write(`[vco-relay] sync-handler: envelope decode/validate/store error: ${err}\n`);
       continue;
     }
   }
