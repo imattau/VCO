@@ -104,6 +104,14 @@ export class KeyringService {
   }
 
   /**
+   * Securely rotates the identity by revoking the current one and generating a new one.
+   */
+  static async rotateIdentity(newPassword: string): Promise<IdentityKeys> {
+    await this.revokeIdentity();
+    return await this.generateAndStoreIdentity(newPassword);
+  }
+
+  /**
    * Checks if an identity exists (even if locked).
    */
   static async hasIdentity(): Promise<boolean> {

@@ -62,4 +62,26 @@ describe('KeyringService Unit Tests', () => {
     await KeyringService.revokeIdentity();
     expect(await KeyringService.hasIdentity()).toBe(false);
   });
+
+  it('should correctly rotate identity (generate new keys and delete old)', async () => {
+    // 1. Setup initial identity
+    const id1 = await KeyringService.generateAndStoreIdentity("pass1");
+    const did1 = id1.creatorIdHex;
+
+    // 2. Rotate
+    const id2 = await KeyringService.rotateIdentity("pass2");
+    const did2 = id2.creatorIdHex;
+
+    // 3. Verify
+    expect(did2).not.toBe(did1); // New DID should be different
+    expect(await KeyringService.hasIdentity()).toBe(true); // Should still have an identity
+
+    // 4. Verify old password no longer works
+    const unlockOld = await KeyringService.unlockIdentity("pass1");
+    expect(unlockOld).toBeNull();
+
+    // 5. Verify new password works
+    const unlockNew = await KeyringService.unlockIdentity("pass2");
+    expect(unlockNew?.creatorIdHex).toBe(did2);
+  });
 });
