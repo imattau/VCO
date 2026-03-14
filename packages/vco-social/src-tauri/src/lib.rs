@@ -1,7 +1,7 @@
 mod vco_node;
 
 use std::panic;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use vco_node::{NodeCommand, VcoNodeState};
 use base64::{Engine as _, engine::general_purpose};
 
@@ -144,6 +144,10 @@ pub fn run() {
                     Err(e) => {
                         log::error!("VCO CRITICAL: Failed to start libp2p node: {:?}", e);
                         eprintln!("VCO CRITICAL: Failed to start libp2p node: {:?}", e);
+                        let _ = handle.emit("vco-node-event", serde_json::json!({
+                            "type": "error",
+                            "message": format!("Node failed to start: {}", e)
+                        }));
                     }
                 }
             });

@@ -244,9 +244,14 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
         )
         .build();
 
-    swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
+    // QUIC is best-effort — Android/emulators may not support UDP binding
+    if let Err(e) = swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?) {
+        log::warn!("VCO: QUIC transport unavailable (non-fatal): {:?}", e);
+    }
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0/ws".parse()?)?;
+    if let Err(e) = swarm.listen_on("/ip4/0.0.0.0/tcp/0/ws".parse()?) {
+        log::warn!("VCO: WebSocket transport unavailable (non-fatal): {:?}", e);
+    }
 
     let handle = app_handle.clone();
     let profile = std::env::var("VCO_PROFILE").unwrap_or_else(|_| "default".to_string());
