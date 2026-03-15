@@ -158,8 +158,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   const hasExistingIdentity = async () => await KeyringService.hasIdentity();
 
-  const processEnvelopes = useCallback(async (envelopes: any[], myProfile: ProfileData, profileMap: Map<string, ProfileData>, identity: IdentityKeys) => {
-    const results = FeedProcessor.process(envelopes, myProfile, profileMap, identity.creatorIdHex);
+  const processEnvelopes = useCallback(async (envelopes: any[], myProfile: ProfileData, profileMap: Map<string, ProfileData>, identity: IdentityKeys, extraPostsByCid?: Map<string, { authorId: Uint8Array, data: any, authorProfile: ProfileData }>) => {
+    const results = FeedProcessor.process(envelopes, myProfile, profileMap, identity.creatorIdHex, extraPostsByCid);
     const dmMap = await DMProcessor.process(envelopes, identity);
     return { ...results, dmMap };
   }, []);
@@ -213,7 +213,47 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         };
       }
       
-      const { feedItems, replyItems, followSet, dmMap, reactionMap, repostMap, notifications: newNotifs } = await processEnvelopes([{ cid: cidBase64, channelId, payload: base64 }], currentProfile, peerProfilesRef.current, currentIdentity);
+      // For repost envelopes arriving in a new session, the original post may be
+      // in IndexedDB but absent from the current in-memory batch.  Pre-seed the
+      // post lookup map so FeedProcessor can resolve the original without needing
+      // to be made async itself.
+      let extraPostsByCid: Map<string, { authorId: Uint8Array; data: any; authorProfile: ProfileData }> | undefined;
+      const payloadRaw = new TextDecoder().decode(envelope.payload);
+      if (payloadRaw.includes(Constants.REPOST_SCHEMA_URI)) {
+        const { decodeRepost: _decodeRepost } = await import('@vco/vco-schemas');
+        const repostData = _decodeRepost(envelope.payload);
+        const originalCidHex = toHex(repostData.originalPostCid);
+        const storedOriginal = await vcoStore.getEnvelopeByCid(originalCidHex);
+        if (storedOriginal) {
+          const { decodeEnvelopeProto: _decodeCore } = await import('@vco/vco-core');
+          const { decodePost: _decodePost } = await import('@vco/vco-schemas');
+          try {
+            const origBytes = Uint8Array.from(atob(storedOriginal.payload), c => c.charCodeAt(0));
+            const origEnvelope = _decodeCore(origBytes);
+            const origCreatorIdHex = toHex(origEnvelope.header.creatorId);
+            const origAuthorProfile = origCreatorIdHex === currentIdentity.creatorIdHex
+              ? currentProfile
+              : peerProfilesRef.current.get(origCreatorIdHex) || {
+                  schema: Constants.PROFILE_SCHEMA_URI,
+                  displayName: `Peer ${origCreatorIdHex.substring(0, 6)}`,
+                  avatarCid: new Uint8Array(0),
+                  previousManifest: new Uint8Array(0),
+                  bio: "Offline identity"
+                };
+            extraPostsByCid = new Map([
+              [originalCidHex, {
+                authorId: origEnvelope.header.creatorId,
+                data: _decodePost(origEnvelope.payload),
+                authorProfile: origAuthorProfile
+              }]
+            ]);
+          } catch {
+            // If decoding the stored original fails, proceed without it.
+          }
+        }
+      }
+
+      const { feedItems, replyItems, followSet, dmMap, reactionMap, repostMap, notifications: newNotifs } = await processEnvelopes([{ cid: cidBase64, channelId, payload: base64 }], currentProfile, peerProfilesRef.current, currentIdentity, extraPostsByCid);
       
       if (feedItems.length > 0) setFeed(prev => [feedItems[0], ...prev]);
       if (replyItems.length > 0) setReplies(prev => [replyItems[0], ...prev]);

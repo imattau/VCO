@@ -3,7 +3,7 @@ import { toHex } from "./encoding";
 import type { VcoEnvelope } from "@vco/vco-core";
 
 const DB_NAME_BASE = "vco_social_db";
-const DB_VERSION = 3; 
+const DB_VERSION = 4;
 
 export interface StoredEnvelope {
   cid: string;
@@ -96,6 +96,16 @@ export class VcoStore {
               const blobStore = tx.objectStore("blobs");
               if (!blobStore.indexNames.contains("by_updated")) {
                 blobStore.createIndex("by_updated", "updatedAt", { unique: false });
+              }
+            }
+          }
+
+          if (oldVersion < 4) {
+            const tx = request.transaction;
+            if (tx) {
+              const envelopeStore = tx.objectStore("envelopes");
+              if (!envelopeStore.indexNames.contains("by_header_hash")) {
+                envelopeStore.createIndex("by_header_hash", "headerHash", { unique: false });
               }
             }
           }
@@ -319,6 +329,23 @@ export class VcoStore {
     stores.forEach(s => tx.objectStore(s).clear());
     return new Promise((resolve) => {
       tx.oncomplete = () => resolve();
+    });
+  }
+
+  /**
+   * Point-lookup by headerHash (CID hex string).
+   * Used to resolve cross-batch reposts where the original post was stored
+   * in a prior sync session and is not present in the current in-memory batch.
+   */
+  async getEnvelopeByCid(cidHex: string): Promise<StoredEnvelope | null> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("envelopes", "readonly");
+      const store = tx.objectStore("envelopes");
+      const index = store.index("by_header_hash");
+      const request = index.get(cidHex);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
     });
   }
 

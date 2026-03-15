@@ -174,6 +174,34 @@ describe('FeedProcessor state building', () => {
     expect(repostItem!.repostBy!.profile.displayName).not.toBe('Me'); // from peer, not self
   });
 
+  it('repost of an envelope from a prior batch resolves from VcoStore', () => {
+    // The original post is NOT in the current envelope batch — it came from a prior session
+    // and is supplied via extraPostsByCid (pre-seeded from VcoStore by the caller).
+    const priorSessionPost = {
+      authorId: new Uint8Array([0xBB]),
+      data: { schema: Constants.POST_SCHEMA_URI, content: 'Prior session post', timestampMs: BigInt(500) } as any,
+      authorProfile: { displayName: 'PriorPeer' } as any,
+    };
+    // originalPostCid from decodeRepost mock is [1,1,1] → "010101"
+    const targetHex = '010101';
+    const extraPostsByCid = new Map([[targetHex, priorSessionPost]]);
+
+    // Only the repost envelope is in the current batch (no original post envelope).
+    const repostEnv = {
+      cid: btoa(String.fromCharCode(5,5,5)),
+      payload: btoa(String.fromCharCode(0xAA, 5) + Constants.REPOST_SCHEMA_URI),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+
+    const results = FeedProcessor.process([repostEnv], myProfile, profileMap, myCreatorIdHex, extraPostsByCid);
+
+    expect(results.repostMap.has(targetHex)).toBe(true);
+    const repostItem = results.feedItems.find(f => f.repostBy !== undefined);
+    expect(repostItem).toBeDefined();
+    expect(repostItem!.authorProfile.displayName).toBe('PriorPeer');
+    expect(repostItem!.repostBy!.profile.displayName).not.toBe('PriorPeer'); // reposted by the peer, not original author
+  });
+
   it('should handle mixed post+reaction+repost+reply in one batch', () => {
     const postEnv = {
       cid: btoa(String.fromCharCode(1,1,1)),

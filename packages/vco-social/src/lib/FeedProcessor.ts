@@ -45,10 +45,11 @@ export class FeedProcessor {
    * Pure logic to process a batch of envelopes and build timeline state.
    */
   static process(
-    envelopes: any[], 
-    myProfile: ProfileData, 
-    profileMap: Map<string, ProfileData>, 
-    myCreatorIdHex: string
+    envelopes: any[],
+    myProfile: ProfileData,
+    profileMap: Map<string, ProfileData>,
+    myCreatorIdHex: string,
+    extraPostsByCid?: Map<string, { authorId: Uint8Array, data: PostData, authorProfile: ProfileData }>
   ): ProcessedResults {
     const feedItems: FeedItem[] = [];
     const replyItems: ReplyItem[] = [];
@@ -57,8 +58,8 @@ export class FeedProcessor {
     const repostMap = new Map<string, Set<string>>();
     const notifications: any[] = [];
 
-    // Pass 1: Cache posts
-    const allPostsByCid = new Map<string, { authorId: Uint8Array, data: PostData, authorProfile: ProfileData }>();
+    // Pass 1: Cache posts — seed with any posts resolved from a prior session.
+    const allPostsByCid = new Map<string, { authorId: Uint8Array, data: PostData, authorProfile: ProfileData }>(extraPostsByCid);
     for (const e of envelopes) {
       try {
         const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));

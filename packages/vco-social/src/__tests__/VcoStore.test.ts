@@ -127,7 +127,7 @@ describe('VcoStore Unit Tests', () => {
 
   it('should initialize with correct profile-based name', async () => {
     await (store as any).getDB();
-    expect(mockIDB.open).toHaveBeenCalledWith('vco_social_db_test-profile', 3);
+    expect(mockIDB.open).toHaveBeenCalledWith('vco_social_db_test-profile', 4);
   });
 
   it('should store and retrieve envelopes', async () => {
