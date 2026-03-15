@@ -16,7 +16,7 @@ import {
   RotateCw
 } from 'lucide-react';
 import { useToast } from '../../components/ToastProvider';
-import { scan, Format } from '@tauri-apps/plugin-barcode-scanner';
+import { scan, Format, checkPermissions, requestPermissions } from '@tauri-apps/plugin-barcode-scanner';
 import { twMerge } from 'tailwind-merge';
 import { NetworkService, NetworkStats } from '../../lib/NetworkService';
 import { NodeClient } from '../../lib/NodeClient';
@@ -111,6 +111,14 @@ export function SettingsView() {
 
   const handleQrScan = async () => {
     try {
+      const perm = await checkPermissions();
+      if (perm !== 'granted') {
+        const req = await requestPermissions();
+        if (req !== 'granted') {
+          toast('Camera permission denied', 'error');
+          return;
+        }
+      }
       const result = await scan({ windowed: false, formats: [Format.QRCode] });
       const content = result.content?.trim();
       if (!content) {
