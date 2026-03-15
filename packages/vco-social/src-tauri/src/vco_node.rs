@@ -303,6 +303,8 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
     let mut peer_addresses: HashMap<PeerId, String> = HashMap::new();
     let mut message_count: u32 = 0;
     let mut last_minute = tokio::time::Instant::now();
+    // Pending sync sessions awaiting ConnectionEstablished: peer_id -> session_id
+    let mut pending_syncs: HashMap<PeerId, String> = HashMap::new();
 
     tokio::spawn(async move {
         loop {
@@ -405,7 +407,134 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                         let addr = endpoint.get_remote_address().to_string();
                         log::info!("VCO: Connection established with {} at {}", peer_id, addr);
                         peer_addresses.insert(peer_id, addr.clone());
-                        
+
+                        // If there is a pending sync for this peer, extract the actual TCP
+                        // address from the established endpoint and open the sync stream.
+                        if let Some(session_id) = pending_syncs.remove(&peer_id) {
+                            let remote_ma = endpoint.get_remote_address().clone();
+                            // Extract IP + TCP port from the actual established address
+                            let tcp_sock = {
+                                let mut ip: Option<std::net::IpAddr> = None;
+                                let mut port: Option<u16> = None;
+                                for proto in remote_ma.iter() {
+                                    match proto {
+                                        libp2p::multiaddr::Protocol::Ip4(a) => ip = Some(std::net::IpAddr::V4(a)),
+                                        libp2p::multiaddr::Protocol::Ip6(a) => ip = Some(std::net::IpAddr::V6(a)),
+                                        libp2p::multiaddr::Protocol::Tcp(p) => port = Some(p),
+                                        _ => {}
+                                    }
+                                }
+                                ip.zip(port).map(|(ip, port)| std::net::SocketAddr::new(ip, port))
+                            };
+                            match tcp_sock {
+                                Some(tcp_addr) => {
+                                    let handle2 = handle.clone();
+                                    let app_handle2 = handle.clone();
+                                    tokio::spawn(async move {
+                                        let tcp_stream = match tokio::net::TcpStream::connect(tcp_addr).await {
+                                            Ok(s) => s,
+                                            Err(e) => {
+                                                let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
+                                                    session_id: session_id.clone(),
+                                                    message: format!("TCP connect failed: {e}"),
+                                                });
+                                                return;
+                                            }
+                                        };
+                                        let (mut read_half, mut write_half) = tokio::io::split(tcp_stream);
+                                        let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+                                        {
+                                            let node_state = app_handle2.state::<VcoNodeState>();
+                                            let mut sessions = node_state.sync_sessions.lock().await;
+                                            sessions.insert(session_id.clone(), write_tx);
+                                        }
+                                        let _ = handle2.emit("vco-node-event", NodeEvent::SyncSessionReady {
+                                            session_id: session_id.clone(),
+                                        });
+                                        let write_handle = handle2.clone();
+                                        let write_session = session_id.clone();
+                                        let write_app = app_handle2.clone();
+                                        tokio::spawn(async move {
+                                            while let Some(bytes) = write_rx.recv().await {
+                                                if write_half.write_all(&bytes).await.is_err() {
+                                                    let _ = write_handle.emit("vco-node-event", NodeEvent::SyncError {
+                                                        session_id: write_session.clone(),
+                                                        message: "Stream write error".to_string(),
+                                                    });
+                                                    let node_state = write_app.state::<VcoNodeState>();
+                                                    let mut sessions = node_state.sync_sessions.lock().await;
+                                                    sessions.remove(&write_session);
+                                                    break;
+                                                }
+                                            }
+                                        });
+                                        let mut received_count: u32 = 0;
+                                        loop {
+                                            let mut len_buf = [0u8; 4];
+                                            if read_half.read_exact(&mut len_buf).await.is_err() {
+                                                if received_count > 0 {
+                                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncComplete {
+                                                        session_id: session_id.clone(),
+                                                        received_count,
+                                                    });
+                                                } else {
+                                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
+                                                        session_id: session_id.clone(),
+                                                        message: "Stream closed unexpectedly".to_string(),
+                                                    });
+                                                }
+                                                let node_state = app_handle2.state::<VcoNodeState>();
+                                                let mut sessions = node_state.sync_sessions.lock().await;
+                                                sessions.remove(&session_id);
+                                                break;
+                                            }
+                                            let frame_len = u32::from_be_bytes(len_buf) as usize;
+                                            if frame_len == 0 {
+                                                let _ = handle2.emit("vco-node-event", NodeEvent::SyncFrame {
+                                                    session_id: session_id.clone(),
+                                                    frame_b64: String::new(),
+                                                });
+                                                let _ = handle2.emit("vco-node-event", NodeEvent::SyncComplete {
+                                                    session_id: session_id.clone(),
+                                                    received_count,
+                                                });
+                                                let node_state = app_handle2.state::<VcoNodeState>();
+                                                let mut sessions = node_state.sync_sessions.lock().await;
+                                                sessions.remove(&session_id);
+                                                break;
+                                            }
+                                            let mut body = vec![0u8; frame_len];
+                                            if read_half.read_exact(&mut body).await.is_err() {
+                                                let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
+                                                    session_id: session_id.clone(),
+                                                    message: "Stream read error (body)".to_string(),
+                                                });
+                                                let node_state = app_handle2.state::<VcoNodeState>();
+                                                let mut sessions = node_state.sync_sessions.lock().await;
+                                                sessions.remove(&session_id);
+                                                break;
+                                            }
+                                            received_count += 1;
+                                            let frame_b64 = general_purpose::STANDARD.encode(&body);
+                                            let _ = handle2.emit("vco-node-event", NodeEvent::SyncFrame {
+                                                session_id: session_id.clone(),
+                                                frame_b64,
+                                            });
+                                        }
+                                    });
+                                }
+                                None => {
+                                    let _ = handle.emit("vco-node-event", NodeEvent::SyncError {
+                                        session_id,
+                                        message: format!(
+                                            "Connected peer {} has no TCP address in endpoint {}",
+                                            peer_id, remote_ma
+                                        ),
+                                    });
+                                }
+                            }
+                        }
+
                         if let Ok(data) = fs::read_to_string(&cache_path) {
                             if let Ok(mut cached) = serde_json::from_str::<Vec<CachedPeer>>(&data) {
                                 let peer_id_str = peer_id.to_string();
@@ -570,149 +699,19 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                             }
                         };
 
-                        // Extract TCP socket address from multiaddr for direct connection
-                        let tcp_addr = {
-                            let mut ip: Option<std::net::IpAddr> = None;
-                            let mut port: Option<u16> = None;
-                            for proto in maddr.iter() {
-                                match proto {
-                                    libp2p::multiaddr::Protocol::Ip4(a) => ip = Some(std::net::IpAddr::V4(a)),
-                                    libp2p::multiaddr::Protocol::Ip6(a) => ip = Some(std::net::IpAddr::V6(a)),
-                                    libp2p::multiaddr::Protocol::Tcp(p) => port = Some(p),
-                                    _ => {}
-                                }
-                            }
-                            ip.zip(port).map(|(ip, port)| std::net::SocketAddr::new(ip, port))
-                        };
-
-                        let tcp_addr = match tcp_addr {
-                            Some(a) => a,
-                            None => {
-                                let _ = handle.emit("vco-node-event", NodeEvent::SyncError {
-                                    session_id,
-                                    message: "relay_addr missing /ip4/ and /tcp/ components".to_string(),
-                                });
-                                continue;
-                            }
-                        };
-
-                        // Also dial via libp2p for DHT/identify
+                        // Register the pending sync; the actual TCP stream is opened in
+                        // ConnectionEstablished using the confirmed endpoint address so that
+                        // QUIC connections (where there is no TCP port in the user addr) are
+                        // handled correctly via swarm transport negotiation.
+                        pending_syncs.insert(peer_id, session_id.clone());
                         swarm.behaviour_mut().kad.add_address(&peer_id, maddr.clone());
-                        let _ = swarm.dial(maddr);
-
-                        let handle2 = handle.clone();
-                        let app_handle2 = handle.clone();
-
-                        tokio::spawn(async move {
-                            // Allow time for the connection to establish
-                            tokio::time::sleep(Duration::from_millis(800)).await;
-
-                            let tcp_stream = match tokio::net::TcpStream::connect(tcp_addr).await {
-                                Ok(s) => s,
-                                Err(e) => {
-                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
-                                        session_id: session_id.clone(),
-                                        message: format!("TCP connect failed: {e}"),
-                                    });
-                                    return;
-                                }
-                            };
-
-                            let (mut read_half, mut write_half) = tokio::io::split(tcp_stream);
-                            let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-
-                            // Register session in shared state
-                            {
-                                let node_state = app_handle2.state::<VcoNodeState>();
-                                let mut sessions = node_state.sync_sessions.lock().await;
-                                sessions.insert(session_id.clone(), write_tx);
-                            }
-
-                            // Signal TS that stream is ready
-                            let _ = handle2.emit("vco-node-event", NodeEvent::SyncSessionReady {
-                                session_id: session_id.clone(),
+                        if let Err(e) = swarm.dial(maddr) {
+                            pending_syncs.remove(&peer_id);
+                            let _ = handle.emit("vco-node-event", NodeEvent::SyncError {
+                                session_id,
+                                message: format!("Swarm dial failed: {e}"),
                             });
-
-                            // Write half: drain write_rx into stream
-                            let write_handle = handle2.clone();
-                            let write_session = session_id.clone();
-                            let write_app = app_handle2.clone();
-                            tokio::spawn(async move {
-                                while let Some(bytes) = write_rx.recv().await {
-                                    if write_half.write_all(&bytes).await.is_err() {
-                                        let _ = write_handle.emit("vco-node-event", NodeEvent::SyncError {
-                                            session_id: write_session.clone(),
-                                            message: "Stream write error".to_string(),
-                                        });
-                                        let node_state = write_app.state::<VcoNodeState>();
-                                        let mut sessions = node_state.sync_sessions.lock().await;
-                                        sessions.remove(&write_session);
-                                        break;
-                                    }
-                                }
-                            });
-
-                            // Read half: forward frames to TS using 4-byte BE length prefix protocol
-                            let mut received_count: u32 = 0;
-                            loop {
-                                let mut len_buf = [0u8; 4];
-                                if read_half.read_exact(&mut len_buf).await.is_err() {
-                                    // Stream closed - treat as sync complete if we got frames
-                                    if received_count > 0 {
-                                        let _ = handle2.emit("vco-node-event", NodeEvent::SyncComplete {
-                                            session_id: session_id.clone(),
-                                            received_count,
-                                        });
-                                    } else {
-                                        let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
-                                            session_id: session_id.clone(),
-                                            message: "Stream closed unexpectedly".to_string(),
-                                        });
-                                    }
-                                    let node_state = app_handle2.state::<VcoNodeState>();
-                                    let mut sessions = node_state.sync_sessions.lock().await;
-                                    sessions.remove(&session_id);
-                                    break;
-                                }
-
-                                let frame_len = u32::from_be_bytes(len_buf) as usize;
-
-                                if frame_len == 0 {
-                                    // Zero-length sentinel: pull phase complete
-                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncFrame {
-                                        session_id: session_id.clone(),
-                                        frame_b64: String::new(),
-                                    });
-                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncComplete {
-                                        session_id: session_id.clone(),
-                                        received_count,
-                                    });
-                                    let node_state = app_handle2.state::<VcoNodeState>();
-                                    let mut sessions = node_state.sync_sessions.lock().await;
-                                    sessions.remove(&session_id);
-                                    break;
-                                }
-
-                                let mut body = vec![0u8; frame_len];
-                                if read_half.read_exact(&mut body).await.is_err() {
-                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
-                                        session_id: session_id.clone(),
-                                        message: "Stream read error (body)".to_string(),
-                                    });
-                                    let node_state = app_handle2.state::<VcoNodeState>();
-                                    let mut sessions = node_state.sync_sessions.lock().await;
-                                    sessions.remove(&session_id);
-                                    break;
-                                }
-
-                                received_count += 1;
-                                let frame_b64 = general_purpose::STANDARD.encode(&body);
-                                let _ = handle2.emit("vco-node-event", NodeEvent::SyncFrame {
-                                    session_id: session_id.clone(),
-                                    frame_b64,
-                                });
-                            }
-                        });
+                        }
                     }
                     Some(NodeCommand::Shutdown) => {
                         break;

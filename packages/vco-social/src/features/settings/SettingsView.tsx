@@ -136,6 +136,7 @@ export function SettingsView() {
         }
       })();
       setDialAddr(multiaddr);
+      handleRelayAddrChange(multiaddr);
       toast("Multiaddr scanned — tap Dial Peer to connect", "info");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

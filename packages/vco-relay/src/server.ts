@@ -91,8 +91,13 @@ export class RelayServer {
           res.end(JSON.stringify({
             peerId: this.peerId?.toString(),
             multiaddrs: addrs,
-            // Return the first non-local TCP or QUIC address as a recommendation
-            recommended: addrs.find(a => !a.includes("127.0.0.1") && (a.includes("/tcp/") || a.includes("/udp/")))
+            // Prefer LAN TCP first (universally connectable), then any non-loopback TCP
+            recommended: (() => {
+              const isLan = (a: string) => /\/ip4\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a);
+              const isTcp = (a: string) => a.includes('/tcp/') && !a.includes('/ws');
+              return addrs.find(a => isLan(a) && isTcp(a))
+                ?? addrs.find(a => !a.includes('127.0.0.1') && isTcp(a));
+            })()
           }));
         } else {
           res.writeHead(404);
