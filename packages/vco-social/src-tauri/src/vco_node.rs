@@ -106,7 +106,6 @@ struct VcoBehaviour {
     gossipsub: gossipsub::Behaviour,
     autonat: autonat::Behaviour,
     relay_client: relay::client::Behaviour,
-    stream: libp2p_stream::Behaviour,
     #[cfg(not(mobile))]
     mdns: mdns::tokio::Behaviour,
 }
@@ -228,8 +227,7 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                     gossipsub_config,
                 ).expect("Valid gossipsub config");
                 let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
-                let stream = libp2p_stream::Behaviour::new();
-                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client, stream }
+                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client }
             })?
             .with_swarm_config(|c: libp2p::swarm::Config| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build()
@@ -260,17 +258,13 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                     gossipsub_config,
                 ).expect("Valid gossipsub config");
                 let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
-                let stream = libp2p_stream::Behaviour::new();
                 let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)
                     .expect("Valid mdns config");
-                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client, stream, mdns }
+                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client, mdns }
             })?
             .with_swarm_config(|c: libp2p::swarm::Config| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build()
     };
-
-    // Extract stream Control before the event loop consumes the swarm
-    let stream_control = swarm.behaviour().stream.new_control();
 
     // Android/restrictive environments may fail UDP/TCP binding
     if let Err(e) = swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?) {
@@ -309,9 +303,6 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
     let mut peer_addresses: HashMap<PeerId, String> = HashMap::new();
     let mut message_count: u32 = 0;
     let mut last_minute = tokio::time::Instant::now();
-
-    // stream_control is moved into the spawn closure
-    let mut stream_control = stream_control;
 
     tokio::spawn(async move {
         loop {
@@ -579,12 +570,36 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                             }
                         };
 
-                        // Dial relay if not connected
+                        // Extract TCP socket address from multiaddr for direct connection
+                        let tcp_addr = {
+                            let mut ip: Option<std::net::IpAddr> = None;
+                            let mut port: Option<u16> = None;
+                            for proto in maddr.iter() {
+                                match proto {
+                                    libp2p::multiaddr::Protocol::Ip4(a) => ip = Some(std::net::IpAddr::V4(a)),
+                                    libp2p::multiaddr::Protocol::Ip6(a) => ip = Some(std::net::IpAddr::V6(a)),
+                                    libp2p::multiaddr::Protocol::Tcp(p) => port = Some(p),
+                                    _ => {}
+                                }
+                            }
+                            ip.zip(port).map(|(ip, port)| std::net::SocketAddr::new(ip, port))
+                        };
+
+                        let tcp_addr = match tcp_addr {
+                            Some(a) => a,
+                            None => {
+                                let _ = handle.emit("vco-node-event", NodeEvent::SyncError {
+                                    session_id,
+                                    message: "relay_addr missing /ip4/ and /tcp/ components".to_string(),
+                                });
+                                continue;
+                            }
+                        };
+
+                        // Also dial via libp2p for DHT/identify
                         swarm.behaviour_mut().kad.add_address(&peer_id, maddr.clone());
                         let _ = swarm.dial(maddr);
 
-                        // Clone control and handle for the spawned task
-                        let mut ctrl = stream_control.clone();
                         let handle2 = handle.clone();
                         let app_handle2 = handle.clone();
 
@@ -592,21 +607,18 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                             // Allow time for the connection to establish
                             tokio::time::sleep(Duration::from_millis(800)).await;
 
-                            let stream = match ctrl.open_stream(
-                                peer_id,
-                                StreamProtocol::new("/vco/sync/3.2.0"),
-                            ).await {
+                            let tcp_stream = match tokio::net::TcpStream::connect(tcp_addr).await {
                                 Ok(s) => s,
                                 Err(e) => {
                                     let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
                                         session_id: session_id.clone(),
-                                        message: format!("Stream open failed: {e}"),
+                                        message: format!("TCP connect failed: {e}"),
                                     });
                                     return;
                                 }
                             };
 
-                            let (mut read_half, mut write_half) = tokio::io::split(stream);
+                            let (mut read_half, mut write_half) = tokio::io::split(tcp_stream);
                             let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
                             // Register session in shared state
