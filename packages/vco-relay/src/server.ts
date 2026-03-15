@@ -2,6 +2,11 @@ import { createVcoLibp2pNode, handleSyncSessionChannels } from "@vco/vco-transpo
 import type { Libp2pNode } from "@vco/vco-transport";
 import { identify } from "@libp2p/identify";
 import { kadDHT } from "@libp2p/kad-dht";
+import { mdns } from "@libp2p/mdns";
+import { tcp } from "@libp2p/tcp";
+import { quic } from "@chainsafe/libp2p-quic";
+import { webSockets } from "@libp2p/websockets";
+import { generateKeyPair, privateKeyToProtobuf, privateKeyFromProtobuf } from "@libp2p/crypto/keys";
 import { NobleCryptoProvider } from "@vco/vco-crypto";
 import { VCOCore, type IZKPVerifier } from "@vco/vco-core";
 import type { RelayConfig } from "./config.js";
@@ -30,16 +35,38 @@ export class RelayServer {
     await store.open();
     this.store = store;
 
+    // Persistent identity
+    let privateKey;
+    const keyBytes = await store.getPrivateKey();
+    if (keyBytes) {
+      privateKey = await privateKeyFromProtobuf(keyBytes);
+    } else {
+      privateKey = await generateKeyPair("Ed25519");
+      await store.setPrivateKey(privateKeyToProtobuf(privateKey));
+    }
+
     // Use persistent store for core (nullifier tracking)
     (this.core as any).nullifierStore = store;
 
     const node = await createVcoLibp2pNode({
+      privateKey,
       addresses: { listen: this.config.listenAddrs },
+      transports: [tcp(), quic(), webSockets()],
       services: {
-        identify: identify(),
-        dht: kadDHT({ clientMode: false }),
+        identify: identify({
+          agentVersion: "/vco/1.0.0",
+        }),
+        dht: kadDHT({
+          protocol: "/vco/kad/1.0.0",
+          clientMode: false,
+        }),
+        mdns: mdns(),
       },
-      connectionManager: { maxConnections: this.config.maxConnections },
+      connectionManager: {
+        maxConnections: this.config.maxConnections,
+        maxParallelDials: 100,
+        maxIncomingPendingConnections: 1000,
+      },
     });
 
     await handleSyncSessionChannels(node, async (channel) => {
@@ -54,6 +81,15 @@ export class RelayServer {
         if (req.url === "/health") {
           res.writeHead(200, { "Content-Type": "text/plain" });
           res.end("OK");
+        } else if (req.url === "/address") {
+          const addrs = this.multiaddrs.map(a => a.toString());
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({
+            peerId: this.peerId?.toString(),
+            multiaddrs: addrs,
+            // Return the first non-local TCP or QUIC address as a recommendation
+            recommended: addrs.find(a => !a.includes("127.0.0.1") && (a.includes("/tcp/") || a.includes("/udp/")))
+          }));
         } else {
           res.writeHead(404);
           res.end();

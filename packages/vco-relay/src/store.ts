@@ -22,6 +22,10 @@ export interface IRelayStore extends NullifierStore {
   powScore(headerHash: Uint8Array): Promise<number>;
   /** Deletes an envelope and its associated index entries. */
   evict(headerHash: Uint8Array): Promise<void>;
+  /** Gets the persistent private key for the relay's libp2p identity. */
+  getPrivateKey(): Promise<Uint8Array | undefined>;
+  /** Sets the persistent private key for the relay's libp2p identity. */
+  setPrivateKey(key: Uint8Array): Promise<void>;
   /** Closes the underlying database. */
   close(): Promise<void>;
 }
@@ -187,6 +191,19 @@ export class LevelDBRelayStore implements IRelayStore {
     await batch.write();
     this.existenceCache.delete(hashHex);
     this.envelopeCache.delete(hashHex);
+  }
+
+  async getPrivateKey(): Promise<Uint8Array | undefined> {
+    try {
+      return await this.db.get("cfg:private_key");
+    } catch (err: any) {
+      if (err?.code === "LEVEL_NOT_FOUND") return undefined;
+      throw err;
+    }
+  }
+
+  async setPrivateKey(key: Uint8Array): Promise<void> {
+    await this.db.put("cfg:private_key", key);
   }
 
   async close(): Promise<void> {

@@ -5,6 +5,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createVcoLibp2pNode, openSyncSessionChannel } from "@vco/vco-transport";
+import { tcp } from "@libp2p/tcp";
+import { quic } from "@chainsafe/libp2p-quic";
 import { NobleCryptoProvider, deriveEd25519Multikey } from "@vco/vco-crypto";
 import { createEnvelope, encodeEnvelopeProto } from "@vco/vco-core";
 import http from "node:http";
@@ -33,7 +35,7 @@ function makeConfig(dir: string, httpPort?: number) {
     configPath: undefined,
     env: {
       VCO_DATA_DIR: dir,
-      VCO_LISTEN_ADDRS: "/ip4/127.0.0.1/udp/0/quic-v1",
+      VCO_LISTEN_ADDRS: "/ip4/127.0.0.1/udp/0/quic-v1,/ip4/127.0.0.1/tcp/0",
       ...(httpPort !== undefined ? { VCO_HTTP_PORT: httpPort.toString(), VCO_HTTP_HOST: "127.0.0.1" } : {}),
     },
   });
@@ -53,7 +55,8 @@ afterEach(async () => {
 describe("Relay Server E2E", () => {
   it("stores a submitted envelope in the relay's LevelDB store", async () => {
     const clientNode = await createVcoLibp2pNode({
-      addresses: { listen: ["/ip4/127.0.0.1/udp/0/quic-v1"] },
+      addresses: { listen: ["/ip4/127.0.0.1/udp/0/quic-v1", "/ip4/127.0.0.1/tcp/0"] },
+      transports: [tcp(), quic()],
     });
     await clientNode.start();
 
@@ -85,7 +88,8 @@ describe("Relay Server E2E", () => {
 
   it("deduplicates envelopes — submitting the same envelope twice stores it once", async () => {
     const clientNode = await createVcoLibp2pNode({
-      addresses: { listen: ["/ip4/127.0.0.1/udp/0/quic-v1"] },
+      addresses: { listen: ["/ip4/127.0.0.1/udp/0/quic-v1", "/ip4/127.0.0.1/tcp/0"] },
+      transports: [tcp(), quic()],
     });
     await clientNode.start();
 

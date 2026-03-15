@@ -33,7 +33,11 @@ export interface RelayConfig {
 }
 
 const DEFAULTS: RelayConfig = {
-  listenAddrs: ["/ip4/0.0.0.0/udp/4001/quic-v1"],
+  listenAddrs: [
+    "/ip4/0.0.0.0/udp/4001/quic-v1",
+    "/ip4/0.0.0.0/tcp/4001",
+    "/ip4/0.0.0.0/tcp/4002/ws",
+  ],
   httpHost: "127.0.0.1",
   httpPort: 4000,
   dataDir: "./relay-data",

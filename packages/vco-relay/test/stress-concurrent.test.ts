@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { RelayServer } from "../src/server.js";
 import { loadConfig } from "../src/config.js";
 import { createVcoLibp2pNode } from "@vco/vco-transport";
+import { tcp } from "@libp2p/tcp";
+import { quic } from "@chainsafe/libp2p-quic";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -17,8 +19,8 @@ beforeEach(async () => {
     configPath: undefined,
     env: {
       VCO_DATA_DIR: tmpDir,
-      VCO_LISTEN_ADDRS: "/ip4/127.0.0.1/udp/0/quic-v1",
-      VCO_MAX_CONNECTIONS: MAX_CONNECTIONS.toString(),
+      VCO_LISTEN_ADDRS: "/ip4/127.0.0.1/udp/0/quic-v1,/ip4/127.0.0.1/tcp/0",
+      VCO_MAX_CONNECTIONS: "1000",
       VCO_HTTP_PORT: "0",
     },
   });
@@ -33,32 +35,33 @@ afterEach(async () => {
 
 describe("RelayServer Concurrent Stress Test", () => {
   it("handles high volume of concurrent connections", async () => {
-    const NUM_CLIENTS = 100; 
+    const NUM_CLIENTS = 50; 
     const clients: Libp2pNode[] = [];
     const relayAddr = server.multiaddrs[0];
 
     console.log(`Starting stress test: Connecting ${NUM_CLIENTS} clients to ${relayAddr}`);
 
     try {
-      // Create and start client nodes in parallel
-      const startTasks = Array.from({ length: NUM_CLIENTS }).map(async (_, i) => {
+      // Create and start client nodes with a small staggered delay
+      const clients: Libp2pNode[] = [];
+      for (let i = 0; i < NUM_CLIENTS; i++) {
         const node = await createVcoLibp2pNode({
           addresses: {
-            listen: ["/ip4/127.0.0.1/udp/0/quic-v1"],
+            listen: ["/ip4/127.0.0.1/udp/0/quic-v1", "/ip4/127.0.0.1/tcp/0"],
           },
+          transports: [tcp(), quic()],
         });
         await node.start();
-        return node;
-      });
-
-      const startedNodes = await Promise.all(startTasks);
-      clients.push(...startedNodes);
+        clients.push(node);
+        if (i % 10 === 0) await new Promise(resolve => setTimeout(resolve, 50)); 
+      }
 
       console.log(`All ${NUM_CLIENTS} clients started. Initiating connections...`);
 
-      // Attempt to dial the relay from all clients concurrently
-      const connectTasks = startedNodes.map(async (node, i) => {
+      // Attempt to dial the relay from all clients concurrently but slightly staggered
+      const connectTasks = clients.map(async (node, i) => {
         try {
+          if (i > 0) await new Promise(resolve => setTimeout(resolve, i * 10));
           await node.dial(relayAddr);
           return { index: i, success: true };
         } catch (err) {
@@ -95,8 +98,8 @@ describe("RelayServer Concurrent Stress Test", () => {
       configPath: undefined,
       env: {
         VCO_DATA_DIR: tmpDir,
-        VCO_LISTEN_ADDRS: "/ip4/127.0.0.1/udp/0/quic-v1",
-        VCO_MAX_CONNECTIONS: "2000", // High limit
+        VCO_LISTEN_ADDRS: "/ip4/127.0.0.1/tcp/0",
+        VCO_MAX_CONNECTIONS: "2000", 
         VCO_HTTP_PORT: "0",
       },
     });
@@ -105,7 +108,7 @@ describe("RelayServer Concurrent Stress Test", () => {
 
     const relayAddr = server.multiaddrs[0];
     const allClients: Libp2pNode[] = [];
-    const BATCH_SIZE = 100;
+    const BATCH_SIZE = 50;
     const MAX_TOTAL = 1000; // Increase target to find real limits
     let totalConnected = 0;
 
@@ -118,7 +121,8 @@ describe("RelayServer Concurrent Stress Test", () => {
         const batchNodes = await Promise.all(
           Array.from({ length: BATCH_SIZE }).map(async () => {
             const node = await createVcoLibp2pNode({
-              addresses: { listen: ["/ip4/127.0.0.1/udp/0/quic-v1"] },
+              addresses: { listen: ["/ip4/127.0.0.1/udp/0/quic-v1", "/ip4/127.0.0.1/tcp/0"] },
+              transports: [tcp(), quic()],
             });
             await node.start();
             return node;

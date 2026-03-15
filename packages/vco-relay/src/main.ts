@@ -1,5 +1,6 @@
 import { loadConfig } from "./config.js";
 import { RelayServer } from "./server.js";
+import qrcode from "qrcode-terminal";
 
 async function main() {
   const configPath = process.env.VCO_CONFIG_PATH;
@@ -21,7 +22,16 @@ async function main() {
 
   console.log("VCO Relay started");
   console.log("PeerID:", server.peerId?.toString());
-  console.log("Multiaddrs:", server.multiaddrs.map((a) => a.toString()).join(", "));
+  
+  const multiaddrs = server.multiaddrs.map((a) => a.toString());
+  console.log("Multiaddrs:", multiaddrs.join(", "));
+
+  // Find a primary non-localhost address to show as a QR code
+  const primaryAddr = multiaddrs.find(a => !a.includes("127.0.0.1") && (a.includes("/tcp/") || a.includes("/udp/")));
+  if (primaryAddr) {
+    console.log("\nScan this QR code with the VCO app to dial this relay:");
+    qrcode.generate(primaryAddr, { small: true });
+  }
 }
 
 main().catch((err) => {

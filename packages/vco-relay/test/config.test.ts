@@ -11,7 +11,11 @@ afterEach(() => { rmSync(tmpDir, { recursive: true }); });
 describe("loadConfig", () => {
   it("returns defaults when no file or env vars", () => {
     const config = loadConfig({ configPath: undefined, env: {} });
-    expect(config.listenAddrs).toEqual(["/ip4/0.0.0.0/udp/4001/quic-v1"]);
+    expect(config.listenAddrs).toEqual([
+      "/ip4/0.0.0.0/udp/4001/quic-v1",
+      "/ip4/0.0.0.0/tcp/4001",
+      "/ip4/0.0.0.0/tcp/4002/ws",
+    ]);
     expect(config.maxConnections).toBe(256);
     expect(config.pow.defaultDifficulty).toBe(0);
     expect(config.pow.maxDifficulty).toBe(20);
