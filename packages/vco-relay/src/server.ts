@@ -66,6 +66,10 @@ export class RelayServer {
         maxConnections: this.config.maxConnections,
         maxParallelDials: 100,
         maxIncomingPendingConnections: 1000,
+        // Relay servers must accept many connections from the same IP (e.g.
+        // clients behind NAT, or test suites on loopback).  The libp2p
+        // default of 5 per host would reject concurrent stress-test clients.
+        inboundConnectionThreshold: this.config.maxConnections,
       },
     });
 

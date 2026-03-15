@@ -88,7 +88,8 @@ export async function handleSyncSession(
       err?.code === "ERR_STREAM_RESET" ||
       err?.message?.includes("closed") ||
       err?.message?.includes("reset") ||
-      err?.message?.includes("aborted")
+      err?.message?.includes("aborted") ||
+      err?.message?.includes("transport payload")
     ) {
       return; // Session ended before first message — normal
     }
@@ -151,7 +152,8 @@ export async function handleSyncSession(
         err?.code === "ERR_STREAM_RESET" ||
         err?.message?.includes("closed") ||
         err?.message?.includes("reset") ||
-        err?.message?.includes("aborted")
+        err?.message?.includes("aborted") ||
+        err?.message?.includes("transport payload")
       ) {
         break;
       }
