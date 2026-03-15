@@ -4,7 +4,6 @@ use std::panic;
 use tauri::{Emitter, Manager, State};
 use vco_node::{NodeCommand, VcoNodeState};
 use base64::{Engine as _, engine::general_purpose};
-
 #[tauri::command]
 async fn subscribe(channel_id: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
     let tx_lock = state.swarm_tx.lock().await;
@@ -111,6 +110,27 @@ async fn get_vco_profile() -> String {
     std::env::var("VCO_PROFILE").unwrap_or_else(|_| "default".to_string())
 }
 
+#[tauri::command]
+async fn sync_with_relay(relay_addr: String, session_id: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::SyncWithRelay { relay_addr, session_id }).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn sync_respond(session_id: String, frame_b64: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let bytes = general_purpose::STANDARD.decode(frame_b64).map_err(|e| e.to_string())?;
+    let sessions = state.sync_sessions.lock().await;
+    if let Some(tx) = sessions.get(&session_id) {
+        tx.send(bytes).map_err(|e| e.to_string())
+    } else {
+        Err("session not found".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Redirect panics to logcat/stdout
@@ -143,7 +163,10 @@ pub fn run() {
             log::info!("VCO: App setup starting...");
 
             // Initialize state with None
-            app.manage(VcoNodeState { swarm_tx: tokio::sync::Mutex::new(None) });
+            app.manage(VcoNodeState {
+                swarm_tx: tokio::sync::Mutex::new(None),
+                sync_sessions: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            });
 
             // Start libp2p node in a dedicated async task
             tauri::async_runtime::spawn(async move {
@@ -177,7 +200,9 @@ pub fn run() {
             put_record,
             bootstrap,
             shutdown,
-            get_vco_profile
+            get_vco_profile,
+            sync_with_relay,
+            sync_respond
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSocial } from '../SocialContext';
 import {
   Server,
@@ -12,7 +12,8 @@ import {
   Unplug,
   Fingerprint,
   Lock,
-  ScanLine
+  ScanLine,
+  RotateCw
 } from 'lucide-react';
 import { useToast } from '../../components/ToastProvider';
 import { scan, Format } from '@tauri-apps/plugin-barcode-scanner';
@@ -40,20 +41,30 @@ export function SettingsView() {
     isReady: false
   });
 
+  const node = NodeClient.getInstance();
+  const [relayAddr, setRelayAddr] = useState(node.relayAddr ?? '');
+  const [syncInProgress, setSyncInProgress] = useState(node.syncInProgress);
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(node.lastSyncAt);
+
   useEffect(() => {
     BiometricService.isAvailable().then(setBioAvailable);
   }, []);
 
   useEffect(() => {
     NetworkService.startPolling(setStats);
-    
-    const cleanup = NodeClient.getInstance().onEvent((event) => {
+
+    const cleanup = node.onEvent((event) => {
       if (event.type === 'dialing') {
         toast(`Dialing: ${event.peerId || 'address'}...`, "info");
       } else if (event.type === 'dial_success') {
         toast(`Successfully connected to: ${event.addr}`, "success");
       } else if (event.type === 'error' && event.message.includes('dial')) {
         toast(`Failed to dial: ${event.message}`, "error");
+      } else if (event.type === 'sync_complete') {
+        setSyncInProgress(false);
+        setLastSyncAt(new Date());
+      } else if (event.type === 'sync_error') {
+        setSyncInProgress(false);
       }
     });
 
@@ -61,7 +72,27 @@ export function SettingsView() {
       NetworkService.stopPolling();
       cleanup();
     };
-  }, [toast]);
+  }, [toast, node]);
+
+  const handleRelayAddrChange = useCallback((value: string) => {
+    setRelayAddr(value);
+    localStorage.setItem('vco.relay_addr', value);
+    node.relayAddr = value || null;
+  }, [node]);
+
+  const handleSyncNow = useCallback(async () => {
+    if (!node.relayAddr) return;
+    setSyncInProgress(true);
+    node.syncWithRelay(node.relayAddr).catch(console.error);
+  }, [node]);
+
+  const formatLastSync = (date: Date | null): string => {
+    if (!date) return 'Never synced';
+    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diff < 60) return 'Last synced just now';
+    if (diff < 3600) return `Last synced ${Math.floor(diff / 60)} minute${Math.floor(diff / 60) === 1 ? '' : 's'} ago`;
+    return `Last synced ${Math.floor(diff / 3600)} hour${Math.floor(diff / 3600) === 1 ? '' : 's'} ago`;
+  };
 
   const copyToClipboard = (text: string) => {
     if (!text) return;
@@ -239,22 +270,52 @@ export function SettingsView() {
                </div>
                <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
                   <div className={twMerge(
-                    "h-full transition-all duration-1000", 
-                    networkStatus === "ACTIVE" ? "bg-emerald-500 w-full" : 
+                    "h-full transition-all duration-1000",
+                    networkStatus === "ACTIVE" ? "bg-emerald-500 w-full" :
                     networkStatus === "CONNECTING" ? "bg-amber-500 w-1/3 animate-pulse" : "bg-zinc-800 w-0"
                   )} />
                </div>
-               
+
                <div className="flex items-center justify-between text-[10px] md:text-xs font-bold px-2 pt-2">
                   <span className="text-zinc-500 uppercase tracking-widest">Swarm Reachability</span>
                   <span className={hasSwarmConn ? "text-blue-500" : "text-zinc-600"}>{reachability}</span>
                </div>
                <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
                   <div className={twMerge(
-                    "h-full transition-all duration-1000 bg-blue-500", 
+                    "h-full transition-all duration-1000 bg-blue-500",
                     hasSwarmConn ? "w-[80%]" : "w-[10%] bg-zinc-800"
                   )} />
                </div>
+            </div>
+
+            {/* Relay Address + Delta Sync */}
+            <div className="space-y-3">
+               <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Relay Address</label>
+               <input
+                 type="text"
+                 value={relayAddr}
+                 onChange={e => handleRelayAddrChange(e.target.value)}
+                 placeholder="/ip4/1.2.3.4/tcp/9000/p2p/12D3..."
+                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-[10px] font-mono text-zinc-300 focus:ring-1 focus:ring-emerald-500 outline-none"
+               />
+               {stats.isReady && node.relayAddr && (
+                 <div className="flex items-center gap-3">
+                   <button
+                     onClick={handleSyncNow}
+                     disabled={syncInProgress}
+                     className={twMerge(
+                       "flex items-center gap-2 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all border shadow-lg",
+                       syncInProgress
+                         ? "bg-zinc-800 text-zinc-500 border-zinc-700 cursor-not-allowed"
+                         : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border-emerald-500/20"
+                     )}
+                   >
+                     <RotateCw size={12} className={syncInProgress ? "animate-spin" : ""} />
+                     {syncInProgress ? "Syncing…" : "Sync now"}
+                   </button>
+                   <span className="text-[9px] text-zinc-600 italic">{formatLastSync(lastSyncAt)}</span>
+                 </div>
+               )}
             </div>
          </div>
 

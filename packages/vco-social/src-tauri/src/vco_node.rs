@@ -19,6 +19,7 @@ use std::collections::HashMap;
 
 use libp2p::kad::store::RecordStore;
 use std::borrow::Cow;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub struct SledStore {
     db: sled::Tree,
@@ -105,6 +106,7 @@ struct VcoBehaviour {
     gossipsub: gossipsub::Behaviour,
     autonat: autonat::Behaviour,
     relay_client: relay::client::Behaviour,
+    stream: libp2p_stream::Behaviour,
     #[cfg(not(mobile))]
     mdns: mdns::tokio::Behaviour,
 }
@@ -139,6 +141,14 @@ pub enum NodeEvent {
     Dialing { peer_id: Option<String> },
     #[serde(rename_all = "camelCase")]
     DialSuccess { addr: String },
+    #[serde(rename_all = "camelCase")]
+    SyncSessionReady { session_id: String },
+    #[serde(rename_all = "camelCase")]
+    SyncFrame { session_id: String, frame_b64: String },
+    #[serde(rename_all = "camelCase")]
+    SyncComplete { session_id: String, received_count: u32 },
+    #[serde(rename_all = "camelCase")]
+    SyncError { session_id: String, message: String },
 }
 
 #[derive(Serialize, Clone)]
@@ -151,6 +161,7 @@ pub struct ConnectionInfo {
 
 pub struct VcoNodeState {
     pub swarm_tx: Mutex<Option<mpsc::UnboundedSender<NodeCommand>>>,
+    pub sync_sessions: Mutex<HashMap<String, mpsc::UnboundedSender<Vec<u8>>>>,
 }
 
 pub enum NodeCommand {
@@ -162,6 +173,7 @@ pub enum NodeCommand {
     PutRecord(String, Vec<u8>),
     GetStats,
     Bootstrap(Vec<String>),
+    SyncWithRelay { relay_addr: String, session_id: String },
     Shutdown,
 }
 
@@ -216,7 +228,8 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                     gossipsub_config,
                 ).expect("Valid gossipsub config");
                 let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
-                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client }
+                let stream = libp2p_stream::Behaviour::new();
+                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client, stream }
             })?
             .with_swarm_config(|c: libp2p::swarm::Config| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build()
@@ -247,13 +260,17 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                     gossipsub_config,
                 ).expect("Valid gossipsub config");
                 let autonat = autonat::Behaviour::new(local_peer_id, autonat::Config::default());
+                let stream = libp2p_stream::Behaviour::new();
                 let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)
                     .expect("Valid mdns config");
-                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client, mdns }
+                VcoBehaviour { identify, kad, gossipsub, autonat, relay_client, stream, mdns }
             })?
             .with_swarm_config(|c: libp2p::swarm::Config| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build()
     };
+
+    // Extract stream Control before the event loop consumes the swarm
+    let stream_control = swarm.behaviour().stream.new_control();
 
     // Android/restrictive environments may fail UDP/TCP binding
     if let Err(e) = swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?) {
@@ -292,6 +309,9 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
     let mut peer_addresses: HashMap<PeerId, String> = HashMap::new();
     let mut message_count: u32 = 0;
     let mut last_minute = tokio::time::Instant::now();
+
+    // stream_control is moved into the spawn closure
+    let mut stream_control = stream_control;
 
     tokio::spawn(async move {
         loop {
@@ -532,6 +552,154 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                             peers,
                             connections,
                             network_load,
+                        });
+                    }
+                    Some(NodeCommand::SyncWithRelay { relay_addr, session_id }) => {
+                        let maddr = match relay_addr.parse::<Multiaddr>() {
+                            Ok(m) => m,
+                            Err(e) => {
+                                let _ = handle.emit("vco-node-event", NodeEvent::SyncError {
+                                    session_id,
+                                    message: format!("Invalid relay addr: {e}"),
+                                });
+                                continue;
+                            }
+                        };
+                        let peer_id = match maddr.iter().find_map(|p| match p {
+                            libp2p::multiaddr::Protocol::P2p(id) => Some(id),
+                            _ => None,
+                        }) {
+                            Some(id) => id,
+                            None => {
+                                let _ = handle.emit("vco-node-event", NodeEvent::SyncError {
+                                    session_id,
+                                    message: "relay_addr missing /p2p/ component".to_string(),
+                                });
+                                continue;
+                            }
+                        };
+
+                        // Dial relay if not connected
+                        swarm.behaviour_mut().kad.add_address(&peer_id, maddr.clone());
+                        let _ = swarm.dial(maddr);
+
+                        // Clone control and handle for the spawned task
+                        let mut ctrl = stream_control.clone();
+                        let handle2 = handle.clone();
+                        let app_handle2 = handle.clone();
+
+                        tokio::spawn(async move {
+                            // Allow time for the connection to establish
+                            tokio::time::sleep(Duration::from_millis(800)).await;
+
+                            let stream = match ctrl.open_stream(
+                                peer_id,
+                                StreamProtocol::new("/vco/sync/3.2.0"),
+                            ).await {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
+                                        session_id: session_id.clone(),
+                                        message: format!("Stream open failed: {e}"),
+                                    });
+                                    return;
+                                }
+                            };
+
+                            let (mut read_half, mut write_half) = tokio::io::split(stream);
+                            let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
+                            // Register session in shared state
+                            {
+                                let node_state = app_handle2.state::<VcoNodeState>();
+                                let mut sessions = node_state.sync_sessions.lock().await;
+                                sessions.insert(session_id.clone(), write_tx);
+                            }
+
+                            // Signal TS that stream is ready
+                            let _ = handle2.emit("vco-node-event", NodeEvent::SyncSessionReady {
+                                session_id: session_id.clone(),
+                            });
+
+                            // Write half: drain write_rx into stream
+                            let write_handle = handle2.clone();
+                            let write_session = session_id.clone();
+                            let write_app = app_handle2.clone();
+                            tokio::spawn(async move {
+                                while let Some(bytes) = write_rx.recv().await {
+                                    if write_half.write_all(&bytes).await.is_err() {
+                                        let _ = write_handle.emit("vco-node-event", NodeEvent::SyncError {
+                                            session_id: write_session.clone(),
+                                            message: "Stream write error".to_string(),
+                                        });
+                                        let node_state = write_app.state::<VcoNodeState>();
+                                        let mut sessions = node_state.sync_sessions.lock().await;
+                                        sessions.remove(&write_session);
+                                        break;
+                                    }
+                                }
+                            });
+
+                            // Read half: forward frames to TS using 4-byte BE length prefix protocol
+                            let mut received_count: u32 = 0;
+                            loop {
+                                let mut len_buf = [0u8; 4];
+                                if read_half.read_exact(&mut len_buf).await.is_err() {
+                                    // Stream closed - treat as sync complete if we got frames
+                                    if received_count > 0 {
+                                        let _ = handle2.emit("vco-node-event", NodeEvent::SyncComplete {
+                                            session_id: session_id.clone(),
+                                            received_count,
+                                        });
+                                    } else {
+                                        let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
+                                            session_id: session_id.clone(),
+                                            message: "Stream closed unexpectedly".to_string(),
+                                        });
+                                    }
+                                    let node_state = app_handle2.state::<VcoNodeState>();
+                                    let mut sessions = node_state.sync_sessions.lock().await;
+                                    sessions.remove(&session_id);
+                                    break;
+                                }
+
+                                let frame_len = u32::from_be_bytes(len_buf) as usize;
+
+                                if frame_len == 0 {
+                                    // Zero-length sentinel: pull phase complete
+                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncFrame {
+                                        session_id: session_id.clone(),
+                                        frame_b64: String::new(),
+                                    });
+                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncComplete {
+                                        session_id: session_id.clone(),
+                                        received_count,
+                                    });
+                                    let node_state = app_handle2.state::<VcoNodeState>();
+                                    let mut sessions = node_state.sync_sessions.lock().await;
+                                    sessions.remove(&session_id);
+                                    break;
+                                }
+
+                                let mut body = vec![0u8; frame_len];
+                                if read_half.read_exact(&mut body).await.is_err() {
+                                    let _ = handle2.emit("vco-node-event", NodeEvent::SyncError {
+                                        session_id: session_id.clone(),
+                                        message: "Stream read error (body)".to_string(),
+                                    });
+                                    let node_state = app_handle2.state::<VcoNodeState>();
+                                    let mut sessions = node_state.sync_sessions.lock().await;
+                                    sessions.remove(&session_id);
+                                    break;
+                                }
+
+                                received_count += 1;
+                                let frame_b64 = general_purpose::STANDARD.encode(&body);
+                                let _ = handle2.emit("vco-node-event", NodeEvent::SyncFrame {
+                                    session_id: session_id.clone(),
+                                    frame_b64,
+                                });
+                            }
                         });
                     }
                     Some(NodeCommand::Shutdown) => {

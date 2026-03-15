@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { toHex } from "./encoding";
+import type { VcoEnvelope } from "@vco/vco-core";
 
 const DB_NAME_BASE = "vco_social_db";
 const DB_VERSION = 3; 
@@ -10,6 +11,7 @@ export interface StoredEnvelope {
   payload: string; // Base64
   timestamp: number;
   syncStatus?: 'pending' | 'synced';
+  headerHash?: string; // hex-encoded
 }
 
 export class VcoStore {
@@ -318,6 +320,55 @@ export class VcoStore {
     return new Promise((resolve) => {
       tx.oncomplete = () => resolve();
     });
+  }
+
+  /**
+   * Returns the headerHash bytes for all stored envelopes.
+   * Used by the delta-sync bisect loop to compute range fingerprints.
+   */
+  async getAllHeaderHashes(): Promise<Uint8Array[]> {
+    const envelopes = await this.getAllEnvelopes();
+    const result: Uint8Array[] = [];
+    for (const env of envelopes) {
+      if (env.headerHash) {
+        // hex decode
+        const bytes = new Uint8Array(env.headerHash.length / 2);
+        for (let i = 0; i < bytes.length; i++) {
+          bytes[i] = parseInt(env.headerHash.slice(i * 2, i * 2 + 2), 16);
+        }
+        result.push(bytes);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Single write path for all envelope storage.
+   * Builds a StoredEnvelope from a decoded VcoEnvelope and stores it.
+   */
+  async storeEnvelope(env: VcoEnvelope, syncStatus: 'pending' | 'synced'): Promise<void> {
+    const { encodeEnvelopeProto } = await import('@vco/vco-core');
+    const encoded = encodeEnvelopeProto(env);
+    // base64 encode without TextDecoder to avoid 0x00 truncation
+    const bytes = encoded;
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const payload = btoa(binary);
+    // channelId: use contextId if available (hex), else creatorId hex
+    const channelId = env.header.contextId
+      ? toHex(env.header.contextId)
+      : toHex(env.header.creatorId);
+    const stored: StoredEnvelope = {
+      cid: toHex(env.headerHash),
+      channelId,
+      payload,
+      timestamp: Date.now(),
+      syncStatus,
+      headerHash: toHex(env.headerHash),
+    };
+    await this.putEnvelope(stored);
   }
 }
 
