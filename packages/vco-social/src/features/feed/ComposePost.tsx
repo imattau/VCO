@@ -101,8 +101,8 @@ export function ComposePost() {
              </div>
            )}
            
-           <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-4 border-t border-zinc-800/50 gap-4">
-             <div className="flex items-center gap-0.5 md:gap-1 overflow-x-auto no-scrollbar">
+           <div className="flex flex-row items-center justify-between pt-4 border-t border-zinc-800/50 gap-3">
+             <div className="flex flex-1 min-w-0 items-center gap-0.5 md:gap-1 overflow-x-auto no-scrollbar">
                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" multiple accept="image/*" />
                 <ToolButton onClick={() => fileInputRef.current?.click()} icon={<Image size={18} />} label="Add Image" />
                 
@@ -131,10 +131,10 @@ export function ComposePost() {
              <button
                onClick={handleSubmit}
                disabled={(!content.trim() && mediaFiles.length === 0) || isPublishing}
-               className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2.5 sm:px-6 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 active:translate-y-0.5 flex items-center justify-center gap-2 self-end sm:self-auto sm:w-auto"
+               className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-2.5 sm:px-6 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 active:translate-y-0.5 flex items-center justify-center gap-2 shrink-0"
              >
                {isPublishing ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
-               <span className="hidden sm:inline">{isPublishing ? 'Publishing...' : 'Post'}</span>
+               <span>{isPublishing ? 'Publishing...' : 'Post'}</span>
              </button>
            </div>
         </div>
