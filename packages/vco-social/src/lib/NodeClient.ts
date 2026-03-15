@@ -1,8 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { SyncRangeProofProtocol, computeRangeFingerprint } from '@vco/vco-sync';
-import type { RangeProof } from '@vco/vco-sync';
-import { decodeEnvelopeProto } from '@vco/vco-core';
 import { vcoStore } from './VcoStore';
 
 export type NodeEvent =
@@ -257,6 +254,12 @@ export class NodeClient {
    * Direct port of runClientDeltaSync from the delta-sync test.
    */
   private async _runBisectLoop(sessionId: string): Promise<void> {
+    // Dynamic imports: @vco/vco-sync uses Node.js APIs (Buffer, libp2p) that are
+    // unavailable in Android WebView. Deferring to runtime avoids a bundle-time crash.
+    const { SyncRangeProofProtocol, computeRangeFingerprint } = await import('@vco/vco-sync');
+    const { decodeEnvelopeProto } = await import('@vco/vco-core');
+    type RangeProof = import('@vco/vco-sync').RangeProof;
+
     // Create per-session queue and register it
     const queue = new AsyncQueue<Uint8Array>();
     this.sessionQueues.set(sessionId, queue);
@@ -389,17 +392,23 @@ export class NodeClient {
       console.error('VCO NodeClient: Error event:', event.message);
     } else if (event.type === 'envelope') {
       // Write gossipsub envelope to store (fire-and-forget)
-      try {
-        const binaryStr = atob(event.envelope);
-        const bytes = new Uint8Array(binaryStr.length);
-        for (let i = 0; i < binaryStr.length; i++) {
-          bytes[i] = binaryStr.charCodeAt(i);
+      // Dynamic import: @vco/vco-core may transitively pull in Node.js deps via
+      // @vco/vco-sync when bundled together; keep it lazy to be safe.
+      import('@vco/vco-core').then(({ decodeEnvelopeProto }) => {
+        try {
+          const binaryStr = atob(event.envelope);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          const decoded = decodeEnvelopeProto(bytes);
+          vcoStore.storeEnvelope(decoded, 'pending').catch(console.error);
+        } catch (e) {
+          console.warn('VCO NodeClient: Failed to decode/store gossipsub envelope', e);
         }
-        const decoded = decodeEnvelopeProto(bytes);
-        vcoStore.storeEnvelope(decoded, 'pending').catch(console.error);
-      } catch (e) {
-        console.warn('VCO NodeClient: Failed to decode/store gossipsub envelope', e);
-      }
+      }).catch((e) => {
+        console.warn('VCO NodeClient: Failed to load @vco/vco-core for envelope decode', e);
+      });
     } else if (event.type === 'dial_success') {
       // Auto-trigger sync if this is the configured relay
       if (this.relayAddr && event.addr.startsWith(this.relayAddr)) {
