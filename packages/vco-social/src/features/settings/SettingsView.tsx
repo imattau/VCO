@@ -11,9 +11,11 @@ import {
   RefreshCw,
   Unplug,
   Fingerprint,
-  Lock
+  Lock,
+  ScanLine
 } from 'lucide-react';
 import { useToast } from '../../components/ToastProvider';
+import { scan, Format } from '@tauri-apps/plugin-barcode-scanner';
 import { twMerge } from 'tailwind-merge';
 import { NetworkService, NetworkStats } from '../../lib/NetworkService';
 import { NodeClient } from '../../lib/NodeClient';
@@ -74,6 +76,39 @@ export function SettingsView() {
     if (!dialAddr.trim()) return;
     NodeClient.getInstance().dial(dialAddr.trim());
     setDialAddr('');
+  };
+
+  const handleQrScan = async () => {
+    try {
+      const result = await scan({ windowed: false, formats: [Format.QRCode] });
+      const content = result.content?.trim();
+      if (!content) {
+        toast("No QR content detected", "error");
+        return;
+      }
+      // Accept raw multiaddr strings (starting with /) or wrapped in a URL
+      const multiaddr = content.startsWith('/') ? content : (() => {
+        try {
+          const url = new URL(content);
+          const ma = url.searchParams.get('multiaddr') ?? url.pathname;
+          return ma.startsWith('/') ? ma : content;
+        } catch {
+          return content;
+        }
+      })();
+      setDialAddr(multiaddr);
+      toast("Multiaddr scanned — tap Dial Peer to connect", "info");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('cancel') || msg.includes('Cancel')) return;
+      if (msg.includes('permission') || msg.includes('denied')) {
+        toast("Camera permission denied", "error");
+      } else if (msg.includes('not available') || msg.includes('not implemented')) {
+        toast("QR scanning is only available on mobile", "error");
+      } else {
+        toast("QR scan failed", "error");
+      }
+    }
   };
 
   const handleExportIdentity = async () => {
@@ -234,13 +269,23 @@ export function SettingsView() {
                </div>
                
                <form onSubmit={handleDial} className="flex flex-col sm:flex-row gap-2">
-                  <input 
-                    type="text" 
-                    value={dialAddr}
-                    onChange={e => setDialAddr(e.target.value)}
-                    placeholder="Enter Multiaddress..."
-                    className="bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2 text-[10px] font-mono text-zinc-300 w-full sm:w-64 focus:ring-1 focus:ring-blue-500 outline-none"
-                  />
+                  <div className="relative w-full sm:w-64">
+                    <input
+                      type="text"
+                      value={dialAddr}
+                      onChange={e => setDialAddr(e.target.value)}
+                      placeholder="Enter Multiaddress..."
+                      className="bg-zinc-950 border border-zinc-800 rounded-xl pl-4 pr-9 py-2 text-[10px] font-mono text-zinc-300 w-full focus:ring-1 focus:ring-blue-500 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleQrScan}
+                      title="Scan QR code"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-blue-400 transition-colors"
+                    >
+                      <ScanLine size={14} />
+                    </button>
+                  </div>
                   <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap">
                      Dial Peer
                   </button>
