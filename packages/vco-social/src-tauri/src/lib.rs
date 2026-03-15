@@ -123,7 +123,15 @@ pub fn run() {
         eprintln!("VCO PANIC at {}: {}", location, payload);
     }));
 
-    tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(mobile)]
+    {
+        builder = builder.plugin(tauri_plugin_biometric::init());
+    }
+
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_log::Builder::default()
             .level(log::LevelFilter::Info)

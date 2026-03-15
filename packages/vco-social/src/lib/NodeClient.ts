@@ -7,6 +7,7 @@ export type NodeEvent =
   | { type: 'envelope', channelId: string, envelope: string }
   | { type: 'stats', peerId: string, multiaddrs: string[], peers: string[], connections: { remotePeer: string, remoteAddr: string, tags: string[] }[], networkLoad: number }
   | { type: 'resolving', cid: string, channelId: string }
+  | { type: 'dialing', peerId?: string }
   | { type: 'dial_success', addr: string }
   | { type: 'error', message: string };
 
@@ -61,12 +62,7 @@ export class NodeClient {
       console.log('VCO NodeClient: Registering vco-node-event listener...');
       await listen<NodeEvent>('vco-node-event', (event) => {
         console.log('VCO NodeClient: Raw event received:', JSON.stringify(event.payload));
-        // Normalize snake_case keys from Rust serde to camelCase
-        const p = event.payload as any;
-        if (p.peer_id !== undefined) { p.peerId = p.peer_id; }
-        if (p.network_load !== undefined) { p.networkLoad = p.network_load; }
-        if (p.channel_id !== undefined) { p.channelId = p.channel_id; }
-        this.handleEvent(p as NodeEvent);
+        this.handleEvent(event.payload);
       });
 
       console.log('VCO NodeClient: Listener registered. Requesting initial stats...');
@@ -100,15 +96,51 @@ export class NodeClient {
   }
 
   public dial(addr: string) {
-    if (isTauri()) invoke('dial', { addr }).catch(console.error);
+    if (isTauri()) {
+      invoke('dial', { addr }).catch(console.error);
+    } else {
+      // Mock dial simulation
+      this.handleEvent({ type: 'dialing', peerId: addr.split('/').pop() });
+      setTimeout(() => {
+        this.peers = [addr];
+        this.connections = [{ remotePeer: addr.split('/').pop() || 'mock-peer', remoteAddr: addr, tags: ['connected'] }];
+        this.handleEvent({ type: 'dial_success', addr });
+        this.handleEvent({
+          type: 'stats',
+          peerId: this.peerId!,
+          multiaddrs: this.multiaddrs,
+          peers: this.peers,
+          connections: this.connections,
+          networkLoad: 1.0
+        });
+      }, 1000);
+    }
   }
 
   public bootstrap(addrs: string[]) {
-    if (isTauri()) invoke('bootstrap', { addrs }).catch(console.error);
+    if (isTauri()) {
+      invoke('bootstrap', { addrs }).catch(console.error);
+    } else {
+      this.handleEvent({ type: 'dialing' });
+      setTimeout(() => {
+        this.handleEvent({ type: 'stats', peerId: this.peerId!, multiaddrs: this.multiaddrs, peers: addrs, connections: [], networkLoad: 1.0 });
+      }, 500);
+    }
   }
 
   public getStats() {
-    if (isTauri()) invoke('get_stats').catch(console.error);
+    if (isTauri()) {
+      invoke('get_stats').catch(console.error);
+    } else {
+      this.handleEvent({
+        type: 'stats',
+        peerId: this.peerId!,
+        multiaddrs: this.multiaddrs,
+        peers: this.peers,
+        connections: this.connections,
+        networkLoad: 1.0
+      });
+    }
   }
 
   public async shutdown() {

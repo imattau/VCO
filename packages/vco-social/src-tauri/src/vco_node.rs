@@ -117,10 +117,13 @@ struct CachedPeer {
 }
 
 #[derive(Serialize, Clone)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum NodeEvent {
+    #[serde(rename_all = "camelCase")]
     Ready { peer_id: String, multiaddrs: Vec<String> },
+    #[serde(rename_all = "camelCase")]
     Envelope { channel_id: String, envelope: String },
+    #[serde(rename_all = "camelCase")]
     Stats {
         peer_id: String,
         multiaddrs: Vec<String>,
@@ -128,8 +131,13 @@ pub enum NodeEvent {
         connections: Vec<ConnectionInfo>,
         network_load: f32,
     },
+    #[serde(rename_all = "camelCase")]
     Error { message: String },
-    Resolving { cid: String },
+    #[serde(rename_all = "camelCase")]
+    Resolving { cid: String, channel_id: String },
+    #[serde(rename_all = "camelCase")]
+    Dialing { peer_id: Option<String> },
+    #[serde(rename_all = "camelCase")]
     DialSuccess { addr: String },
 }
 
@@ -182,8 +190,6 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
     let local_key = load_or_generate_keypair(&app_handle)?;
     let local_peer_id = PeerId::from(local_key.public());
 
-    let (relay_transport, relay_client) = relay::client::new(local_peer_id);
-
     let sled_store = SledStore::new(&app_handle)?;
 
     // On mobile, with_dns() reads /etc/resolv.conf which doesn't exist on Android.
@@ -194,7 +200,8 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
             .with_tokio()
             .with_tcp(tcp::Config::default(), libp2p::noise::Config::new, libp2p::yamux::Config::default)?
             .with_quic()
-            .with_behaviour(|key: &libp2p::identity::Keypair| {
+            .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
+            .with_behaviour(|key: &libp2p::identity::Keypair, relay_client| {
                 let mut kad_config = kad::Config::new(StreamProtocol::new("/vco/kad/1.0.0"));
                 kad_config.set_query_timeout(Duration::from_secs(10));
                 let kad = kad::Behaviour::with_config(local_peer_id, sled_store, kad_config);
@@ -224,7 +231,8 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
             .with_dns()?
             .with_websocket(libp2p::tls::Config::new, libp2p::yamux::Config::default)
             .await?
-            .with_behaviour(|key: &libp2p::identity::Keypair| {
+            .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)?
+            .with_behaviour(|key: &libp2p::identity::Keypair, relay_client| {
                 let mut kad_config = kad::Config::new(StreamProtocol::new("/vco/kad/1.0.0"));
                 kad_config.set_query_timeout(Duration::from_secs(10));
                 let kad = kad::Behaviour::with_config(local_peer_id, sled_store, kad_config);
@@ -286,8 +294,6 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
     let mut last_minute = tokio::time::Instant::now();
 
     tokio::spawn(async move {
-        let _keep_alive = relay_transport;
-        
         loop {
             tokio::select! {
                 _ = stats_interval.tick() => {
@@ -309,7 +315,7 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                         ConnectionInfo {
                             remote_peer: p.clone(),
                             remote_addr: addr,
-                            tags: vec![],
+                            tags: vec!["connected".to_string()],
                         }
                     }).collect();
 
@@ -322,6 +328,11 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                     });
                 }
                 event = swarm.select_next_some() => match event {
+                    SwarmEvent::Dialing { peer_id, .. } => {
+                        let _ = handle.emit("vco-node-event", NodeEvent::Dialing {
+                            peer_id: peer_id.map(|p| p.to_string())
+                        });
+                    }
                     SwarmEvent::NewListenAddr { address, .. } => {
                         let _ = handle.emit("vco-node-event", NodeEvent::Ready {
                             peer_id: local_peer_id.to_string(),
@@ -381,6 +392,7 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                     }
                     SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
                         let addr = endpoint.get_remote_address().to_string();
+                        log::info!("VCO: Connection established with {} at {}", peer_id, addr);
                         peer_addresses.insert(peer_id, addr.clone());
                         
                         if let Ok(data) = fs::read_to_string(&cache_path) {
@@ -408,7 +420,16 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                         });
                     }
                     SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                        log::info!("VCO: Connection closed with {}", peer_id);
                         peer_addresses.remove(&peer_id);
+                    }
+                    SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                        let msg = format!("Dial failed to {:?}: {:?}", peer_id, error);
+                        log::error!("VCO: {}", msg);
+                        let _ = handle.emit("vco-node-event", NodeEvent::Error { message: msg });
+                    }
+                    SwarmEvent::IncomingConnectionError { error, .. } => {
+                        log::warn!("VCO: Incoming connection error: {:?}", error);
                     }
                     _ => {}
                 },
@@ -427,14 +448,42 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                         let _ = swarm.behaviour_mut().gossipsub.publish(topic, data);
                     }
                     Some(NodeCommand::Dial(addr)) => {
-                        if let Ok(maddr) = addr.parse::<Multiaddr>() {
-                            let _ = swarm.dial(maddr);
+                        match addr.parse::<Multiaddr>() {
+                            Ok(maddr) => {
+                                log::info!("VCO: Manual dial request to {}", maddr);
+                                let mut peer_id_opt = None;
+                                if let Some(peer_id) = maddr.iter().find_map(|p| match p {
+                                    libp2p::multiaddr::Protocol::P2p(id) => Some(id),
+                                    _ => None,
+                                }) {
+                                    peer_id_opt = Some(peer_id.to_string());
+                                    swarm.behaviour_mut().kad.add_address(&peer_id, maddr.clone());
+                                }
+                                
+                                let _ = handle.emit("vco-node-event", NodeEvent::Dialing {
+                                    peer_id: peer_id_opt
+                                });
+
+                                if let Err(e) = swarm.dial(maddr.clone()) {
+                                    let _ = handle.emit("vco-node-event", NodeEvent::Error {
+                                        message: format!("Dial failed: {:?}", e)
+                                    });
+                                }
+                            }
+                            Err(e) => {
+                                let _ = handle.emit("vco-node-event", NodeEvent::Error {
+                                    message: format!("Dial failed: Invalid multiaddress: {:?}", e)
+                                });
+                            }
                         }
                     }
                     Some(NodeCommand::Resolve(cid)) => {
                         let key = RecordKey::new(&cid);
                         swarm.behaviour_mut().kad.get_record(key);
-                        let _ = handle.emit("vco-node-event", NodeEvent::Resolving { cid: cid.clone() });
+                        let _ = handle.emit("vco-node-event", NodeEvent::Resolving { 
+                            cid: cid.clone(),
+                            channel_id: format!("vco://objects/{}", cid)
+                        });
                     }
                     Some(NodeCommand::PutRecord(cid, payload)) => {
                         let key = RecordKey::new(&cid);
@@ -474,9 +523,8 @@ pub async fn start_node(app_handle: AppHandle) -> anyhow::Result<mpsc::Unbounded
                             ConnectionInfo {
                                 remote_peer: p.clone(),
                                 remote_addr: addr,
-                                tags: vec![],
-                            }
-                        }).collect();
+                                tags: vec!["connected".to_string()],
+                            }                        }).collect();
 
                         let _ = handle.emit("vco-node-event", NodeEvent::Stats {
                             peer_id: local_peer_id.to_string(),

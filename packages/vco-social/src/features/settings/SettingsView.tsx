@@ -1,26 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useSocial } from '../SocialContext';
-import { 
-  Server, 
-  Wifi, 
-  Shield, 
-  Globe, 
-  Zap, 
-  Copy, 
-  CheckCircle2, 
+import {
+  Server,
+  Wifi,
+  Shield,
+  Globe,
+  Zap,
+  Copy,
+  CheckCircle2,
   RefreshCw,
-  Settings as SettingsIcon,
-  Database,
-  ArrowRightLeft,
-  Plus,
   Unplug,
-  Activity
+  Fingerprint,
+  Lock
 } from 'lucide-react';
 import { useToast } from '../../components/ToastProvider';
 import { twMerge } from 'tailwind-merge';
 import { NetworkService, NetworkStats } from '../../lib/NetworkService';
 import { NodeClient } from '../../lib/NodeClient';
 import { KeyringService } from '../../lib/KeyringService';
+import { BiometricService } from '../../lib/BiometricService';
 import { vcoStore } from '../../lib/VcoStore';
 import { SwarmPulse } from '../../components/SwarmPulse';
 
@@ -28,6 +26,10 @@ export function SettingsView() {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [dialAddr, setDialAddr] = useState('');
+  const [bioAvailable, setBioAvailable] = useState(false);
+  const [bioEnabled, setBioEnabled] = useState(BiometricService.isEnabled());
+  const [bioPassword, setBioPassword] = useState('');
+  const [showBioEnroll, setShowBioEnroll] = useState(false);
   const [stats, setStats] = useState<NetworkStats>({
     peerId: null,
     multiaddrs: [],
@@ -37,10 +39,16 @@ export function SettingsView() {
   });
 
   useEffect(() => {
+    BiometricService.isAvailable().then(setBioAvailable);
+  }, []);
+
+  useEffect(() => {
     NetworkService.startPolling(setStats);
     
     const cleanup = NodeClient.getInstance().onEvent((event) => {
-      if (event.type === 'dial_success') {
+      if (event.type === 'dialing') {
+        toast(`Dialing: ${event.peerId || 'address'}...`, "info");
+      } else if (event.type === 'dial_success') {
         toast(`Successfully connected to: ${event.addr}`, "success");
       } else if (event.type === 'error' && event.message.includes('dial')) {
         toast(`Failed to dial: ${event.message}`, "error");
@@ -65,7 +73,6 @@ export function SettingsView() {
     e.preventDefault();
     if (!dialAddr.trim()) return;
     NodeClient.getInstance().dial(dialAddr.trim());
-    toast(`Dialing swarm address...`, "info");
     setDialAddr('');
   };
 
@@ -75,6 +82,30 @@ export function SettingsView() {
       navigator.clipboard.writeText(pkg);
       toast("Encrypted identity package copied to clipboard", "success");
     }
+  };
+
+  const handleBioEnroll = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const identity = await KeyringService.unlockIdentity(bioPassword);
+    if (!identity) {
+      toast("Incorrect password", "error");
+      return;
+    }
+    const ok = await BiometricService.enable(bioPassword);
+    if (ok) {
+      setBioEnabled(true);
+      setShowBioEnroll(false);
+      setBioPassword('');
+      toast("Biometric unlock enabled", "success");
+    } else {
+      toast("Biometric authentication cancelled", "error");
+    }
+  };
+
+  const handleBioDisable = () => {
+    BiometricService.disable();
+    setBioEnabled(false);
+    toast("Biometric unlock disabled", "info");
   };
 
   const handleWipe = async () => {
@@ -262,6 +293,55 @@ export function SettingsView() {
             </div>
             <h3 className="text-lg md:text-xl font-black text-white uppercase tracking-widest italic">Recovery & Security</h3>
          </div>
+
+         {bioAvailable && (
+           <div className="space-y-3 md:space-y-4">
+             <div className="flex items-center gap-3">
+               <Fingerprint size={18} className="text-blue-400 shrink-0" />
+               <h4 className="text-base md:text-lg font-bold text-white">Biometric Unlock</h4>
+             </div>
+             <p className="text-zinc-500 text-xs md:text-sm">Use fingerprint or face recognition to unlock your identity without entering your password.</p>
+             {bioEnabled ? (
+               <button
+                 onClick={handleBioDisable}
+                 className="flex items-center gap-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 px-5 md:px-6 py-2.5 md:py-3 rounded-xl md:rounded-2xl font-bold text-[10px] uppercase tracking-widest transition-all border border-blue-500/20 shadow-lg"
+               >
+                 <Fingerprint size={12} />
+                 Disable Biometrics
+               </button>
+             ) : showBioEnroll ? (
+               <form onSubmit={handleBioEnroll} className="space-y-3">
+                 <div className="relative">
+                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 w-4 h-4" />
+                   <input
+                     type="password"
+                     value={bioPassword}
+                     onChange={e => setBioPassword(e.target.value)}
+                     placeholder="Confirm your passphrase..."
+                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:ring-1 focus:ring-blue-500 outline-none font-mono"
+                     required
+                   />
+                 </div>
+                 <div className="flex gap-2">
+                   <button type="submit" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all">
+                     <Fingerprint size={12} /> Enroll
+                   </button>
+                   <button type="button" onClick={() => { setShowBioEnroll(false); setBioPassword(''); }} className="px-4 py-2 rounded-xl text-zinc-500 hover:text-white text-[10px] font-bold uppercase tracking-widest transition-all">
+                     Cancel
+                   </button>
+                 </div>
+               </form>
+             ) : (
+               <button
+                 onClick={() => setShowBioEnroll(true)}
+                 className="flex items-center gap-3 bg-zinc-800 hover:bg-zinc-700 text-white px-5 md:px-6 py-2.5 md:py-3 rounded-xl md:rounded-2xl font-bold text-[10px] uppercase tracking-widest transition-all border border-zinc-700 shadow-lg"
+               >
+                 <Fingerprint size={12} />
+                 Enable Biometrics
+               </button>
+             )}
+           </div>
+         )}
 
          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-3 md:space-y-4">

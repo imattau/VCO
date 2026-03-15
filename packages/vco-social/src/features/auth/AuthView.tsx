@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Shield, Lock, Key, ArrowRight, Loader2, AlertCircle, Upload } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Shield, Lock, Key, ArrowRight, Loader2, AlertCircle, Fingerprint } from 'lucide-react';
 import { KeyringService } from '@/lib/KeyringService';
+import { BiometricService } from '@/lib/BiometricService';
 
 interface AuthViewProps {
   onUnlock: (password: string) => Promise<void>;
@@ -15,6 +16,30 @@ export function AuthView({ onUnlock, onCreate, hasExisting }: AuthViewProps) {
   const [mode, setMode] = useState<'unlock' | 'create' | 'import'>(hasExisting ? 'unlock' : 'create');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  useEffect(() => {
+    if (hasExisting && BiometricService.isEnabled()) {
+      BiometricService.isAvailable().then(setBiometricAvailable);
+    }
+  }, [hasExisting]);
+
+  const handleBiometricUnlock = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const password = await BiometricService.unlock();
+      if (password) {
+        await onUnlock(password);
+      } else {
+        setError("Biometric authentication failed. Use your password.");
+      }
+    } catch {
+      setError("Biometric authentication failed. Use your password.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,6 +165,18 @@ export function AuthView({ onUnlock, onCreate, hasExisting }: AuthViewProps) {
             {isLoading ? <Loader2 className="animate-spin" /> : (mode === 'create' ? "Create Identity" : mode === 'import' ? "Import & Unlock" : "Unlock")}
             {!isLoading && <ArrowRight size={18} />}
           </button>
+
+          {mode === 'unlock' && biometricAvailable && (
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={handleBiometricUnlock}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white py-4 rounded-2xl font-black uppercase tracking-[0.2em] transition-all border border-zinc-700 active:scale-95 flex items-center justify-center gap-3"
+            >
+              <Fingerprint size={20} className="text-blue-400" />
+              Use Biometrics
+            </button>
+          )}
 
           <div className="pt-4 flex flex-col items-center gap-4">
             {mode === 'unlock' ? (
