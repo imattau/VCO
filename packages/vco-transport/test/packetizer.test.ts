@@ -54,4 +54,34 @@ describe("FixedFramePacketizer", () => {
     packetSet.packets = packetSet.packets.filter((packet) => packet.index !== 1);
     expect(() => packetizer.reassemble(packetSet)).toThrow(/missing packet index/i);
   });
+
+  it("rejects mismatched packet counts", () => {
+    const frameSize = 8;
+    const packetizer = new FixedFramePacketizer(frameSize);
+    const payload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const packetSet = packetizer.packetize(payload);
+
+    packetSet.packets[0].count = 5;
+    expect(() => packetizer.reassemble(packetSet)).toThrow(/count mismatch/i);
+  });
+
+  it("rejects indices beyond count", () => {
+    const frameSize = 8;
+    const packetizer = new FixedFramePacketizer(frameSize);
+    const payload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const packetSet = packetizer.packetize(payload);
+
+    packetSet.packets[0].index = 10;
+    expect(() => packetizer.reassemble(packetSet)).toThrow(/lower than packet.count/i);
+  });
+
+  it("rejects totalPayloadLength mismatches", () => {
+    const frameSize = 8;
+    const packetizer = new FixedFramePacketizer(frameSize);
+    const payload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const packetSet = packetizer.packetize(payload);
+
+    packetSet.totalPayloadLength = 100;
+    expect(() => packetizer.reassemble(packetSet)).toThrow(/does not match totalPayloadLength/i);
+  });
 });
