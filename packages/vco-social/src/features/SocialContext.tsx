@@ -129,6 +129,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const profileRef = useRef<ProfileData | null>(null);
   const peerProfilesRef = useRef<Map<string, ProfileData>>(new Map());
   const isNodeReadyRef = useRef(false);
+  const feedCursorTimestamp = useRef<number | undefined>(undefined);
 
   useEffect(() => { identityRef.current = identity; }, [identity]);
   useEffect(() => { profileRef.current = profile; }, [profile]);
@@ -158,8 +159,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   const hasExistingIdentity = async () => await KeyringService.hasIdentity();
 
-  const processEnvelopes = useCallback(async (envelopes: any[], myProfile: ProfileData, profileMap: Map<string, ProfileData>, identity: IdentityKeys, extraPostsByCid?: Map<string, { authorId: Uint8Array, data: any, authorProfile: ProfileData }>) => {
-    const results = FeedProcessor.process(envelopes, myProfile, profileMap, identity.creatorIdHex, extraPostsByCid);
+  const processEnvelopes = useCallback(async (envelopes: any[], myProfile: ProfileData, profileMap: Map<string, ProfileData>, identity: IdentityKeys, extraPostsByCid?: Map<string, { authorId: Uint8Array, data: any, authorProfile: ProfileData }>, followingSet?: Set<string>) => {
+    const results = FeedProcessor.process(envelopes, myProfile, profileMap, followingSet ?? new Set<string>(), identity.creatorIdHex, extraPostsByCid);
     const dmMap = await DMProcessor.process(envelopes, identity);
     return { ...results, dmMap };
   }, []);
@@ -190,11 +191,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       if (toHex(actualHash) !== toHex(envelope.headerHash)) return;
 
       const hash = envelope.headerHash;
-      const cidBase64 = btoa(String.fromCharCode(...hash));
+      const cidHex = toHex(hash);
       const creatorIdHex = toHex(envelope.header.creatorId);
 
       await vcoStore.putEnvelope({
-        cid: cidBase64,
+        cid: cidHex,
         channelId,
         payload: base64,
         timestamp: Date.now()
@@ -211,6 +212,21 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           avatarCid: new Uint8Array(0),
           previousManifest: new Uint8Array(0)
         };
+      } else {
+        // Profile resolved — update peerProfiles state and patch any feed items
+        // that still show the placeholder display name for this peer.
+        setPeerProfiles(prev => {
+          const next = new Map(prev);
+          next.set(creatorIdHex, authorProfile!);
+          return next;
+        });
+        setFeed(prev => prev.map(item => {
+          const updated = peerProfilesRef.current.get(toHex(item.authorId));
+          if (updated && item.authorProfile.displayName.startsWith('Peer ')) {
+            return { ...item, authorProfile: updated };
+          }
+          return item;
+        }));
       }
       
       // For repost envelopes arriving in a new session, the original post may be
@@ -253,7 +269,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const { feedItems, replyItems, followSet, dmMap, reactionMap, repostMap, notifications: newNotifs } = await processEnvelopes([{ cid: cidBase64, channelId, payload: base64 }], currentProfile, peerProfilesRef.current, currentIdentity, extraPostsByCid);
+      const { feedItems, replyItems, followSet, dmMap, reactionMap, repostMap, notifications: newNotifs } = await processEnvelopes([{ cid: cidHex, channelId, payload: base64 }], currentProfile, peerProfilesRef.current, currentIdentity, extraPostsByCid, new Set(Array.from(peerProfilesRef.current.keys())));
       
       if (feedItems.length > 0) setFeed(prev => [feedItems[0], ...prev]);
       if (replyItems.length > 0) setReplies(prev => [replyItems[0], ...prev]);
@@ -315,14 +331,19 @@ export function SocialProvider({ children }: { children: ReactNode }) {
     const currentIdentity = identityRef.current;
     const currentProfile = profileRef.current;
     if (!currentIdentity || !hasMoreFeed || !currentProfile) return;
-    
-    const lastTimestamp = feed.length > 0 ? Number(feed[feed.length - 1].data.timestampMs) : undefined;
-    const moreEnvelopes = await vcoStore.getEnvelopesPaged(Constants.FEED_PAGE_SIZE, lastTimestamp);
-    
+
+    // Use the storage-time cursor (IDB insertion time) rather than the
+    // content-level timestampMs so the IDB index and the cursor are in the
+    // same timestamp domain.
+    const moreEnvelopes = await vcoStore.getEnvelopesPaged(Constants.FEED_PAGE_SIZE, feedCursorTimestamp.current);
+
     if (moreEnvelopes.length < Constants.FEED_PAGE_SIZE) setHasMoreFeed(false);
     if (moreEnvelopes.length === 0) return;
 
-    const { feedItems, reactionMap, repostMap } = await processEnvelopes(moreEnvelopes, currentProfile, peerProfilesRef.current, currentIdentity);
+    // Advance the storage-time cursor to the oldest envelope in this page.
+    feedCursorTimestamp.current = moreEnvelopes[moreEnvelopes.length - 1].timestamp;
+
+    const { feedItems, reactionMap, repostMap } = await processEnvelopes(moreEnvelopes, currentProfile, peerProfilesRef.current, currentIdentity, undefined, new Set(Array.from(peerProfilesRef.current.keys())));
     setFeed(prev => [...prev, ...feedItems.sort((a,b) => {
       const aTime = a.repostBy ? Number(a.repostBy.timestampMs) : Number(a.data.timestampMs);
       const bTime = b.repostBy ? Number(b.repostBy.timestampMs) : Number(b.data.timestampMs);
@@ -351,7 +372,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         return next;
       });
     }
-  }, [hasMoreFeed, feed.length, processEnvelopes]);
+  }, [hasMoreFeed, processEnvelopes]);
 
   useEffect(() => {
     if (!identity) {
@@ -384,6 +405,15 @@ export function SocialProvider({ children }: { children: ReactNode }) {
           if (p.creatorId !== identity.creatorIdHex) profileMap.set(p.creatorId, p.data);
         });
         setPeerProfiles(profileMap);
+        // Patch any feed items whose authorProfile is still a placeholder now
+        // that we have the full profile map from the store.
+        setFeed(prev => prev.map(item => {
+          const updated = profileMap.get(toHex(item.authorId));
+          if (updated && item.authorProfile.displayName.startsWith('Peer ')) {
+            return { ...item, authorProfile: updated };
+          }
+          return item;
+        }));
 
         const storedNotifs = await vcoStore.getAllNotifications();
         setNotifications(storedNotifs.sort((a,b) => Number(b.timestampMs - a.timestampMs)));
@@ -525,7 +555,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
       const hash = envelope.headerHash;
       await vcoStore.putEnvelope({
-        cid: btoa(String.fromCharCode(...hash)),
+        cid: toHex(hash),
         channelId: Constants.GLOBAL_SOCIAL_CHANNEL,
         payload: base64,
         timestamp: Date.now()
@@ -567,7 +597,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
       const hash = envelope.headerHash;
       await vcoStore.putEnvelope({
-        cid: btoa(String.fromCharCode(...hash)),
+        cid: toHex(hash),
         channelId: Constants.GLOBAL_SOCIAL_CHANNEL,
         payload: base64,
         timestamp: Date.now()
@@ -619,7 +649,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
       const hash = envelope.headerHash;
       await vcoStore.putEnvelope({
-        cid: btoa(String.fromCharCode(...hash)),
+        cid: toHex(hash),
         channelId,
         payload: base64,
         timestamp: Date.now()
@@ -662,8 +692,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
-      await vcoStore.putEnvelope({ cid: btoa(String.fromCharCode(...envelope.headerHash)), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
-      
+      await vcoStore.putEnvelope({ cid: toHex(envelope.headerHash), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
+
       setFollowing(prev => new Set(prev).add(creatorIdHex));
       toast("Follow manifest published", "success");
     } catch (err) {
@@ -684,8 +714,8 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
-      await vcoStore.putEnvelope({ cid: btoa(String.fromCharCode(...envelope.headerHash)), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
-      
+      await vcoStore.putEnvelope({ cid: toHex(envelope.headerHash), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
+
       setFollowing(prev => {
         const next = new Set(prev);
         next.delete(creatorIdHex);
@@ -743,7 +773,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       const envelope = createEnvelope({ payload, payloadType: 0x50, creatorId: identity.creatorId, privateKey: identity.signingPrivateKey, powDifficulty: PoWService.calculateTargetDifficulty(payload.length, networkLoad) }, crypto);
       const base64 = btoa(String.fromCharCode(...encodeCore(envelope)));
       NodeClient.getInstance().publish(Constants.GLOBAL_SOCIAL_CHANNEL, base64);
-      await vcoStore.putEnvelope({ cid: btoa(String.fromCharCode(...envelope.headerHash)), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
+      await vcoStore.putEnvelope({ cid: toHex(envelope.headerHash), channelId: Constants.GLOBAL_SOCIAL_CHANNEL, payload: base64, timestamp: Date.now() });
       setTombstones(prev => new Set(prev).add(toHex(cid)));
       toast("Tombstone published to swarm", "info");
     } catch (err) {

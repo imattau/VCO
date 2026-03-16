@@ -4,6 +4,7 @@ import { PostCard } from './PostCard';
 import { ComposePost } from './ComposePost';
 import { ThreadView } from './ThreadView';
 import { SwatchBook, X, Loader2 } from 'lucide-react';
+import { toHex } from '../../lib/encoding';
 import { Virtuoso } from 'react-virtuoso';
 
 export function FeedView() {
@@ -55,7 +56,7 @@ export function FeedView() {
             itemContent={(index, item) => (
               <div className="pb-8 px-2">
                 <PostCard 
-                  key={`${item.cid.toString()}-${item.repostBy?.timestampMs || 'original'}`} 
+                  key={`${toHex(item.cid)}-${item.repostBy?.timestampMs || 'original'}`}
                   data={item.data} 
                   authorProfile={item.authorProfile}
                   cid={item.cid} 

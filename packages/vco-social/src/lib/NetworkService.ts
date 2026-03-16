@@ -43,10 +43,11 @@ export class NetworkService {
     });
 
     const poll = () => {
+      // Only nudge the backend — the response arrives async and fires the
+      // eventUnsub listener above, which calls callback(snapshot()) with
+      // authoritative data. Calling snapshot() here would race against the
+      // response and push stale (possibly empty) connection state to the UI.
       client.getStats();
-      const s = snapshot();
-      console.log('VCO NetworkService: poll snapshot → isReady:', s.isReady, '| peerId:', s.peerId, '| peers:', s.peers.length);
-      callback(s);
     };
 
     poll();

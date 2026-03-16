@@ -65,6 +65,7 @@ export class FeedProcessor {
     const reactionMap = new Map<string, Set<string>>();
     const repostMap = new Map<string, Set<string>>();
     const notifications: any[] = [];
+    const repostedOriginalCids = new Set<string>();
 
     const effectiveMyCreatorIdHex = myCreatorIdHex || "";
 
@@ -133,7 +134,9 @@ export class FeedProcessor {
           try {
             const post = decodePost(coreEnvelope.payload);
             if (post.schema === POST_SCHEMA_URI || post.schema === POST_V2_SCHEMA_URI || post.schema === POST_V3_SCHEMA_URI) {
-              feedItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: post, authorProfile });
+              if (!repostedOriginalCids.has(toHex(cid))) {
+                feedItems.push({ cid, authorId: coreEnvelope.header.creatorId, data: post, authorProfile });
+              }
               continue;
             }
           } catch { /* Not a post */ }
@@ -183,6 +186,7 @@ export class FeedProcessor {
               if (!repostMap.has(targetHex)) repostMap.set(targetHex, new Set());
               repostMap.get(targetHex)!.add(creatorIdHex);
 
+              repostedOriginalCids.add(targetHex);
               const original = allPostsByCid.get(targetHex);
               if (original == null) {
                 console.debug('FeedProcessor: repost references unknown original CID', targetHex);

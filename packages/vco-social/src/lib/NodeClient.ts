@@ -240,7 +240,9 @@ export class NodeClient {
       console.error('VCO NodeClient: Bisect loop error', e);
     } finally {
       this.syncInProgress = false;
-      this.listeners.forEach(l => l({ type: 'stats', peerId: this.peerId!, multiaddrs: this.multiaddrs, peers: this.peers, connections: this.connections, networkLoad: 1.0 }));
+      // Request authoritative stats from Rust rather than emitting a synthetic
+      // event built from potentially-stale instance fields.
+      this.getStats();
     }
   }
 

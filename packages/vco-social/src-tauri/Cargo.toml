@@ -26,7 +26,7 @@ tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-biometric = "2"
 tauri-plugin-barcode-scanner = "2"
-libp2p = { version = "0.54", features = ["tcp", "dns", "quic", "websocket", "tls", "noise", "yamux", "kad", "identify", "gossipsub", "macros", "tokio", "mdns", "autonat", "relay"] }
+libp2p = { version = "0.54", features = ["tcp", "dns", "quic", "websocket", "tls", "noise", "yamux", "kad", "identify", "gossipsub", "macros", "tokio", "mdns", "autonat", "relay", "ping"] }
 tokio = { version = "1.37", features = ["full"] }
 futures = "0.3"
 async-trait = "0.1"
