@@ -7,6 +7,12 @@ if (typeof window === 'undefined') {
   (global as any).window = {
     __TAURI_INTERNALS__: {} // Simulate Tauri
   };
+  (global as any).localStorage = {
+    getItem: vi.fn(),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+  };
 }
 
 // Mock Tauri

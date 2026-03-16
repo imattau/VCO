@@ -10,7 +10,7 @@ import {
   decodeRepost
 } from '@vco/vco-schemas';
 import { decodeEnvelopeProto as decodeCore } from '@vco/vco-core';
-import { toHex } from './encoding';
+import { toHex, fromHex } from './encoding';
 import * as Constants from './constants';
 
 export interface FeedItem {
@@ -76,7 +76,7 @@ export class FeedProcessor {
             authorProfile
           });
         }
-      } catch {}
+      } catch (e) { console.warn('FeedProcessor: failed to process item', e); }
     }
 
     // Pass 2: Full processing
@@ -84,7 +84,7 @@ export class FeedProcessor {
       try {
         const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
         const coreEnvelope = decodeCore(bytes);
-        const cid = Uint8Array.from(atob(e.cid), c => c.charCodeAt(0));
+        const cid = fromHex(e.cid);
         const creatorIdHex = toHex(coreEnvelope.header.creatorId);
         const authorProfile = creatorIdHex === myCreatorIdHex ? myProfile : profileMap.get(creatorIdHex) || this.createPlaceholderProfile(creatorIdHex);
 
@@ -97,7 +97,9 @@ export class FeedProcessor {
             
             // Notification: Someone replied to me
             const parentPost = allPostsByCid.get(toHex(data.parentCid));
-            if (parentPost && toHex(parentPost.authorId) === myCreatorIdHex && creatorIdHex !== myCreatorIdHex) {
+            if (parentPost == null) {
+              console.debug('FeedProcessor: reply references unknown parent CID', toHex(data.parentCid));
+            } else if (toHex(parentPost.authorId) === myCreatorIdHex && creatorIdHex !== myCreatorIdHex) {
               notifications.push({
                 cid,
                 type: 1, // Reply
@@ -124,7 +126,9 @@ export class FeedProcessor {
 
             // Notification: Someone liked my post
             const targetPost = allPostsByCid.get(targetHex);
-            if (targetPost && toHex(targetPost.authorId) === myCreatorIdHex && creatorIdHex !== myCreatorIdHex) {
+            if (targetPost == null) {
+              console.debug('FeedProcessor: reaction references unknown target CID', targetHex);
+            } else if (toHex(targetPost.authorId) === myCreatorIdHex && creatorIdHex !== myCreatorIdHex) {
               notifications.push({
                 cid,
                 type: 3, // Reaction/Like
@@ -142,7 +146,9 @@ export class FeedProcessor {
             repostMap.get(targetHex)!.add(creatorIdHex);
 
             const original = allPostsByCid.get(targetHex);
-            if (original) {
+            if (original == null) {
+              console.debug('FeedProcessor: repost references unknown original CID', targetHex);
+            } else {
               feedItems.push({
                 cid: repostData.originalPostCid,
                 authorId: original.authorId,
@@ -165,7 +171,7 @@ export class FeedProcessor {
             }
           }
         }
-      } catch {}
+      } catch (e) { console.warn('FeedProcessor: failed to process item', e); }
     }
 
     return { feedItems, replyItems, followSet, reactionMap, repostMap, notifications };

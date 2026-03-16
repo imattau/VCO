@@ -1,12 +1,14 @@
 import { checkStatus, authenticate } from '@tauri-apps/plugin-biometric';
 
-const BIO_PASSWORD_KEY = 'vco_bio_password';
 const BIO_ENABLED_KEY = 'vco_bio_enabled';
 
 /**
  * Biometric authentication service.
- * Uses tauri-plugin-biometric to gate access to a stored password copy.
- * Falls back gracefully when biometrics are unavailable.
+ * 
+ * SECURITY NOTE: A previous implementation stored the plaintext password in localStorage.
+ * This was a critical vulnerability. Biometric unlock MUST be implemented using a 
+ * platform-native secure enclave (Keychain/Keystore) via a dedicated plugin 
+ * (e.g., tauri-plugin-stronghold).
  */
 export class BiometricService {
   /**
@@ -31,14 +33,16 @@ export class BiometricService {
   }
 
   /**
-   * Prompts biometric auth, then stores the password for future unlocks.
-   * Call this after a successful password unlock to enroll biometrics.
+   * Prompts biometric auth.
+   * NOTE: Plaintext password storage has been REMOVED for security.
+   * This feature currently only verifies the user but does not store the secret.
    */
-  static async enable(password: string): Promise<boolean> {
+  static async enable(_password: string): Promise<boolean> {
     try {
       await authenticate('Confirm identity to enable biometric unlock');
-      localStorage.setItem(BIO_PASSWORD_KEY, password);
+      // SECURITY: DO NOT store 'password' in localStorage!
       localStorage.setItem(BIO_ENABLED_KEY, 'true');
+      console.warn("BiometricService: enabled without persistent secret storage. Secure vault plugin required for full functionality.");
       return true;
     } catch {
       return false;
@@ -46,26 +50,25 @@ export class BiometricService {
   }
 
   /**
-   * Prompts biometric auth and returns the stored password on success.
-   * Returns null if auth fails or biometrics not enrolled.
+   * Prompts biometric auth.
+   * Returns null because secure secret storage is not yet implemented.
    */
   static async unlock(): Promise<string | null> {
     if (!this.isEnabled()) return null;
-    const stored = localStorage.getItem(BIO_PASSWORD_KEY);
-    if (!stored) return null;
     try {
       await authenticate('Unlock your VCO identity');
-      return stored;
+      // In a real implementation, we would retrieve the secret from a secure vault here.
+      console.error("BiometricService: biometric unlock called but secure secret storage is not implemented.");
+      return null;
     } catch {
       return null;
     }
   }
 
   /**
-   * Disables biometric unlock and removes the stored password.
+   * Disables biometric unlock.
    */
   static disable(): void {
-    localStorage.removeItem(BIO_PASSWORD_KEY);
     localStorage.removeItem(BIO_ENABLED_KEY);
   }
 }

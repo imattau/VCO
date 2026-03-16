@@ -371,8 +371,11 @@ export class NodeClient {
       }
     };
 
-    await Promise.race([drainLoop(), completionPromise]);
-    this.sessionQueues.delete(sessionId);
+    try {
+      await Promise.race([drainLoop(), completionPromise]);
+    } finally {
+      this.sessionQueues.delete(sessionId);
+    }
   }
 
   private handleEvent(event: NodeEvent) {
@@ -405,9 +408,11 @@ export class NodeClient {
           vcoStore.storeEnvelope(decoded, 'pending').catch(console.error);
         } catch (e) {
           console.warn('VCO NodeClient: Failed to decode/store gossipsub envelope', e);
+          this.handleEvent({ type: 'error', message: `Failed to decode gossipsub envelope: ${e}` });
         }
       }).catch((e) => {
         console.warn('VCO NodeClient: Failed to load @vco/vco-core for envelope decode', e);
+        this.handleEvent({ type: 'error', message: `Failed to decode gossipsub envelope: ${e}` });
       });
     } else if (event.type === 'dial_success') {
       // Auto-trigger sync if this is the configured relay
@@ -431,6 +436,10 @@ export class NodeClient {
             queue.enqueue(bytes);
           } catch (e) {
             console.warn('VCO NodeClient: Failed to decode sync_frame', e);
+            // Enqueue a zero-length sentinel so the bisect loop unblocks,
+            // then emit sync_error so the caller knows the session is broken.
+            queue.enqueue(new Uint8Array(0));
+            this.handleEvent({ type: 'sync_error', sessionId: event.sessionId, message: `Bad sync_frame: ${e}` });
           }
         }
       }

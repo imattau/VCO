@@ -163,6 +163,7 @@ describe("envelope receiver", () => {
     const receiver = handleEnvelopeStream(listener, core, {
       powPolicy: policy,
       onEnvelope: () => undefined,
+      failOnAdmissionError: true,
     });
 
     const envelopeBytes = encodeSignedEnvelope(new Uint8Array(32).fill(7), 0);
@@ -182,6 +183,7 @@ describe("envelope receiver", () => {
     const receiver = handleEnvelopeStream(listener, core, {
       requiredDifficulty: 3,
       onEnvelope: () => undefined,
+      failOnAdmissionError: true,
     });
 
     const envelopeBytes = encodeSignedEnvelope(new Uint8Array(32).fill(7), 0);

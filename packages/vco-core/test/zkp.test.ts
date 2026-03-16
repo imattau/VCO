@@ -183,4 +183,46 @@ describe("VCOCore", () => {
     // Should fail because the headerHash (integrity) no longer matches the tampered header
     await expect(core.validateEnvelope(envelope)).resolves.toBe(false);
   });
+
+  it("handles multiple verifiers for different circuit IDs", async () => {
+    const crypto = new DeterministicCryptoProvider();
+    const core = new VCOCore(crypto);
+
+    const v1: IZKPVerifier = { circuitId: 1, async verify() { return true; } };
+    const v2: IZKPVerifier = { circuitId: 2, async verify() { return true; } };
+
+    core.registerVerifier(v1);
+    core.registerVerifier(v2);
+
+    const env1 = createEnvelope({
+      payload: new Uint8Array([1]), payloadType: 1, flags: FLAG_ZKP_AUTH, nullifier: filled(32, 1),
+      zkpExtension: { circuitId: 1, proofLength: 1, proof: new Uint8Array([1]), inputsLength: 0, publicInputs: new Uint8Array(0) }
+    }, crypto);
+
+    const env2 = createEnvelope({
+      payload: new Uint8Array([2]), payloadType: 1, flags: FLAG_ZKP_AUTH, nullifier: filled(32, 2),
+      zkpExtension: { circuitId: 2, proofLength: 1, proof: new Uint8Array([2]), inputsLength: 0, publicInputs: new Uint8Array(0) }
+    }, crypto);
+
+    await expect(core.validateEnvelope(env1)).resolves.toBe(true);
+    await expect(core.validateEnvelope(env2)).resolves.toBe(true);
+  });
+
+  it("last registered verifier wins for same circuit ID", async () => {
+    const crypto = new DeterministicCryptoProvider();
+    const core = new VCOCore(crypto);
+
+    const v1: IZKPVerifier = { circuitId: 10, async verify() { return false; } };
+    const v2: IZKPVerifier = { circuitId: 10, async verify() { return true; } };
+
+    core.registerVerifier(v1);
+    core.registerVerifier(v2);
+
+    const envelope = createEnvelope({
+      payload: new Uint8Array([1]), payloadType: 1, flags: FLAG_ZKP_AUTH, nullifier: filled(32, 1),
+      zkpExtension: { circuitId: 10, proofLength: 1, proof: new Uint8Array([1]), inputsLength: 0, publicInputs: new Uint8Array(0) }
+    }, crypto);
+
+    await expect(core.validateEnvelope(envelope)).resolves.toBe(true);
+  });
 });

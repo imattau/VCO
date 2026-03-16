@@ -56,6 +56,8 @@ export class VcoStore {
     if (this.db) return this.db;
     if (this.dbPromise) return this.dbPromise;
 
+    // Fix 1: assign dbPromise synchronously before any await so concurrent
+    // callers immediately receive the same promise and cannot race past this guard.
     this.dbPromise = (async () => {
       const profile = await this.getStorageProfile();
       const dbName = `${DB_NAME_BASE}_${profile}`;
@@ -134,12 +136,13 @@ export class VcoStore {
       const tx = db.transaction("envelopes", "readwrite");
       const store = tx.objectStore("envelopes");
       const request = store.put(envelope);
-      
+
       tx.oncomplete = () => resolve();
       tx.onerror = () => {
         console.error("VcoStore: putEnvelope transaction failed", tx.error);
         reject(tx.error);
       };
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -149,7 +152,7 @@ export class VcoStore {
       const tx = db.transaction("envelopes", "readonly");
       const store = tx.objectStore("envelopes");
       const index = store.index("by_timestamp");
-      
+
       const results: StoredEnvelope[] = [];
       const range = beforeTimestamp ? IDBKeyRange.upperBound(beforeTimestamp, true) : null;
       const request = index.openCursor(range, "prev");
@@ -164,6 +167,7 @@ export class VcoStore {
         }
       };
       request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -175,6 +179,7 @@ export class VcoStore {
       const request = store.getAll();
       request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -186,6 +191,7 @@ export class VcoStore {
       const request = store.put({ creatorId, data });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -197,22 +203,39 @@ export class VcoStore {
       const request = store.get(creatorId);
       request.onsuccess = () => resolve(request.result?.data || null);
       request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
   async putBlob(cid: string | Uint8Array, blob: Blob): Promise<void> {
     const db = await this.getDB();
     const cidHex = typeof cid === 'string' ? cid : toHex(cid);
-    
-    this.evictOldBlobs(200).catch(console.warn);
 
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("blobs", "readwrite");
-      const store = tx.objectStore("blobs");
-      const request = store.put({ cid: cidHex, blob, updatedAt: Date.now() });
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    const writeBlob = (): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction("blobs", "readwrite");
+        const store = tx.objectStore("blobs");
+        store.put({ cid: cidHex, blob, updatedAt: Date.now() });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(new Error('Transaction aborted'));
+      });
+
+    try {
+      await writeBlob();
+    } catch (err: any) {
+      if (err && (err.name === 'QuotaExceededError' || err instanceof DOMException && err.code === 22)) {
+        console.warn("VcoStore: QuotaExceededError on blob write — evicting old blobs and retrying");
+        await this.evictOldBlobs(200);
+        try {
+          await writeBlob();
+        } catch (retryErr: any) {
+          throw new Error(`VcoStore: blob write failed after eviction — storage quota exceeded: ${retryErr?.message ?? retryErr}`);
+        }
+      } else {
+        throw err;
+      }
+    }
   }
 
   async getBlob(cid: string | Uint8Array): Promise<Blob | null> {
@@ -225,6 +248,7 @@ export class VcoStore {
       const request = store.get(cidHex);
       request.onsuccess = () => resolve(request.result?.blob || null);
       request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -236,6 +260,7 @@ export class VcoStore {
       const request = store.count();
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -264,6 +289,7 @@ export class VcoStore {
         }
       };
       request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -275,6 +301,7 @@ export class VcoStore {
       const request = store.getAll();
       request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -286,6 +313,7 @@ export class VcoStore {
       const request = store.put(notification);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -297,6 +325,7 @@ export class VcoStore {
       const request = store.getAll();
       request.onsuccess = () => resolve(request.result || []);
       request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -319,6 +348,7 @@ export class VcoStore {
         }
       };
       request.onerror = () => reject(request.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
     });
   }
 
@@ -358,12 +388,20 @@ export class VcoStore {
     const result: Uint8Array[] = [];
     for (const env of envelopes) {
       if (env.headerHash) {
-        // hex decode
-        const bytes = new Uint8Array(env.headerHash.length / 2);
-        for (let i = 0; i < bytes.length; i++) {
-          bytes[i] = parseInt(env.headerHash.slice(i * 2, i * 2 + 2), 16);
+        // Guard against malformed stored data: must be a non-empty even-length hex string.
+        try {
+          if (typeof env.headerHash !== 'string' || env.headerHash.length === 0 || env.headerHash.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(env.headerHash)) {
+            console.warn("VcoStore: skipping invalid headerHash value", env.headerHash);
+            continue;
+          }
+          const bytes = new Uint8Array(env.headerHash.length / 2);
+          for (let i = 0; i < bytes.length; i++) {
+            bytes[i] = parseInt(env.headerHash.slice(i * 2, i * 2 + 2), 16);
+          }
+          result.push(bytes);
+        } catch (e) {
+          console.warn("VcoStore: failed to decode headerHash, skipping entry", env.headerHash, e);
         }
-        result.push(bytes);
       }
     }
     return result;

@@ -1,9 +1,11 @@
 import { ed25519, x25519 } from "@noble/curves/ed25519";
 import { blake3 } from "@noble/hashes/blake3";
+import { hkdf } from "@noble/hashes/hkdf";
+import { sha256 } from "@noble/hashes/sha256";
 import { varint } from "multiformats";
 import { CryptoError } from "./errors.js";
 
-export { blake3 };
+export { blake3, hkdf, sha256 };
 
 /**
  * Common type for byte arrays (Uint8Array).
@@ -59,7 +61,7 @@ export class UnconfiguredCryptoProvider implements CryptoProvider {
 export class NobleCryptoProvider implements CryptoProvider {
   /** Computes Blake3 hash. */
   digest(payload: ByteArray): ByteArray {
-    return blake3(payload);
+    return blake3(Uint8Array.from(payload));
   }
 
   /** Signs using Ed25519. */
@@ -118,6 +120,18 @@ export function generateX25519KeyPair(): { privateKey: ByteArray, publicKey: Byt
  */
 export function deriveSharedSecret(privateKey: ByteArray, remotePublicKey: ByteArray): ByteArray {
   return x25519.getSharedSecret(privateKey, remotePublicKey);
+}
+
+/**
+ * Derives a symmetric key from a shared secret using HKDF-SHA256.
+ *
+ * @param sharedSecret The raw shared secret (e.g. from X25519).
+ * @param salt Optional salt.
+ * @param info Optional context info.
+ * @returns A 32-byte derived key.
+ */
+export function deriveKeyHkdf(sharedSecret: ByteArray, salt?: ByteArray, info?: ByteArray): ByteArray {
+  return hkdf(sha256, sharedSecret, salt, info, 32);
 }
 
 /**

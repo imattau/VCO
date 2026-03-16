@@ -17,7 +17,8 @@ export interface IdentityKeys {
 }
 
 const STORAGE_KEY_BASE = "vco_social_identity_encrypted_keys";
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 600000;
+const PBKDF2_LEGACY_ITERATIONS = 100000;
 
 export class KeyringService {
   private static async getStorageKey(): Promise<string> {
@@ -61,19 +62,44 @@ export class KeyringService {
 
   /**
    * Attempts to decrypt and load the identity using the provided password.
+   * Supports automatic migration from legacy PBKDF2 iterations.
    */
   static async unlockIdentity(password: string): Promise<IdentityKeys | null> {
     const key = await this.getStorageKey();
     const saved = localStorage.getItem(key);
     if (!saved) return null;
 
-    try {
-      const pkg = JSON.parse(saved);
-      const salt = this.fromHex(pkg.salt);
-      const iv = this.fromHex(pkg.iv);
-      const ciphertext = this.fromHex(pkg.ciphertext);
+    const pkg = JSON.parse(saved);
+    const salt = this.fromHex(pkg.salt);
+    const iv = this.fromHex(pkg.iv);
+    const ciphertext = this.fromHex(pkg.ciphertext);
 
-      const encryptionKey = await this.deriveKey(password, salt);
+    // Try current (secure) iterations first
+    let result = await this.tryDecrypt(password, salt, iv, ciphertext, PBKDF2_ITERATIONS);
+    
+    // If it fails, try legacy iterations
+    if (!result) {
+      result = await this.tryDecrypt(password, salt, iv, ciphertext, PBKDF2_LEGACY_ITERATIONS);
+      
+      // If legacy works, upgrade automatically
+      if (result) {
+        console.info(`KeyringService: upgrading identity to ${PBKDF2_ITERATIONS} iterations.`);
+        await this.persistIdentity(result, password);
+      }
+    }
+
+    return result;
+  }
+
+  private static async tryDecrypt(
+    password: string, 
+    salt: Uint8Array, 
+    iv: Uint8Array, 
+    ciphertext: Uint8Array, 
+    iterations: number
+  ): Promise<IdentityKeys | null> {
+    try {
+      const encryptionKey = await this.deriveKey(password, salt, iterations);
       const decrypted = await window.crypto.subtle.decrypt(
         { name: "AES-GCM", iv },
         encryptionKey,
@@ -90,7 +116,6 @@ export class KeyringService {
         encryptionPublicKey: this.fromHex(parsed.encryptionPublicKey),
       };
     } catch (e) {
-      console.error("Failed to decrypt identity keys", e);
       return null;
     }
   }
@@ -147,7 +172,7 @@ export class KeyringService {
 
     const salt = window.crypto.getRandomValues(new Uint8Array(16));
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const encryptionKey = await this.deriveKey(password, salt);
+    const encryptionKey = await this.deriveKey(password, salt, PBKDF2_ITERATIONS);
 
     const ciphertext = await window.crypto.subtle.encrypt(
       { name: "AES-GCM", iv },
@@ -165,7 +190,7 @@ export class KeyringService {
     localStorage.setItem(key, JSON.stringify(pkg));
   }
 
-  private static async deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+  private static async deriveKey(password: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
     const passwordKey = await window.crypto.subtle.importKey(
       "raw",
       new TextEncoder().encode(password),
@@ -178,7 +203,7 @@ export class KeyringService {
       {
         name: "PBKDF2",
         salt,
-        iterations: PBKDF2_ITERATIONS,
+        iterations,
         hash: "SHA-256"
       },
       passwordKey,

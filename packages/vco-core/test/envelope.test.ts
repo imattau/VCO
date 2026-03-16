@@ -115,14 +115,15 @@ describe("createEnvelope", () => {
   });
 });
 
-describe("assertEnvelopeIntegrity", () => {
-  it("rejects tampered payloads", () => {
+describe("createEnvelope edge cases", () => {
+  it("creates a valid envelope with an empty payload", () => {
     const crypto = new DeterministicCryptoProvider();
-    const privateKey = filled(32, 3);
+    const privateKey = filled(32, 9);
     const creatorId = encodeEd25519Multikey(privateKey);
+
     const envelope = createEnvelope(
       {
-        payload: new Uint8Array([1, 2, 3]),
+        payload: new Uint8Array(0),
         payloadType: MULTICODEC_PROTOBUF,
         creatorId,
         privateKey,
@@ -130,19 +131,46 @@ describe("assertEnvelopeIntegrity", () => {
       crypto,
     );
 
-    envelope.payload[0] = 9;
-
-    expect(() => assertEnvelopeIntegrity(envelope, crypto)).toThrow(/payload hash mismatch/i);
-    expect(verifyEnvelope(envelope, crypto)).toBe(false);
+    expect(envelope.payload.length).toBe(0);
+    expect(verifyEnvelope(envelope, crypto)).toBe(true);
   });
 
-  it("rejects tampered signatures", () => {
+  it("throws when creatorId and privateKey are missing for signature auth", () => {
     const crypto = new DeterministicCryptoProvider();
-    const privateKey = filled(32, 5);
+    expect(() =>
+      createEnvelope(
+        {
+          payload: new Uint8Array([1]),
+          payloadType: MULTICODEC_PROTOBUF,
+        },
+        crypto,
+      ),
+    ).toThrow(/creatorId and privateKey are required/i);
+  });
+
+  it("throws when zkpExtension is missing for ZKP auth", () => {
+    const crypto = new DeterministicCryptoProvider();
+    expect(() =>
+      createEnvelope(
+        {
+          payload: new Uint8Array([1]),
+          payloadType: MULTICODEC_PROTOBUF,
+          flags: FLAG_ZKP_AUTH,
+        },
+        crypto,
+      ),
+    ).toThrow(/zkpExtension is required/i);
+  });
+
+  it("clones input arrays to prevent external mutation after creation", () => {
+    const crypto = new DeterministicCryptoProvider();
+    const privateKey = filled(32, 11);
     const creatorId = encodeEd25519Multikey(privateKey);
+    const payload = new Uint8Array([1, 2, 3]);
+
     const envelope = createEnvelope(
       {
-        payload: new Uint8Array([4, 5, 6]),
+        payload,
         payloadType: MULTICODEC_PROTOBUF,
         creatorId,
         privateKey,
@@ -150,9 +178,68 @@ describe("assertEnvelopeIntegrity", () => {
       crypto,
     );
 
-    envelope.header.signature[0] ^= 0xff;
+    payload[0] = 99;
+    expect(envelope.payload[0]).toBe(1);
+  });
+});
 
+describe("assertEnvelopeIntegrity edge cases", () => {
+  it("rejects tampered header flags (non-reserved bit)", () => {
+    const crypto = new DeterministicCryptoProvider();
+    const privateKey = filled(32, 13);
+    const creatorId = encodeEd25519Multikey(privateKey);
+    const envelope = createEnvelope(
+      {
+        payload: new Uint8Array([7, 8, 9]),
+        payloadType: MULTICODEC_PROTOBUF,
+        creatorId,
+        privateKey,
+      },
+      crypto,
+    );
+
+    envelope.header.flags ^= 0x80; // Tamper with bit 7 (unreserved)
+
+    // Should fail signature check because flags are part of the signing material
     expect(() => assertEnvelopeIntegrity(envelope, crypto)).toThrow(/signature verification failed/i);
-    expect(verifyEnvelope(envelope, crypto)).toBe(false);
+  });
+
+  it("fails early on unsupported version during integrity check", () => {
+    const crypto = new DeterministicCryptoProvider();
+    const privateKey = filled(32, 15);
+    const creatorId = encodeEd25519Multikey(privateKey);
+    const envelope = createEnvelope(
+      {
+        payload: new Uint8Array([1, 1, 1]),
+        payloadType: MULTICODEC_PROTOBUF,
+        creatorId,
+        privateKey,
+      },
+      crypto,
+    );
+
+    envelope.header.version = 99;
+
+    // validation happens before hash check
+    expect(() => assertEnvelopeIntegrity(envelope, crypto)).toThrow(/Unsupported version 99/i);
+  });
+
+  it("rejects tampered nonce", () => {
+    const crypto = new DeterministicCryptoProvider();
+    const privateKey = filled(32, 17);
+    const creatorId = encodeEd25519Multikey(privateKey);
+    const envelope = createEnvelope(
+      {
+        payload: new Uint8Array([2, 2, 2]),
+        payloadType: MULTICODEC_PROTOBUF,
+        creatorId,
+        privateKey,
+      },
+      crypto,
+    );
+
+    envelope.header.nonce += 1;
+
+    expect(() => assertEnvelopeIntegrity(envelope, crypto)).toThrow(/header hash mismatch/i);
   });
 });

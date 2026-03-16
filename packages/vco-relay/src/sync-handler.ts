@@ -17,6 +17,21 @@ export interface SyncHandlerOptions {
 }
 
 /**
+ * Returns a promise that rejects with a timeout error after `ms` milliseconds.
+ */
+function receiveWithTimeout(channel: SyncMessageChannel, ms: number): Promise<Uint8Array> {
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(Object.assign(new Error(`[vco-relay] sync-handler: idle timeout after ${ms}ms`), { code: "ERR_IDLE_TIMEOUT" }));
+    }, ms);
+    channel.receive().then(
+      (frame) => { clearTimeout(timer); resolve(frame); },
+      (err)   => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
+/**
  * A channel wrapper that replays one already-received message before
  * delegating all subsequent receives to the inner channel.
  */
@@ -66,7 +81,7 @@ export async function handleSyncSession(
   let firstEnvelopeBytes: Uint8Array | null = null;
 
   try {
-    const firstBytes = await channel.receive();
+    const firstBytes = await receiveWithTimeout(channel, config.idleTimeoutMs);
     let kind: string;
     try {
       kind = decodeSyncControlKind(firstBytes);
@@ -86,12 +101,16 @@ export async function handleSyncSession(
   } catch (err: any) {
     if (
       err?.code === "ERR_STREAM_RESET" ||
+      err?.code === "ERR_IDLE_TIMEOUT" ||
       err?.message?.includes("closed") ||
       err?.message?.includes("reset") ||
       err?.message?.includes("aborted") ||
       err?.message?.includes("transport payload")
     ) {
-      return; // Session ended before first message — normal
+      if (err?.code === "ERR_IDLE_TIMEOUT") {
+        process.stderr.write(`${err.message}\n`);
+      }
+      return; // Session ended before first message — normal or timed out
     }
     process.stderr.write(`[vco-relay] sync-handler: phase detection error: ${err}\n`);
     return;
@@ -145,16 +164,20 @@ export async function handleSyncSession(
   while (true) {
     let encoded: Uint8Array;
     try {
-      encoded = await channel.receive();
+      encoded = await receiveWithTimeout(channel, config.idleTimeoutMs);
     } catch (err: any) {
-      // Stream closed cleanly or timed out — normal session end
+      // Stream closed cleanly, timed out, or reset — normal session end
       if (
         err?.code === "ERR_STREAM_RESET" ||
+        err?.code === "ERR_IDLE_TIMEOUT" ||
         err?.message?.includes("closed") ||
         err?.message?.includes("reset") ||
         err?.message?.includes("aborted") ||
         err?.message?.includes("transport payload")
       ) {
+        if (err?.code === "ERR_IDLE_TIMEOUT") {
+          process.stderr.write(`${err.message}\n`);
+        }
         break;
       }
       // Unexpected receive error — log and terminate session

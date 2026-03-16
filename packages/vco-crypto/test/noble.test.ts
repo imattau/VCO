@@ -4,6 +4,10 @@ import {
   createNobleCryptoProvider,
   deriveEd25519Multikey,
   deriveEd25519PublicKey,
+  generateX25519KeyPair,
+  deriveSharedSecret,
+  encryptAesGcm,
+  decryptAesGcm,
 } from "../src/index.js";
 
 function privateKeyFromSeed(seed: number): Uint8Array {
@@ -53,5 +57,48 @@ describe("NobleCryptoProvider", () => {
     expect(prefixLength).toBe(2);
     expect(multikey.length).toBe(prefixLength + 32);
     expect(multikey.slice(prefixLength)).toEqual(deriveEd25519PublicKey(privateKey));
+  });
+
+  it("generates valid X25519 keypairs", () => {
+    const { privateKey, publicKey } = generateX25519KeyPair();
+    expect(privateKey.length).toBe(32);
+    expect(publicKey.length).toBe(32);
+  });
+
+  it("derives consistent shared secrets with X25519", () => {
+    const alice = generateX25519KeyPair();
+    const bob = generateX25519KeyPair();
+
+    const sharedAlice = deriveSharedSecret(alice.privateKey, bob.publicKey);
+    const sharedBob = deriveSharedSecret(bob.privateKey, alice.publicKey);
+
+    expect(sharedAlice).toEqual(sharedBob);
+    expect(sharedAlice.length).toBe(32);
+  });
+
+  it("round-trips AES-GCM encryption and decryption", async () => {
+    const key = new Uint8Array(32).fill(0x42);
+    const nonce = new Uint8Array(12).fill(0x07);
+    const payload = new TextEncoder().encode("Hello VCO E2EE");
+
+    const encrypted = await encryptAesGcm(key, nonce, payload);
+    expect(encrypted.length).toBeGreaterThan(payload.length);
+
+    const decrypted = await decryptAesGcm(key, nonce, encrypted);
+    expect(new TextDecoder().decode(decrypted)).toBe("Hello VCO E2EE");
+  });
+
+  it("fails decryption with wrong key or nonce", async () => {
+    const key = new Uint8Array(32).fill(0x42);
+    const nonce = new Uint8Array(12).fill(0x07);
+    const payload = new TextEncoder().encode("Secret data");
+
+    const encrypted = await encryptAesGcm(key, nonce, payload);
+
+    const wrongKey = new Uint8Array(32).fill(0x43);
+    await expect(decryptAesGcm(wrongKey, nonce, encrypted)).rejects.toThrow();
+
+    const wrongNonce = new Uint8Array(12).fill(0x08);
+    await expect(decryptAesGcm(key, wrongNonce, encrypted)).rejects.toThrow();
   });
 });

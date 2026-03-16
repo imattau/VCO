@@ -1,6 +1,7 @@
+import { blake3 } from "@vco/vco-crypto";
 import { HEADER_HASH_LENGTH, MAX_VCO_SIZE } from "./constants.js";
 import { EnvelopeValidationError } from "./errors.js";
-import { assertValidPayloadMultihash } from "./multiformat.js";
+import { decodeMultihash, assertValidPayloadMultihash } from "./multiformat.js";
 import type { VcoEnvelope } from "./types.js";
 import { validateEnvelope } from "./validation.js";
 
@@ -197,5 +198,16 @@ export function reassemblePayloadFragments(fragmentSet: PayloadFragmentSet): Uin
 
   const sorted = [...fragmentSet.fragments].sort((left, right) => left.fragmentIndex - right.fragmentIndex);
   const chunks = sorted.map((fragment) => fragment.payloadChunk);
-  return concatChunks(chunks);
+  const payload = concatChunks(chunks);
+
+  const actualDigest = blake3(payload);
+  const expectedDigest = decodeMultihash(sorted[0].payloadHash).digestBytes;
+  if (!bytesEqual(actualDigest, expectedDigest)) {
+    const toHex = (b: Uint8Array) => Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+    throw new EnvelopeValidationError(
+      `Payload hash mismatch after reassembly: expected ${toHex(expectedDigest)}, got ${toHex(actualDigest)}`,
+    );
+  }
+
+  return payload;
 }

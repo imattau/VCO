@@ -1,6 +1,7 @@
 import { 
   generateX25519KeyPair, 
   deriveSharedSecret, 
+  deriveKeyHkdf,
   encryptAesGcm, 
   decryptAesGcm, 
   ByteArray
@@ -15,6 +16,7 @@ export class E2EEService {
   /**
    * Encrypts a message for a recipient using their long-term X25519 public key.
    * Performs an ephemeral-static Diffie-Hellman key exchange.
+   * Derives a symmetric key using HKDF-SHA256 for better key distribution.
    */
   static async encryptMessage(
     recipientPublicKey: ByteArray, 
@@ -26,16 +28,19 @@ export class E2EEService {
     
     // 2. Derive shared secret (X25519 DH)
     const sharedSecret = deriveSharedSecret(ephemeral.privateKey, recipientPublicKey);
+
+    // 3. Derive symmetric key using HKDF-SHA256
+    const encryptionKey = deriveKeyHkdf(sharedSecret, undefined, new TextEncoder().encode("vco_dm_aes_gcm"));
     
-    // 3. Prepare payload
+    // 4. Prepare payload
     const payload: DirectMessagePayloadData = { content, mediaCids };
     const encodedPayload = encodeDirectMessagePayload(payload);
     
-    // 4. Generate random nonce (12 bytes for AES-GCM)
+    // 5. Generate random nonce (12 bytes for AES-GCM)
     const nonce = window.crypto.getRandomValues(new Uint8Array(12));
     
-    // 5. Encrypt with AES-GCM
-    const encryptedPayload = await encryptAesGcm(sharedSecret, nonce, encodedPayload);
+    // 6. Encrypt with AES-GCM
+    const encryptedPayload = await encryptAesGcm(encryptionKey, nonce, encodedPayload);
     
     return {
       ephemeralPubkey: ephemeral.publicKey,
@@ -55,11 +60,14 @@ export class E2EEService {
   ): Promise<DirectMessagePayloadData> {
     // 1. Derive shared secret (X25519 DH)
     const sharedSecret = deriveSharedSecret(localPrivateKey, ephemeralPublicKey);
+
+    // 2. Derive symmetric key using HKDF-SHA256 (must match info string from encryption)
+    const decryptionKey = deriveKeyHkdf(sharedSecret, undefined, new TextEncoder().encode("vco_dm_aes_gcm"));
     
-    // 2. Decrypt with AES-GCM
-    const decodedPayload = await decryptAesGcm(sharedSecret, nonce, encryptedPayload);
+    // 3. Decrypt with AES-GCM
+    const decodedPayload = await decryptAesGcm(decryptionKey, nonce, encryptedPayload);
     
-    // 3. Decode payload
+    // 4. Decode payload
     return decodeDirectMessagePayload(decodedPayload);
   }
 }

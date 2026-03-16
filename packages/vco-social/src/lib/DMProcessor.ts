@@ -3,7 +3,7 @@ import {
   decodeDirectMessage
 } from '@vco/vco-schemas';
 import { decodeEnvelopeProto as decodeCore } from '@vco/vco-core';
-import { toHex } from './encoding';
+import { toHex, fromHex } from './encoding';
 import { E2EEService } from './E2EEService';
 import { IdentityKeys } from './KeyringService';
 
@@ -25,14 +25,15 @@ export class DMProcessor {
     const dmMap = new Map<string, MessageWithMetadata[]>();
 
     for (const e of envelopes) {
+      if (typeof e.channelId !== 'string') continue;
       if (e.channelId.startsWith("vco://channels/dm/")) {
         try {
           const bytes = Uint8Array.from(atob(e.payload), c => c.charCodeAt(0));
           const coreEnvelope = decodeCore(bytes);
-          const cid = Uint8Array.from(atob(e.cid), c => c.charCodeAt(0));
+          const cid = fromHex(e.cid);
           const creatorIdHex = toHex(coreEnvelope.header.creatorId);
           const dmData = decodeDirectMessage(coreEnvelope.payload);
-          
+
           let decrypted: any = { content: "[Encrypted Message]", mediaCids: [] };
           try {
             decrypted = await E2EEService.decryptMessage(
@@ -41,7 +42,9 @@ export class DMProcessor {
               dmData.nonce,
               dmData.encryptedPayload
             );
-          } catch {}
+          } catch (e) {
+            console.warn('DMProcessor: decryption failed', e);
+          }
 
           const msg: MessageWithMetadata = {
             cid,
@@ -53,7 +56,9 @@ export class DMProcessor {
           const peerKey = e.channelId.replace("vco://channels/dm/", "");
           if (!dmMap.has(peerKey)) dmMap.set(peerKey, []);
           dmMap.get(peerKey)!.push(msg);
-        } catch {}
+        } catch (e) {
+          console.warn('DMProcessor: failed to decode envelope or DM for cid', e?.cid, e);
+        }
       }
     }
 
