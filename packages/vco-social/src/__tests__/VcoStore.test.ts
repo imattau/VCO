@@ -1,14 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VcoStore, StoredEnvelope } from '../lib/VcoStore';
-
-// Polyfill window for VcoStore logic
-if (typeof window === 'undefined') {
-  (global as any).window = {
-    __TAURI_INTERNALS__: {} // Enable Tauri mode in VcoStore
-  };
-} else {
-  (window as any).__TAURI_INTERNALS__ = {};
-}
+import { setPlatform } from '../lib/platform';
+import { MockPlatform } from './PlatformTestUtils';
 
 // --- ROBUST INDEXEDDB MOCK ---
 class MockIDBRequest {
@@ -111,23 +104,24 @@ const mockIDB = {
 (global as any).indexedDB = mockIDB;
 (global as any).IDBKeyRange = { upperBound: vi.fn() };
 
-// Mock Tauri
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(async () => 'test-profile'),
-}));
-
-describe('VcoStore Unit Tests', () => {
+describe('VcoStore Unit Tests (Platform Abstracted)', () => {
   let store: VcoStore;
+  let mockPlatform: MockPlatform;
 
   beforeEach(() => {
+    mockPlatform = new MockPlatform();
+    mockPlatform.getIndexedDB = vi.fn(() => mockIDB as any);
+    setPlatform(mockPlatform);
     store = new VcoStore();
     stores = {};
     vi.clearAllMocks();
   });
 
   it('should initialize with correct profile-based name', async () => {
+    mockPlatform.profile = "custom-profile";
     await (store as any).getDB();
-    expect(mockIDB.open).toHaveBeenCalledWith('vco_social_db_test-profile', 4);
+    expect(mockIDB.open).toHaveBeenCalledWith('vco_social_db_custom-profile', 4);
+    expect(mockPlatform.getVcoProfile).toHaveBeenCalled();
   });
 
   it('should store and retrieve envelopes', async () => {

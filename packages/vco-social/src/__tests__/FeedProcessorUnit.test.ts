@@ -110,10 +110,12 @@ describe('FeedProcessor.process()', () => {
       const cidHex = toHex(envelope.headerHash);
       const item = makeStoreItem(payload, cidHex);
 
-      const result: ProcessedResults = FeedProcessor.process(
+      const followingSet = new Set<string>();
+      const result = FeedProcessor.process(
         [item],
         myProfile,
         profileMap,
+        followingSet,
         myCreatorIdHex,
       );
 
@@ -142,12 +144,13 @@ describe('FeedProcessor.process()', () => {
       const cidHex = toHex(envelope.headerHash);
       const item = makeStoreItem(payload, cidHex);
 
-      const result = FeedProcessor.process([item], myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      const result = FeedProcessor.process([item], myProfile, profileMap, followingSet, myCreatorIdHex);
 
       expect(result.feedItems).toHaveLength(1);
       const profile = result.feedItems[0].authorProfile;
-      // placeholder displayName starts with 'Peer ' followed by first 6 hex chars
-      expect(profile.displayName).toMatch(/^Peer [0-9a-f]{6}/);
+      // placeholder displayName starts with 'User ' followed by first 6 hex chars
+      expect(profile.displayName).toMatch(/^User [0-9a-f]{6}/);
       expect(profile.bio).toBe('Offline identity');
     });
   });
@@ -186,10 +189,12 @@ describe('FeedProcessor.process()', () => {
       const replyPayload = btoa(String.fromCharCode(...encodeEnvelopeProto(replyEnvelope)));
       const replyItem = makeStoreItem(replyPayload, toHex(replyEnvelope.headerHash));
 
+      const followingSet = new Set<string>();
       const result = FeedProcessor.process(
-        [postItem, replyItem],
+        [replyItem, postItem],
         myProfile,
         profileMap,
+        followingSet,
         myCreatorIdHex,
       );
 
@@ -227,6 +232,7 @@ describe('FeedProcessor.process()', () => {
       );
       const replyPayload = btoa(String.fromCharCode(...encodeEnvelopeProto(replyEnvelope)));
 
+      const followingSet = new Set<string>();
       const result = FeedProcessor.process(
         [
           makeStoreItem(postPayload, toHex(parentCid)),
@@ -234,6 +240,7 @@ describe('FeedProcessor.process()', () => {
         ],
         myProfile,
         profileMap,
+        followingSet,
         myCreatorIdHex,
       );
 
@@ -263,7 +270,8 @@ describe('FeedProcessor.process()', () => {
 
       let result!: ProcessedResults;
       expect(() => {
-        result = FeedProcessor.process([item], myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      result = FeedProcessor.process([item], myProfile, profileMap, followingSet, myCreatorIdHex);
       }).not.toThrow();
 
       // The reply is still emitted; parent-link notification is simply absent.
@@ -288,7 +296,8 @@ describe('FeedProcessor.process()', () => {
       const replyPayload = btoa(String.fromCharCode(...encodeEnvelopeProto(replyEnvelope)));
       const item = makeStoreItem(replyPayload, toHex(replyEnvelope.headerHash));
 
-      FeedProcessor.process([item], myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      FeedProcessor.process([item], myProfile, profileMap, followingSet, myCreatorIdHex);
 
       expect(console.debug).toHaveBeenCalledWith(
         expect.stringContaining('FeedProcessor: reply references unknown parent CID'),
@@ -327,6 +336,7 @@ describe('FeedProcessor.process()', () => {
       );
       const reactionPayload = btoa(String.fromCharCode(...encodeEnvelopeProto(reactionEnvelope)));
 
+      const followingSet = new Set<string>();
       const result = FeedProcessor.process(
         [
           makeStoreItem(postPayload, toHex(targetCid)),
@@ -334,6 +344,7 @@ describe('FeedProcessor.process()', () => {
         ],
         myProfile,
         profileMap,
+        followingSet,
         myCreatorIdHex,
       );
 
@@ -368,6 +379,7 @@ describe('FeedProcessor.process()', () => {
       );
       const reactionPayload = btoa(String.fromCharCode(...encodeEnvelopeProto(reactionEnvelope)));
 
+      const followingSet = new Set<string>();
       const result = FeedProcessor.process(
         [
           makeStoreItem(postPayload, toHex(targetCid)),
@@ -375,6 +387,7 @@ describe('FeedProcessor.process()', () => {
         ],
         myProfile,
         profileMap,
+        followingSet,
         myCreatorIdHex,
       );
 
@@ -404,7 +417,8 @@ describe('FeedProcessor.process()', () => {
 
       let result!: ProcessedResults;
       expect(() => {
-        result = FeedProcessor.process([item], myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      result = FeedProcessor.process([item], myProfile, profileMap, followingSet, myCreatorIdHex);
       }).not.toThrow();
 
       const targetHex = toHex(unknownTargetCid);
@@ -427,10 +441,12 @@ describe('FeedProcessor.process()', () => {
       );
       const reactionPayload = btoa(String.fromCharCode(...encodeEnvelopeProto(reactionEnvelope)));
 
+      const followingSet = new Set<string>();
       FeedProcessor.process(
         [makeStoreItem(reactionPayload, toHex(reactionEnvelope.headerHash))],
         myProfile,
         profileMap,
+        followingSet,
         myCreatorIdHex,
       );
 
@@ -471,6 +487,7 @@ describe('FeedProcessor.process()', () => {
       );
       const repostPayload = btoa(String.fromCharCode(...encodeEnvelopeProto(repostEnvelope)));
 
+      const followingSet = new Set<string>();
       const result = FeedProcessor.process(
         [
           makeStoreItem(postPayload, toHex(originalPostCid)),
@@ -478,6 +495,7 @@ describe('FeedProcessor.process()', () => {
         ],
         myProfile,
         profileMap,
+        followingSet,
         myCreatorIdHex,
       );
 
@@ -521,6 +539,7 @@ describe('FeedProcessor.process()', () => {
       );
       const repostPayload = btoa(String.fromCharCode(...encodeEnvelopeProto(repostEnvelope)));
 
+      const followingSet = new Set<string>();
       const result = FeedProcessor.process(
         [
           makeStoreItem(postPayload, toHex(originalPostCid)),
@@ -528,6 +547,7 @@ describe('FeedProcessor.process()', () => {
         ],
         myProfile,
         profileMap,
+        followingSet,
         myCreatorIdHex,
       );
 
@@ -546,7 +566,8 @@ describe('FeedProcessor.process()', () => {
 
       let result!: ProcessedResults;
       expect(() => {
-        result = FeedProcessor.process([item], myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      result = FeedProcessor.process([item], myProfile, profileMap, followingSet, myCreatorIdHex);
       }).not.toThrow();
 
       expect(result.feedItems).toHaveLength(0);
@@ -557,7 +578,8 @@ describe('FeedProcessor.process()', () => {
       const garbled = btoa('bad protobuf bytes here');
       const item = makeStoreItem(garbled, 'baadf00d');
 
-      FeedProcessor.process([item], myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      FeedProcessor.process([item], myProfile, profileMap, followingSet, myCreatorIdHex);
 
       expect(console.warn).toHaveBeenCalledWith(
         expect.stringContaining('FeedProcessor: failed to process item'),
@@ -580,7 +602,8 @@ describe('FeedProcessor.process()', () => {
 
       let result!: ProcessedResults;
       expect(() => {
-        result = FeedProcessor.process([item], myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      result = FeedProcessor.process([item], myProfile, profileMap, followingSet, myCreatorIdHex);
       }).not.toThrow();
 
       expect(result.feedItems).toHaveLength(0);
@@ -592,8 +615,8 @@ describe('FeedProcessor.process()', () => {
 
   describe('empty batch', () => {
     it('returns an empty ProcessedResults without crashing', () => {
-      const result = FeedProcessor.process([], myProfile, profileMap, myCreatorIdHex);
-
+      const followingSet = new Set<string>();
+      const result = FeedProcessor.process([], myProfile, profileMap, followingSet, myCreatorIdHex);
       expect(result.feedItems).toHaveLength(0);
       expect(result.replyItems).toHaveLength(0);
       expect(result.followSet.size).toBe(0);
@@ -667,7 +690,8 @@ describe('FeedProcessor.process()', () => {
         makePost('Post C', 0x12),
       ];
 
-      const result = FeedProcessor.process(items, myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      const result = FeedProcessor.process(items, myProfile, profileMap, followingSet, myCreatorIdHex);
 
       expect(result.feedItems).toHaveLength(3);
       const contents = result.feedItems.map(fi => fi.data.content).sort();
@@ -693,7 +717,8 @@ describe('FeedProcessor.process()', () => {
       // Use a different channelId
       const item = makeStoreItem(b64, toHex(envelope.headerHash), 'vco://channels/other/channel');
 
-      const result = FeedProcessor.process([item], myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      const result = FeedProcessor.process([item], myProfile, profileMap, followingSet, myCreatorIdHex);
 
       expect(result.feedItems).toHaveLength(0);
     });
@@ -735,10 +760,12 @@ describe('FeedProcessor.process()', () => {
       const replyPayload = btoa(String.fromCharCode(...encodeEnvelopeProto(replyEnvelope)));
       const item = makeStoreItem(replyPayload, toHex(replyEnvelope.headerHash));
 
+      const followingSet = new Set<string>();
       const result = FeedProcessor.process(
         [item],
         myProfile,
         profileMap,
+        followingSet,
         myCreatorIdHex,
         extraPosts,
       );
@@ -771,7 +798,8 @@ describe('FeedProcessor.process()', () => {
 
       let result!: ProcessedResults;
       expect(() => {
-        result = FeedProcessor.process([item], myProfile, profileMap, myCreatorIdHex);
+      const followingSet = new Set<string>();
+      result = FeedProcessor.process([item], myProfile, profileMap, followingSet, myCreatorIdHex);
       }).not.toThrow();
 
       expect(result.feedItems).toHaveLength(0);

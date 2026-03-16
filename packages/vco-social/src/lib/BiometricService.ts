@@ -1,4 +1,4 @@
-import { checkStatus, authenticate } from '@tauri-apps/plugin-biometric';
+import { getPlatform } from "./platform";
 
 const BIO_ENABLED_KEY = 'vco_bio_enabled';
 
@@ -16,9 +16,8 @@ export class BiometricService {
    * Always false outside Tauri (browser dev mode).
    */
   static async isAvailable(): Promise<boolean> {
-    if (!(window as any).__TAURI_INTERNALS__) return false;
     try {
-      const status = await checkStatus();
+      const status = await getPlatform().checkBiometricStatus();
       return status.isAvailable;
     } catch {
       return false;
@@ -29,7 +28,7 @@ export class BiometricService {
    * Returns true if the user has opted into biometric unlock.
    */
   static isEnabled(): boolean {
-    return localStorage.getItem(BIO_ENABLED_KEY) === 'true';
+    return getPlatform().getLocalStorage().getItem(BIO_ENABLED_KEY) === 'true';
   }
 
   /**
@@ -39,9 +38,9 @@ export class BiometricService {
    */
   static async enable(_password: string): Promise<boolean> {
     try {
-      await authenticate('Confirm identity to enable biometric unlock');
+      await getPlatform().authenticateBiometric('Confirm identity to enable biometric unlock');
       // SECURITY: DO NOT store 'password' in localStorage!
-      localStorage.setItem(BIO_ENABLED_KEY, 'true');
+      getPlatform().getLocalStorage().setItem(BIO_ENABLED_KEY, 'true');
       console.warn("BiometricService: enabled without persistent secret storage. Secure vault plugin required for full functionality.");
       return true;
     } catch {
@@ -56,7 +55,7 @@ export class BiometricService {
   static async unlock(): Promise<string | null> {
     if (!this.isEnabled()) return null;
     try {
-      await authenticate('Unlock your VCO identity');
+      await getPlatform().authenticateBiometric('Unlock your VCO identity');
       // In a real implementation, we would retrieve the secret from a secure vault here.
       console.error("BiometricService: biometric unlock called but secure secret storage is not implemented.");
       return null;
@@ -69,6 +68,6 @@ export class BiometricService {
    * Disables biometric unlock.
    */
   static disable(): void {
-    localStorage.removeItem(BIO_ENABLED_KEY);
+    getPlatform().getLocalStorage().removeItem(BIO_ENABLED_KEY);
   }
 }

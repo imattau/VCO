@@ -1,35 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { BiometricService } from '../lib/BiometricService';
+import { setPlatform } from '../lib/platform';
+import { MockPlatform } from './PlatformTestUtils';
 
-// Polyfill for Node environment
-if (typeof window === 'undefined') {
-  (global as any).window = {
-    __TAURI_INTERNALS__: {} // Simulate Tauri
-  };
-  
-  // Simple localStorage mock
-  const storage: Record<string, string> = {};
-  (global as any).localStorage = {
-    getItem: (key: string) => storage[key] || null,
-    setItem: (key: string, val: string) => { storage[key] = val; },
-    removeItem: (key: string) => { delete storage[key]; }
-  };
-}
-
-// Mock tauri-plugin-biometric
-vi.mock('@tauri-apps/plugin-biometric', () => ({
-  checkStatus: vi.fn(async () => ({ isAvailable: true })),
-  authenticate: vi.fn(async () => true)
-}));
-
-describe('BiometricService Security Tests', () => {
+describe('BiometricService Unit Tests (Platform Abstracted)', () => {
+  let mockPlatform: MockPlatform;
   const BIO_ENABLED_KEY = 'vco_bio_enabled';
-  const BIO_PASSWORD_KEY = 'vco_bio_password'; // Legacy key
 
   beforeEach(() => {
-    localStorage.removeItem(BIO_ENABLED_KEY);
-    localStorage.removeItem(BIO_PASSWORD_KEY);
-    vi.clearAllMocks();
+    mockPlatform = new MockPlatform();
+    setPlatform(mockPlatform);
   });
 
   it('should enable biometrics without storing the password in localStorage', async () => {
@@ -37,17 +17,13 @@ describe('BiometricService Security Tests', () => {
     const success = await BiometricService.enable(password);
     
     expect(success).toBe(true);
-    expect(localStorage.getItem(BIO_ENABLED_KEY)).toBe('true');
+    expect(mockPlatform.getLocalStorage().getItem(BIO_ENABLED_KEY)).toBe('true');
+    expect(mockPlatform.authenticateBiometric).toHaveBeenCalled();
     
-    // CRITICAL SECURITY CHECK:
-    expect(localStorage.getItem(BIO_PASSWORD_KEY)).toBeNull();
-    
-    // Also check that the password string doesn't appear anywhere else in localStorage
-    const allKeys = Object.keys((global as any).localStorage);
-    for (const key of allKeys) {
-      if (key !== 'getItem' && key !== 'setItem' && key !== 'removeItem') {
-        expect(localStorage.getItem(key)).not.toBe(password);
-      }
+    // Check that the password string doesn't appear anywhere in localStorage
+    const storage = (mockPlatform as any).storage;
+    for (const key in storage) {
+      expect(storage[key]).not.toBe(password);
     }
   });
 
@@ -55,11 +31,12 @@ describe('BiometricService Security Tests', () => {
     await BiometricService.enable("some-pass");
     const result = await BiometricService.unlock();
     expect(result).toBeNull();
+    expect(mockPlatform.authenticateBiometric).toHaveBeenCalled();
   });
 
   it('should correctly disable biometrics', () => {
-    localStorage.setItem(BIO_ENABLED_KEY, 'true');
+    mockPlatform.getLocalStorage().setItem(BIO_ENABLED_KEY, 'true');
     BiometricService.disable();
-    expect(localStorage.getItem(BIO_ENABLED_KEY)).toBeNull();
+    expect(mockPlatform.getLocalStorage().getItem(BIO_ENABLED_KEY)).toBeNull();
   });
 });

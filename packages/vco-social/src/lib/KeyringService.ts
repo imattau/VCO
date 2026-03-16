@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { 
   deriveEd25519Multikey, 
   deriveEd25519PublicKey, 
@@ -6,6 +5,7 @@ import {
   ByteArray
 } from "@vco/vco-crypto";
 import { toHex } from "@/lib/encoding";
+import { getPlatform } from "./platform";
 
 export interface IdentityKeys {
   signingPrivateKey: ByteArray;
@@ -22,14 +22,7 @@ const PBKDF2_LEGACY_ITERATIONS = 100000;
 
 export class KeyringService {
   private static async getStorageKey(): Promise<string> {
-    let profile = "default";
-    try {
-      if ((window as any).__TAURI_INTERNALS__) {
-        profile = await invoke<string>("get_vco_profile");
-      }
-    } catch (e) {
-      console.warn("KeyringService: failed to get profile name from Tauri", e);
-    }
+    const profile = await getPlatform().getVcoProfile();
     return `${STORAGE_KEY_BASE}_${profile}`;
   }
 
@@ -40,7 +33,7 @@ export class KeyringService {
   static async generateAndStoreIdentity(password: string): Promise<IdentityKeys> {
     // 1. Ed25519 Signing Keys
     const signingPrivateKey = new Uint8Array(32);
-    window.crypto.getRandomValues(signingPrivateKey);
+    getPlatform().getRandomValues(signingPrivateKey);
     const signingPublicKey = deriveEd25519PublicKey(signingPrivateKey);
     const creatorId = deriveEd25519Multikey(signingPrivateKey);
 
@@ -66,7 +59,7 @@ export class KeyringService {
    */
   static async unlockIdentity(password: string): Promise<IdentityKeys | null> {
     const key = await this.getStorageKey();
-    const saved = localStorage.getItem(key);
+    const saved = getPlatform().getLocalStorage().getItem(key);
     if (!saved) return null;
 
     const pkg = JSON.parse(saved);
@@ -100,7 +93,7 @@ export class KeyringService {
   ): Promise<IdentityKeys | null> {
     try {
       const encryptionKey = await this.deriveKey(password, salt, iterations);
-      const decrypted = await window.crypto.subtle.decrypt(
+      const decrypted = await getPlatform().getSubtleCrypto().decrypt(
         { name: "AES-GCM", iv },
         encryptionKey,
         ciphertext
@@ -125,7 +118,7 @@ export class KeyringService {
    */
   static async revokeIdentity(): Promise<void> {
     const key = await this.getStorageKey();
-    localStorage.removeItem(key);
+    getPlatform().getLocalStorage().removeItem(key);
   }
 
   /**
@@ -141,7 +134,7 @@ export class KeyringService {
    */
   static async hasIdentity(): Promise<boolean> {
     const key = await this.getStorageKey();
-    return localStorage.getItem(key) !== null;
+    return getPlatform().getLocalStorage().getItem(key) !== null;
   }
 
   /**
@@ -149,7 +142,7 @@ export class KeyringService {
    */
   static async exportEncryptedPackage(): Promise<string | null> {
     const key = await this.getStorageKey();
-    return localStorage.getItem(key);
+    return getPlatform().getLocalStorage().getItem(key);
   }
 
   /**
@@ -157,7 +150,7 @@ export class KeyringService {
    */
   static async importEncryptedPackage(pkgJson: string): Promise<void> {
     const key = await this.getStorageKey();
-    localStorage.setItem(key, pkgJson);
+    getPlatform().getLocalStorage().setItem(key, pkgJson);
   }
 
   private static async persistIdentity(identity: IdentityKeys, password: string) {
@@ -170,11 +163,11 @@ export class KeyringService {
       encryptionPublicKey: toHex(identity.encryptionPublicKey),
     });
 
-    const salt = window.crypto.getRandomValues(new Uint8Array(16));
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const salt = getPlatform().getRandomValues(new Uint8Array(16));
+    const iv = getPlatform().getRandomValues(new Uint8Array(12));
     const encryptionKey = await this.deriveKey(password, salt, PBKDF2_ITERATIONS);
 
-    const ciphertext = await window.crypto.subtle.encrypt(
+    const ciphertext = await getPlatform().getSubtleCrypto().encrypt(
       { name: "AES-GCM", iv },
       encryptionKey,
       new TextEncoder().encode(serialized)
@@ -187,11 +180,11 @@ export class KeyringService {
     };
 
     const key = await this.getStorageKey();
-    localStorage.setItem(key, JSON.stringify(pkg));
+    getPlatform().getLocalStorage().setItem(key, JSON.stringify(pkg));
   }
 
   private static async deriveKey(password: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
-    const passwordKey = await window.crypto.subtle.importKey(
+    const passwordKey = await getPlatform().getSubtleCrypto().importKey(
       "raw",
       new TextEncoder().encode(password),
       "PBKDF2",
@@ -199,7 +192,7 @@ export class KeyringService {
       ["deriveBits", "deriveKey"]
     );
 
-    return await window.crypto.subtle.deriveKey(
+    return await getPlatform().getSubtleCrypto().deriveKey(
       {
         name: "PBKDF2",
         salt,

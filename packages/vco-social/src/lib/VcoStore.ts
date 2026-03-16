@@ -1,6 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import { toHex } from "./encoding";
 import type { VcoEnvelope } from "@vco/vco-core";
+import { getPlatform } from "./platform";
 
 const DB_NAME_BASE = "vco_social_db";
 const DB_VERSION = 4;
@@ -21,43 +21,18 @@ export class VcoStore {
 
   /**
    * Internal helper to get the active storage profile.
-   * Retries if Tauri isn't ready yet.
    */
   private async getStorageProfile(): Promise<string> {
     if (this.profile && this.profile !== "default") return this.profile;
     
-    // If not in Tauri, return default immediately
-    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
-      this.profile = "default";
-      return "default";
-    }
-
-    // Attempt to get profile with retries
-    for (let i = 0; i < 5; i++) {
-      try {
-        const p = await invoke<string>("get_vco_profile");
-        if (p) {
-          console.log(`VcoStore: Resolved profile [${p}] on attempt ${i+1}`);
-          this.profile = p;
-          return p;
-        }
-      } catch (e) {
-        console.warn(`VcoStore: Profile resolution attempt ${i+1} failed`, e);
-        await new Promise(r => setTimeout(r, 100 * (i + 1)));
-      }
-    }
-
-    console.error("VcoStore: Failed to resolve profile after retries, falling back to default");
-    this.profile = "default";
-    return "default";
+    this.profile = await getPlatform().getVcoProfile();
+    return this.profile;
   }
 
   private async getDB(): Promise<IDBDatabase> {
     if (this.db) return this.db;
     if (this.dbPromise) return this.dbPromise;
 
-    // Fix 1: assign dbPromise synchronously before any await so concurrent
-    // callers immediately receive the same promise and cannot race past this guard.
     this.dbPromise = (async () => {
       const profile = await this.getStorageProfile();
       const dbName = `${DB_NAME_BASE}_${profile}`;
@@ -65,7 +40,7 @@ export class VcoStore {
       console.log(`VcoStore: Opening database [${dbName}] (v${DB_VERSION})`);
 
       return new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open(dbName, DB_VERSION);
+        const request = getPlatform().getIndexedDB().open(dbName, DB_VERSION);
 
         request.onupgradeneeded = (event: any) => {
           const db = request.result;
@@ -411,7 +386,7 @@ export class VcoStore {
    * Single write path for all envelope storage.
    * Builds a StoredEnvelope from a decoded VcoEnvelope and stores it.
    */
-  async storeEnvelope(env: VcoEnvelope, syncStatus: 'pending' | 'synced'): Promise<void> {
+  async storeEnvelope(env: VcoEnvelope, syncStatus: 'pending' | 'synced', explicitChannelId?: string): Promise<void> {
     const { encodeEnvelopeProto } = await import('@vco/vco-core');
     const encoded = encodeEnvelopeProto(env);
     // base64 encode without TextDecoder to avoid 0x00 truncation
@@ -421,10 +396,10 @@ export class VcoStore {
       binary += String.fromCharCode(bytes[i]);
     }
     const payload = btoa(binary);
-    // channelId: use contextId if available (hex), else creatorId hex
-    const channelId = env.header.contextId
+    // channelId: use explicit if provided, else contextId (hex), else creatorId hex
+    const channelId = explicitChannelId || (env.header.contextId && env.header.contextId.length > 0
       ? toHex(env.header.contextId)
-      : toHex(env.header.creatorId);
+      : toHex(env.header.creatorId));
     const stored: StoredEnvelope = {
       cid: toHex(env.headerHash),
       channelId,

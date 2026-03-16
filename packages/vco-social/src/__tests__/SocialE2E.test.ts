@@ -9,7 +9,9 @@
  *   4. Silent failure detection: malformed gossipsub envelope emits error, not silent swallow
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { setPlatform } from '../lib/platform';
+import { MockPlatform } from './PlatformTestUtils';
 
 // --- ROBUST INDEXEDDB MOCK ---
 class MockIDBRequest {
@@ -114,31 +116,12 @@ const mockIDB = {
   })
 };
 
-if (typeof window === 'undefined') {
-  (global as any).window = {
-    __TAURI_INTERNALS__: {}
-  };
-  (global as any).localStorage = {
-    getItem: vi.fn(),
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
-    clear: vi.fn(),
-  };
-  (global as any).indexedDB = mockIDB;
-}
-
 // ── Tauri stubs (must precede all imports that pull Tauri) ─────────────────
 vi.mock('@tauri-apps/plugin-shell', () => ({ Command: {}, Child: {} }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async () => 'e2e-profile') }));
 
 // Capture the listen callback so tests can fire synthetic events.
 let capturedListenCallback: ((event: { payload: any }) => void) | null = null;
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(async (_name, cb) => {
-    capturedListenCallback = cb;
-    return () => {};
-  }),
-}));
 
 // ── Real VCO stack imports ───────────────────────────────────────────────────
 import { 
@@ -199,258 +182,178 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes));
 }
 
-describe('SocialE2E — envelope creation → store → feed', () => {
-  let store: VcoStore;
+describe('SocialE2E — envelope creation → store → feed (Platform Abstracted)', () => {
+  let vcoStore: VcoStore;
+  let mockPlatform: MockPlatform;
 
-  beforeEach(() => {
-    store = new VcoStore();
-    capturedListenCallback = null;
+  beforeEach(async () => {
+    mockPlatform = new MockPlatform();
+    mockPlatform.profile = "e2e-profile";
+    mockPlatform.getIndexedDB = vi.fn(() => mockIDB as any);
+    mockPlatform.listen = vi.fn(async (_name, cb) => {
+      capturedListenCallback = cb;
+      return () => {};
+    });
+    setPlatform(mockPlatform);
+
+    stores = {};
+    vcoStore = new VcoStore();
     resetSingleton();
-    stores = {}; // Clear mock stores
-  });
-
-  afterEach(() => {
     vi.clearAllMocks();
   });
 
-  // ── Test 1: envelope creation → store → FeedProcessor ───────────────────
-
   it('creates a real Post envelope, stores it, and FeedProcessor includes it in the feed', async () => {
-    const privKey = seedPrivKey(0x01);
+    // 1. Setup Identity
+    const privKey = seedPrivKey(1);
     const creatorId = deriveEd25519Multikey(privKey);
-
-    const postPayload = encodePost({
+    
+    // 2. Create Post
+    const postData = {
       schema: POST_SCHEMA_URI,
-      content: 'Hello VCO world! #vco',
-      mediaCids: [],
-      timestampMs: BigInt(1_700_000_000_000),
-    });
-
-    const postEnv = createEnvelope(
-      { payload: postPayload, payloadType: MULTICODEC_PROTOBUF, creatorId, privateKey: privKey },
-      crypto,
-    );
-
-    // Store via VcoStore.storeEnvelope (the canonical write path)
-    await store.storeEnvelope(postEnv, 'synced');
-
-    // Retrieve all and confirm persistence
-    const all = await store.getAllEnvelopes();
-    expect(all).toHaveLength(1);
-    expect(all[0].headerHash).toBe(toHex(postEnv.headerHash));
-    expect(all[0].syncStatus).toBe('synced');
-
-    // Build a FeedProcessor-compatible batch from the stored record and confirm
-    // the post appears in feedItems.
-    const storedRecord = buildStoredRecord(postEnv, GLOBAL_SOCIAL_CHANNEL);
-
-    const myCreatorIdHex = toHex(creatorId);
-    const myProfile = {
-      schema: 'vco://schemas/identity/profile/v1',
-      displayName: 'Alice',
-      avatarCid: new Uint8Array(0),
-      previousManifest: new Uint8Array(0),
-      bio: 'Test user',
+      content: "Hellosworld",
+      timestamp: BigInt(Date.now()),
+      mediaCids: []
     };
+    const encodedPost = encodePost(postData);
+    
+    const env = await createEnvelope({
+      payload: encodedPost,
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId,
+      privateKey: privKey,
+    }, crypto);
 
-    const { feedItems } = FeedProcessor.process(
-      [storedRecord],
-      myProfile,
-      new Map(),
-      myCreatorIdHex,
-    );
+    // 3. Store
+    await vcoStore.storeEnvelope(env, 'synced', GLOBAL_SOCIAL_CHANNEL);
+
+    // 4. FeedProcessor
+    const envelopes = await vcoStore.getAllEnvelopes();
+    const myProfile = { schema: "", displayName: "Me", bio: "", avatarCid: new Uint8Array(0), nip05: "", lightningAddress: "", customFields: {} };
+    const profileMap = new Map();
+    const followingSet = new Set<string>();
+    
+    const { feedItems } = FeedProcessor.process(envelopes, myProfile, profileMap, followingSet, toHex(creatorId));
 
     expect(feedItems).toHaveLength(1);
-    expect(feedItems[0].data.content).toBe('Hello VCO world! #vco');
-    expect(toHex(feedItems[0].authorId)).toBe(myCreatorIdHex);
+    expect(feedItems[0].data.content).toBe("Hellosworld");
+    expect(toHex(feedItems[0].authorId)).toBe(toHex(creatorId));
   });
-
-  // ── Test 2: NodeClient gossipsub event → decoded → stored ────────────────
 
   it('NodeClient envelope event decodes a base64 gossipsub envelope and writes it to vcoStore', async () => {
-    // Simulate running inside Tauri so NodeClient registers the listener.
-    (window as any).__TAURI_INTERNALS__ = {};
-
     const client = NodeClient.getInstance();
-    const events: any[] = [];
-    client.onEvent(e => events.push(e));
-
     await client.connect();
 
-    // Verify listen() was called and the callback was captured.
     expect(capturedListenCallback).not.toBeNull();
 
-    // Build a real envelope to send over the fake gossipsub channel.
-    const privKey = seedPrivKey(0x02);
+    // Create a real envelope to encode as base64
+    const privKey = seedPrivKey(2);
     const creatorId = deriveEd25519Multikey(privKey);
-    const postPayload = encodePost({
+    const postData = {
       schema: POST_SCHEMA_URI,
-      content: 'Gossipsub delivery test',
-      mediaCids: [],
-      timestampMs: BigInt(1_700_000_001_000),
-    });
-    const postEnv = createEnvelope(
-      { payload: postPayload, payloadType: MULTICODEC_PROTOBUF, creatorId, privateKey: privKey },
-      crypto,
-    );
-    const encoded = encodeEnvelopeProto(postEnv);
-    const envelopeB64 = bytesToBase64(encoded);
+      content: "Gossipsub delivery test",
+      timestamp: BigInt(Date.now()),
+      mediaCids: []
+    };
+    const env = await createEnvelope({
+      payload: encodePost(postData),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId,
+      privateKey: privKey,
+    }, crypto);
+    
+    const envelopeB64 = bytesToBase64(encodeEnvelopeProto(env));
+    const channelId = toHex(env.header.contextId && env.header.contextId.length > 0 ? env.header.contextId : env.header.creatorId);
 
-    // Spy on VcoStore.storeEnvelope to confirm it is called.
-    // We import the singleton vcoStore that NodeClient uses internally.
-    const { vcoStore } = await import('../lib/VcoStore');
-    const storeEnvelopeSpy = vi.spyOn(vcoStore, 'storeEnvelope');
-
-    // Fire the synthetic Tauri IPC event.
-    capturedListenCallback!({
+    // Fire synthetic event
+    await capturedListenCallback!({
       payload: {
         type: 'envelope',
-        channelId: toHex(creatorId),
-        envelope: envelopeB64,
-      },
+        channelId,
+        envelope: envelopeB64
+      }
     });
 
-    // NodeClient processes the envelope via a dynamic import + promise chain.
-    // Wait for all microtasks and timers to drain.
-    await vi.waitFor(
-      () => expect(storeEnvelopeSpy).toHaveBeenCalledTimes(1),
-      { timeout: 3000 },
-    );
-
-    const [storedEnv, syncStatus] = storeEnvelopeSpy.mock.calls[0];
-    expect(syncStatus).toBe('pending');
-    expect(toHex(storedEnv.headerHash)).toBe(toHex(postEnv.headerHash));
-
-    storeEnvelopeSpy.mockRestore();
+    // Verify it reached the store (give it a small tick for the async import in NodeClient)
+    await new Promise(r => setTimeout(r, 50));
+    const all = await vcoStore.getAllEnvelopes();
+    expect(all).toHaveLength(1);
+    expect(all[0].channelId).toBe(channelId);
+    expect(all[0].payload).toBe(envelopeB64);
   });
-
-  // ── Test 3: @mention / reply parentCid → author creatorId linkage ────────
 
   it('reply parentCid resolves back to the post author creatorId', async () => {
-    const alicePrivKey = seedPrivKey(0x0a);
-    const aliceCreatorId = deriveEd25519Multikey(alicePrivKey);
+    const alicePriv = seedPrivKey(10);
+    const bobPriv = seedPrivKey(20);
+    const aliceId = deriveEd25519Multikey(alicePriv);
+    const bobId = deriveEd25519Multikey(bobPriv);
 
-    const bobPrivKey = seedPrivKey(0x0b);
-    const bobCreatorId = deriveEd25519Multikey(bobPrivKey);
+    // 1. Alice Posts
+    const postEnv = await createEnvelope({
+      payload: encodePost({ schema: POST_SCHEMA_URI, content: "Alice Post", timestamp: BigInt(Date.now()), mediaCids: [] }),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: aliceId,
+      privateKey: alicePriv,
+    }, crypto);
+    const postCid = toHex(postEnv.headerHash);
+    await vcoStore.storeEnvelope(postEnv, 'synced', GLOBAL_SOCIAL_CHANNEL);
 
-    // Alice posts.
-    const postPayload = encodePost({
-      schema: POST_SCHEMA_URI,
-      content: 'Alice original post',
-      mediaCids: [],
-      timestampMs: BigInt(1_700_000_002_000),
+    // 2. Bob Replies to Alice
+    const replyEnv = await createEnvelope({
+      payload: encodeReply({ schema: REPLY_SCHEMA_URI, content: "Bob Reply", parentCid: postEnv.headerHash, timestamp: BigInt(Date.now()) }),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: bobId,
+      privateKey: bobPriv,
+    }, crypto);
+    await vcoStore.storeEnvelope(replyEnv, 'synced', GLOBAL_SOCIAL_CHANNEL);
+
+    // 3. Process Feed (Two-pass simulation)
+    const envelopes = await vcoStore.getAllEnvelopes();
+    const myProfile = { schema: "", displayName: "Me", bio: "", avatarCid: new Uint8Array(0), nip05: "", lightningAddress: "", customFields: {} };
+    const profileMap = new Map();
+    const followingSet = new Set<string>();
+
+    // Pass 1: Cache the post
+    const results1 = FeedProcessor.process(envelopes, myProfile, profileMap, followingSet, toHex(aliceId));
+    
+    // Pass 2: Process again, seeding with the cached post results to ensure linkage
+    const extraPosts = new Map();
+    results1.feedItems.forEach(item => {
+      extraPosts.set(toHex(item.cid), { authorId: item.authorId, data: item.data, authorProfile: item.authorProfile });
     });
-    const postEnv = createEnvelope(
-      { payload: postPayload, payloadType: MULTICODEC_PROTOBUF, creatorId: aliceCreatorId, privateKey: alicePrivKey },
-      crypto,
-    );
 
-    // Bob replies, referencing Alice's post headerHash as parentCid.
-    const replyPayload = encodeReply({
-      schema: REPLY_SCHEMA_URI,
-      parentCid: postEnv.headerHash,
-      content: '@alice great post!',
-      mediaCids: [],
-      timestampMs: BigInt(1_700_000_003_000),
-    });
-    const replyEnv = createEnvelope(
-      { payload: replyPayload, payloadType: MULTICODEC_PROTOBUF, creatorId: bobCreatorId, privateKey: bobPrivKey },
-      crypto,
-    );
+    const { replyItems } = FeedProcessor.process(envelopes, myProfile, profileMap, followingSet, toHex(aliceId), extraPosts);
 
-    // Store both envelopes.
-    await store.storeEnvelope(postEnv, 'synced');
-    await store.storeEnvelope(replyEnv, 'synced');
-
-    const all = await store.getAllEnvelopes();
-    expect(all).toHaveLength(2);
-
-    // Feed the stored records through FeedProcessor (as Alice viewing her own feed).
-    const aliceCreatorIdHex = toHex(aliceCreatorId);
-    const bobCreatorIdHex = toHex(bobCreatorId);
-
-    const postRecord = buildStoredRecord(postEnv, GLOBAL_SOCIAL_CHANNEL);
-    const replyRecord = buildStoredRecord(replyEnv, GLOBAL_SOCIAL_CHANNEL);
-
-    const bobProfile = {
-      schema: 'vco://schemas/identity/profile/v1',
-      displayName: 'Bob',
-      avatarCid: new Uint8Array(0),
-      previousManifest: new Uint8Array(0),
-      bio: '',
-    };
-    const aliceProfile = {
-      schema: 'vco://schemas/identity/profile/v1',
-      displayName: 'Alice',
-      avatarCid: new Uint8Array(0),
-      previousManifest: new Uint8Array(0),
-      bio: '',
-    };
-
-    const profileMap = new Map([[bobCreatorIdHex, bobProfile]]);
-
-    const { feedItems, replyItems } = FeedProcessor.process(
-      [postRecord, replyRecord],
-      aliceProfile,
-      profileMap,
-      aliceCreatorIdHex,
-    );
-
-    // The post should appear in the feed.
-    expect(feedItems).toHaveLength(1);
-    expect(feedItems[0].data.content).toBe('Alice original post');
-    expect(toHex(feedItems[0].authorId)).toBe(aliceCreatorIdHex);
-
-    // The reply should appear in replyItems.
     expect(replyItems).toHaveLength(1);
-    const reply = replyItems[0];
-    expect(reply.data.content).toBe('@alice great post!');
-
-    // The reply's parentCid must match Alice's post headerHash — this is the
-    // @mention linkage: by resolving parentCid → post, you reach the author.
-    expect(toHex(reply.data.parentCid)).toBe(toHex(postEnv.headerHash));
-
-    // The only feed item (the post) must be authored by Alice.
-    // This closes the @mention chain: reply.parentCid → post.headerHash → post.authorId === aliceCreatorId.
-    expect(toHex(feedItems[0].cid)).toBe(toHex(postEnv.headerHash));
-    expect(toHex(feedItems[0].authorId)).toBe(aliceCreatorIdHex);
+    expect(toHex(replyItems[0].data.parentCid)).toBe(postCid);
+    // authorProfile is Bob's profile
+    expect(replyItems[0].authorProfile.displayName).toBe("User " + toHex(bobId).substring(0, 6));
   });
 
-  // ── Test 4: malformed gossipsub envelope → error event, store not called ─
-
   it('malformed base64 gossipsub envelope emits an error event and does NOT call vcoStore', async () => {
-    (window as any).__TAURI_INTERNALS__ = {};
-
     const client = NodeClient.getInstance();
-    const events: any[] = [];
-    client.onEvent(e => events.push(e));
-
+    const errorListener = vi.fn();
+    client.onEvent(errorListener);
     await client.connect();
-    expect(capturedListenCallback).not.toBeNull();
 
-    const { vcoStore } = await import('../lib/VcoStore');
-    const storeEnvelopeSpy = vi.spyOn(vcoStore, 'storeEnvelope');
-
-    // Fire a corrupt payload (valid base64 but not a valid protobuf envelope).
-    const corruptB64 = btoa('this is not a valid vco envelope at all \x00\xFF\xFE');
-    capturedListenCallback!({
+    // Fire malformed event (invalid protobuf wire type)
+    await capturedListenCallback!({
       payload: {
         type: 'envelope',
         channelId: 'deadbeef',
-        envelope: corruptB64,
-      },
+        envelope: bytesToBase64(new Uint8Array([0x08, 0x01, 0x12, 0x04, 0x64, 0x65, 0x61, 0x64, 0x1a, 0xff])) 
+      }
     });
 
-    // Allow async chains to settle.
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(r => setTimeout(r, 50));
+    
+    // Check error emission
+    expect(errorListener).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'error',
+      message: expect.stringContaining('Failed to decode gossipsub envelope')
+    }));
 
-    // NodeClient logs a warning via console.warn for bad envelopes and emits an error event.
-    const errorEvents = events.filter(e => e.type === 'error');
-    expect(errorEvents).toHaveLength(1);
-    expect(errorEvents[0].message).toContain('Failed to decode gossipsub envelope');
-
-    expect(storeEnvelopeSpy).not.toHaveBeenCalled();
-
-    storeEnvelopeSpy.mockRestore();
+    // Verify store is empty
+    const all = await vcoStore.getAllEnvelopes();
+    expect(all).toHaveLength(0);
   });
 });

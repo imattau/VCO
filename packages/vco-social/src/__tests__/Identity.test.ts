@@ -1,35 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { KeyringService } from '../lib/KeyringService';
+import { setPlatform } from '../lib/platform';
+import { MockPlatform } from './PlatformTestUtils';
 
-// Polyfill for Node environment
-if (typeof window === 'undefined') {
-  (global as any).window = {
-    crypto: require('crypto').webcrypto,
-    __TAURI_INTERNALS__: {} // Simulate Tauri
-  };
-  
-  // Simple localStorage mock
-  const storage: Record<string, string> = {};
-  (global as any).localStorage = {
-    getItem: (key: string) => storage[key] || null,
-    setItem: (key: string, val: string) => { storage[key] = val; },
-    removeItem: (key: string) => { delete storage[key]; }
-  };
-}
-
-// Mock Tauri invoke
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(async (cmd) => {
-    if (cmd === 'get_vco_profile') return 'test-profile';
-    return null;
-  })
-}));
-
-describe('KeyringService Unit Tests', () => {
-  const STORAGE_KEY = "vco_social_identity_encrypted_keys_test-profile";
+describe('KeyringService Unit Tests (Platform Abstracted)', () => {
+  let mockPlatform: MockPlatform;
 
   beforeEach(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    mockPlatform = new MockPlatform();
+    setPlatform(mockPlatform);
   });
 
   it('should generate, store, and unlock an identity', async () => {
@@ -39,6 +18,7 @@ describe('KeyringService Unit Tests', () => {
     const identity = await KeyringService.generateAndStoreIdentity(password);
     expect(identity.creatorIdHex).toBeDefined();
     expect(identity.signingPrivateKey).toHaveLength(32);
+    expect(mockPlatform.getRandomValues).toHaveBeenCalled();
 
     // 2. Check existence
     const exists = await KeyringService.hasIdentity();
@@ -78,8 +58,8 @@ describe('KeyringService Unit Tests', () => {
     expect(exportedPackage).not.toBeNull();
     expect(typeof exportedPackage).toBe('string');
 
-    // 2. Simulate "Device B" (Clear local storage)
-    localStorage.removeItem(STORAGE_KEY);
+    // 2. Simulate "Device B" (Clear mock storage)
+    mockPlatform.storage = {};
     expect(await KeyringService.hasIdentity()).toBe(false);
 
     // 3. Import onto "Device B"

@@ -1,21 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SwarmLogic } from '../lib/SwarmLogic';
 import { NodeClient, NodeEvent } from '../lib/NodeClient';
+import { setPlatform } from '../lib/platform';
+import { MockPlatform } from './PlatformTestUtils';
 
-// Polyfill for Node environment
-if (typeof window === 'undefined') {
-  (global as any).window = {
-    __TAURI_INTERNALS__: {} // Simulate Tauri
-  };
-  (global as any).localStorage = {
-    getItem: vi.fn(),
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
-    clear: vi.fn(),
-  };
-}
-
-// Mock Tauri
+// ── Tauri stubs (must precede all imports that pull Tauri) ─────────────────
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(async (cmd, args) => {
     if (cmd === 'dial' && args.addr === '/ip4/1.1.1.1/tcp/4001/p2p/peer-id') {
@@ -24,11 +13,16 @@ vi.mock('@tauri-apps/api/core', () => ({
     return null;
   }),
 }));
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(),
-}));
 
-describe('Swarm & Discovery Unit Tests', () => {
+describe('Swarm & Discovery Unit Tests (Platform Abstracted)', () => {
+  let mockPlatform: MockPlatform;
+
+  beforeEach(() => {
+    mockPlatform = new MockPlatform();
+    setPlatform(mockPlatform);
+    (NodeClient as any).instance = undefined;
+    vi.clearAllMocks();
+  });
   
   describe('SwarmLogic Stats', () => {
     it('should correctly aggregate swarm activity counts', () => {
@@ -118,9 +112,9 @@ describe('Swarm & Discovery Unit Tests', () => {
         }
       });
 
-      handleEvent({ type: 'dial_success', addr: '/ip4/1.1.1.1/tcp/4001' });
+      handleEvent({ type: 'dial_success', addr: '/ip4/1.2.3.4/tcp/4001' });
 
-      expect(successAddr).toBe('/ip4/1.1.1.1/tcp/4001');
+      expect(successAddr).toBe('/ip4/1.2.3.4/tcp/4001');
       cleanup();
     });
 
@@ -128,18 +122,17 @@ describe('Swarm & Discovery Unit Tests', () => {
       const client = NodeClient.getInstance();
       const handleEvent = (client as any).handleEvent.bind(client);
       
-      let errorMsg = '';
+      let errorMessage = '';
       const cleanup = client.onEvent((e) => {
         if (e.type === 'error') {
-          errorMsg = e.message;
+          errorMessage = e.message;
         }
       });
 
       handleEvent({ type: 'error', message: 'Connection timeout' });
 
-      expect(errorMsg).toBe('Connection timeout');
+      expect(errorMessage).toBe('Connection timeout');
       cleanup();
     });
   });
-
 });

@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import { vcoStore } from './VcoStore';
+import { getPlatform } from './platform';
 
 export type NodeEvent =
   | { type: 'ready', peerId: string, multiaddrs: string[] }
@@ -45,11 +45,6 @@ class AsyncQueue<T> {
   }
 }
 
-/**
- * Checks if the application is running inside Tauri.
- */
-const isTauri = () => !!(window as any).__TAURI_INTERNALS__;
-
 export class NodeClient {
   private static instance: NodeClient;
   private listeners: Set<EventListener> = new Set();
@@ -63,7 +58,7 @@ export class NodeClient {
   // Delta-sync public state
   public syncInProgress: boolean = false;
   public lastSyncAt: Date | null = null;
-  public relayAddr: string | null = localStorage.getItem('vco.relay_addr');
+  public relayAddr: string | null = getPlatform().getLocalStorage().getItem('vco.relay_addr');
 
   // Per-session frame queues keyed by sessionId
   private sessionQueues: Map<string, AsyncQueue<Uint8Array>> = new Map();
@@ -85,8 +80,8 @@ export class NodeClient {
     if (this.connected) return;
     this.connected = true;
 
-    if (!isTauri()) {
-      const mockNetworkEnabled = typeof import.meta !== 'undefined' && typeof (import.meta as any).env !== 'undefined' && (import.meta as any).env.VITE_MOCK_NETWORK === 'true';
+    if (!getPlatform().isTauri()) {
+      const mockNetworkEnabled = getPlatform().getEnvVar('VITE_MOCK_NETWORK') === 'true';
       if (mockNetworkEnabled) {
         console.warn('VCO NodeClient: VITE_MOCK_NETWORK=true — using mock networking (dev only).');
         this.startMockNode();
@@ -100,7 +95,7 @@ export class NodeClient {
     try {
       // Listen for events from the native Rust node
       console.log('VCO NodeClient: Registering vco-node-event listener...');
-      await listen<NodeEvent>('vco-node-event', (event) => {
+      await getPlatform().listen<NodeEvent>('vco-node-event', (event) => {
         console.log('VCO NodeClient: Raw event received:', JSON.stringify(event.payload));
         this.handleEvent(event.payload);
       });
@@ -116,27 +111,27 @@ export class NodeClient {
   }
 
   public subscribe(channelId: string) {
-    if (isTauri()) invoke('subscribe', { channelId }).catch(console.error);
+    if (getPlatform().isTauri()) invoke('subscribe', { channelId }).catch(console.error);
   }
 
   public unsubscribe(channelId: string) {
-    if (isTauri()) invoke('unsubscribe', { channelId }).catch(console.error);
+    if (getPlatform().isTauri()) invoke('unsubscribe', { channelId }).catch(console.error);
   }
 
   public publish(channelId: string, envelopeBase64: string) {
-    if (isTauri()) invoke('publish', { channelId, envelopeBase64 }).catch(console.error);
+    if (getPlatform().isTauri()) invoke('publish', { channelId, envelopeBase64 }).catch(console.error);
   }
 
   public resolve(cidHex: string) {
-    if (isTauri()) invoke('resolve', { cid: cidHex }).catch(console.error);
+    if (getPlatform().isTauri()) invoke('resolve', { cid: cidHex }).catch(console.error);
   }
 
   public putRecord(cidHex: string, payloadBase64: string) {
-    if (isTauri()) invoke('put_record', { cid: cidHex, payloadBase64 }).catch(console.error);
+    if (getPlatform().isTauri()) invoke('put_record', { cid: cidHex, payloadBase64 }).catch(console.error);
   }
 
   public dial(addr: string) {
-    if (isTauri()) {
+    if (getPlatform().isTauri()) {
       invoke('dial', { addr }).catch(console.error);
     } else {
       // Mock dial simulation
@@ -158,7 +153,7 @@ export class NodeClient {
   }
 
   public bootstrap(addrs: string[]) {
-    if (isTauri()) {
+    if (getPlatform().isTauri()) {
       invoke('bootstrap', { addrs }).catch(console.error);
     } else {
       this.handleEvent({ type: 'dialing' });
@@ -169,7 +164,7 @@ export class NodeClient {
   }
 
   public getStats() {
-    if (isTauri()) {
+    if (getPlatform().isTauri()) {
       invoke('get_stats').catch(console.error);
     } else {
       this.handleEvent({
@@ -185,7 +180,7 @@ export class NodeClient {
 
   public async shutdown() {
     this.isReady = false;
-    if (isTauri()) await invoke('shutdown').catch(console.error);
+    if (getPlatform().isTauri()) await invoke('shutdown').catch(console.error);
   }
 
   public onEvent(listener: EventListener) {
@@ -201,7 +196,7 @@ export class NodeClient {
     if (this.syncInProgress) return;
     this.syncInProgress = true;
 
-    const sessionId = crypto.randomUUID();
+    const sessionId = getPlatform().randomUUID();
 
     try {
       await invoke('sync_with_relay', { relayAddr, sessionId });
@@ -271,7 +266,7 @@ export class NodeClient {
         for (let i = 0; i < payload.byteLength; i++) {
           binary += String.fromCharCode(payload[i]);
         }
-        const frameB64 = btoa(binary);
+        const frameB64 = getPlatform().btoa(binary);
         await invoke('sync_respond', { sessionId, frameB64 }).catch((e) => {
           console.warn('VCO NodeClient: sync_respond error (session may be closing)', e);
         });
@@ -363,7 +358,7 @@ export class NodeClient {
           this.handleEvent({
             type: 'envelope',
             channelId: channelIdHex,
-            envelope: btoa(binary),
+            envelope: getPlatform().btoa(binary),
           });
         } catch {
           // Not an envelope — ignore
@@ -399,7 +394,7 @@ export class NodeClient {
       // @vco/vco-sync when bundled together; keep it lazy to be safe.
       import('@vco/vco-core').then(({ decodeEnvelopeProto }) => {
         try {
-          const binaryStr = atob(event.envelope);
+          const binaryStr = getPlatform().atob(event.envelope);
           const bytes = new Uint8Array(binaryStr.length);
           for (let i = 0; i < binaryStr.length; i++) {
             bytes[i] = binaryStr.charCodeAt(i);
@@ -428,7 +423,7 @@ export class NodeClient {
           queue.enqueue(new Uint8Array(0));
         } else {
           try {
-            const binaryStr = atob(event.frameB64);
+            const binaryStr = getPlatform().atob(event.frameB64);
             const bytes = new Uint8Array(binaryStr.length);
             for (let i = 0; i < binaryStr.length; i++) {
               bytes[i] = binaryStr.charCodeAt(i);
@@ -454,7 +449,7 @@ export class NodeClient {
     this.multiaddrs = ["/ip4/127.0.0.1/tcp/0/ws"];
 
     // Create a broadcast channel for cross-tab mock networking
-    const channel = new BroadcastChannel('vco-mock-mesh');
+    const channel = getPlatform().createBroadcastChannel('vco-mock-mesh');
 
     channel.onmessage = (event) => {
       if (event.data.sender !== this.peerId) {
@@ -469,7 +464,7 @@ export class NodeClient {
     // Override publish for mock mode
     const originalPublish = this.publish.bind(this);
     this.publish = (channelId: string, envelopeBase64: string) => {
-      if (!isTauri()) {
+      if (!getPlatform().isTauri()) {
         channel.postMessage({
           sender: this.peerId,
           channelId,

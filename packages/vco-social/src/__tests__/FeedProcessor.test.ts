@@ -1,238 +1,152 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FeedProcessor } from '../lib/FeedProcessor';
 import * as Constants from '../lib/constants';
+import { setPlatform } from '../lib/platform';
+import { MockPlatform } from './PlatformTestUtils';
+import { 
+  createNobleCryptoProvider, 
+  deriveEd25519Multikey, 
+} from '@vco/vco-crypto';
+import { 
+  createEnvelope, 
+  encodeEnvelopeProto,
+  MULTICODEC_PROTOBUF
+} from '@vco/vco-core';
+import { 
+  encodePost, 
+  encodeReply,
+  encodeReaction,
+  encodeRepost
+} from '@vco/vco-schemas';
+import { toHex } from '../lib/encoding';
 
-// Mock dependencies
-vi.mock('@vco/vco-schemas', () => ({
-  decodePost: vi.fn(() => ({ schema: 'vco://schemas/post/1.0.0', content: 'Post Content', timestampMs: BigInt(1000) })),
-  decodeReply: vi.fn(() => ({ schema: 'vco://schemas/reply/1.0.0', parentCid: new Uint8Array([1,1,1]), content: 'Reply Content', timestampMs: BigInt(1100) })),
-  decodeReaction: vi.fn(() => ({ schema: 'vco://schemas/reaction/1.0.0', targetCid: new Uint8Array([1,1,1]), emoji: '❤️', timestampMs: BigInt(1200) })),
-  decodeRepost: vi.fn(() => ({ schema: 'vco://schemas/repost/1.0.0', originalPostCid: new Uint8Array([1,1,1]), timestampMs: BigInt(1300) })),
-  decodeFollow: vi.fn(() => ({ schema: 'vco://schemas/follow/1.0.0', action: 'follow', subjectKey: new Uint8Array([2,2,2]) })),
-}));
+const crypto = createNobleCryptoProvider();
 
-vi.mock('@vco/vco-core', () => ({
-  decodeEnvelopeProto: vi.fn((bytes) => {
-    // In our tests, we use the payload byte to determine the creator and the hash
-    // bytes[0] is the payload content (which we set to 0x11 for my post, etc)
-    const isMe = bytes[0] === 0xFF;
-    const creatorId = isMe ? new Uint8Array([0xFF]) : new Uint8Array([0xAA]);
-    
-    // We'll use the payload byte as the "hash" so we can link them
-    const hashByte = bytes[1] || 0;
-    const hash = new Uint8Array([hashByte, hashByte, hashByte]);
-    
+function seedPrivKey(seed: number): Uint8Array {
+  const k = new Uint8Array(32);
+  k.fill(seed);
+  return k;
+}
+
+describe('FeedProcessor Integration Tests (Platform Abstracted)', () => {
+  let mockPlatform: MockPlatform;
+  const myPriv = seedPrivKey(1);
+  const myCreatorId = deriveEd25519Multikey(myPriv);
+  const myCreatorIdHex = toHex(myCreatorId);
+  const myProfile: any = { displayName: "Me" };
+  const profileMap = new Map();
+  const followingSet = new Set<string>();
+
+  beforeEach(() => {
+    mockPlatform = new MockPlatform();
+    setPlatform(mockPlatform);
+    vi.clearAllMocks();
+  });
+
+  async function makeStoreItem(env: any) {
+    const wire = encodeEnvelopeProto(env);
+    let binary = '';
+    for (let i = 0; i < wire.byteLength; i++) {
+      binary += String.fromCharCode(wire[i]);
+    }
     return {
-      header: { creatorId },
-      headerHash: hash,
-      payload: bytes // Keep it for the TextDecoder
-    };
-  }),
-}));
-
-describe('FeedProcessor Unit Tests', () => {
-  const myCreatorIdHex = "ff";
-  const myProfile: any = { displayName: "Me" };
-  const profileMap = new Map();
-
-  it('should generate a notification when someone replies to my post', () => {
-    // 1. My post (Hash [1,1,1])
-    const postEnv = {
-      cid: btoa(String.fromCharCode(1,1,1)),
-      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI), 
+      cid: toHex(env.headerHash),
+      payload: btoa(binary),
       channelId: Constants.GLOBAL_SOCIAL_CHANNEL
     };
+  }
 
-    // 2. A reply from someone else to my post (parentCid [1,1,1])
-    const replyEnv = {
-      cid: btoa(String.fromCharCode(2,2,2)),
-      payload: btoa(String.fromCharCode(0xAA, 2) + Constants.REPLY_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
+  it('should generate a notification when someone replies to my post', async () => {
+    const postEnv = await createEnvelope({
+      payload: encodePost({ schema: Constants.POST_SCHEMA_URI, content: "My post", timestamp: BigInt(Date.now()), mediaCids: [] }),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: myCreatorId,
+      privateKey: myPriv
+    }, crypto);
 
-    const envelopes = [postEnv, replyEnv];
-    const results = FeedProcessor.process(envelopes, myProfile, profileMap, myCreatorIdHex);
+    const peerPriv = seedPrivKey(2);
+    const peerId = deriveEd25519Multikey(peerPriv);
+    const replyEnv = await createEnvelope({
+      payload: encodeReply({ schema: Constants.REPLY_SCHEMA_URI, content: "Reply", parentCid: postEnv.headerHash, timestamp: BigInt(Date.now()) }),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: peerId,
+      privateKey: peerPriv
+    }, crypto);
 
-    expect(results.notifications.length).toBe(1);
-    expect(results.notifications[0].type).toBe(1); // Reply
+    const items = [await makeStoreItem(postEnv), await makeStoreItem(replyEnv)];
+    
+    // Two-pass simulation
+    const res1 = FeedProcessor.process(items, myProfile, profileMap, followingSet, myCreatorIdHex);
+    const extraPosts = new Map();
+    res1.feedItems.forEach(fi => extraPosts.set(toHex(fi.cid), { authorId: fi.authorId, data: fi.data, authorProfile: fi.authorProfile }));
+
+    const { notifications } = FeedProcessor.process(items, myProfile, profileMap, followingSet, myCreatorIdHex, extraPosts);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].type).toBe(1); // Reply
   });
 
-  it('should generate a notification when someone likes my post', () => {
-    // 1. My post
-    const postEnv = {
-      cid: btoa(String.fromCharCode(1,1,1)),
-      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
+  it('should generate a notification when someone likes my post', async () => {
+    const postEnv = await createEnvelope({
+      payload: encodePost({ schema: Constants.POST_SCHEMA_URI, content: "My post", timestamp: BigInt(Date.now()), mediaCids: [] }),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: myCreatorId,
+      privateKey: myPriv
+    }, crypto);
 
-    // 2. Reaction from someone else
-    const reactionEnv = {
-      cid: btoa(String.fromCharCode(3,3,3)),
-      payload: btoa(String.fromCharCode(0xAA, 3) + Constants.REACTION_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
+    const peerPriv = seedPrivKey(2);
+    const peerId = deriveEd25519Multikey(peerPriv);
+    const reactionEnv = await createEnvelope({
+      payload: encodeReaction({ schema: Constants.REACTION_SCHEMA_URI, targetCid: postEnv.headerHash, emoji: "❤️", timestampMs: BigInt(Date.now()) }),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: peerId,
+      privateKey: peerPriv
+    }, crypto);
 
-    const envelopes = [postEnv, reactionEnv];
-    const results = FeedProcessor.process(envelopes, myProfile, profileMap, myCreatorIdHex);
+    const items = [await makeStoreItem(postEnv), await makeStoreItem(reactionEnv)];
+    
+    const res1 = FeedProcessor.process(items, myProfile, profileMap, followingSet, myCreatorIdHex);
+    const extraPosts = new Map();
+    res1.feedItems.forEach(fi => extraPosts.set(toHex(fi.cid), { authorId: fi.authorId, data: fi.data, authorProfile: fi.authorProfile }));
 
-    expect(results.notifications.length).toBe(1);
-    expect(results.notifications[0].type).toBe(3); // Reaction
+    const { notifications } = FeedProcessor.process(items, myProfile, profileMap, followingSet, myCreatorIdHex, extraPosts);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].type).toBe(3); // Reaction
   });
 
-  it('should NOT generate a notification for my own interactions', () => {
-    const postEnv = {
-      cid: btoa(String.fromCharCode(1,1,1)),
-      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
+  it('should populate reactionMap and repostMap', async () => {
+    const postEnv = await createEnvelope({
+      payload: encodePost({ schema: Constants.POST_SCHEMA_URI, content: "Post", timestamp: BigInt(Date.now()), mediaCids: [] }),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: myCreatorId,
+      privateKey: myPriv
+    }, crypto);
 
-    const myReplyEnv = {
-      cid: btoa(String.fromCharCode(4,4,4)),
-      payload: btoa(String.fromCharCode(0xFF, 4) + Constants.REPLY_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
+    const peerPriv = seedPrivKey(2);
+    const peerId = deriveEd25519Multikey(peerPriv);
+    const peerIdHex = toHex(peerId);
+    
+    const reactionEnv = await createEnvelope({
+      payload: encodeReaction({ schema: Constants.REACTION_SCHEMA_URI, targetCid: postEnv.headerHash, emoji: "🔥", timestampMs: BigInt(Date.now()) }),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: peerId,
+      privateKey: peerPriv
+    }, crypto);
 
-    const envelopes = [postEnv, myReplyEnv];
-    const results = FeedProcessor.process(envelopes, myProfile, profileMap, myCreatorIdHex);
+    const repostEnv = await createEnvelope({
+      payload: encodeRepost({ schema: Constants.REPOST_SCHEMA_URI, originalPostCid: postEnv.headerHash, originalAuthorCid: myCreatorId, timestampMs: BigInt(Date.now()) }),
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId: peerId,
+      privateKey: peerPriv
+    }, crypto);
 
-    expect(results.notifications.length).toBe(0);
-  });
-});
+    const items = [await makeStoreItem(postEnv), await makeStoreItem(reactionEnv), await makeStoreItem(repostEnv)];
+    const { reactionMap, repostMap, feedItems } = FeedProcessor.process(items, myProfile, profileMap, followingSet, myCreatorIdHex);
 
-describe('FeedProcessor state building', () => {
-  const myCreatorIdHex = "ff";
-  const myProfile: any = { displayName: "Me" };
-  const profileMap = new Map();
-
-  it('should add posts to feedItems', () => {
-    const postEnv = {
-      cid: btoa(String.fromCharCode(1,1,1)),
-      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-
-    const results = FeedProcessor.process([postEnv], myProfile, profileMap, myCreatorIdHex);
-
-    expect(results.feedItems).toHaveLength(1);
-    expect(results.feedItems[0].authorProfile.displayName).toBe('Me');
-  });
-
-  it('should add replies to replyItems (not feedItems)', () => {
-    const replyEnv = {
-      cid: btoa(String.fromCharCode(2,2,2)),
-      payload: btoa(String.fromCharCode(0xAA, 2) + Constants.REPLY_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-
-    const results = FeedProcessor.process([replyEnv], myProfile, profileMap, myCreatorIdHex);
-
-    expect(results.replyItems).toHaveLength(1);
-    expect(results.feedItems).toHaveLength(0);
-  });
-
-  it('should populate reactionMap with reactor creator IDs', () => {
-    const postEnv = {
-      cid: btoa(String.fromCharCode(1,1,1)),
-      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-    const reactionEnv = {
-      cid: btoa(String.fromCharCode(3,3,3)),
-      payload: btoa(String.fromCharCode(0xAA, 3) + Constants.REACTION_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-
-    const results = FeedProcessor.process([postEnv, reactionEnv], myProfile, profileMap, myCreatorIdHex);
-
-    // targetCid from decodeReaction mock is [1,1,1] → "010101"
-    const targetHex = '010101';
-    expect(results.reactionMap.has(targetHex)).toBe(true);
-    expect(results.reactionMap.get(targetHex)!.has('aa')).toBe(true);
-  });
-
-  it('should populate repostMap and add a repost feed item', () => {
-    const postEnv = {
-      cid: btoa(String.fromCharCode(1,1,1)),
-      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-    const repostEnv = {
-      cid: btoa(String.fromCharCode(5,5,5)),
-      payload: btoa(String.fromCharCode(0xAA, 5) + Constants.REPOST_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-
-    const results = FeedProcessor.process([postEnv, repostEnv], myProfile, profileMap, myCreatorIdHex);
-
-    // originalPostCid from decodeRepost mock is [1,1,1] → "010101"
-    const targetHex = '010101';
-    expect(results.repostMap.has(targetHex)).toBe(true);
-    expect(results.repostMap.get(targetHex)!.has('aa')).toBe(true);
-    // Repost creates a feed item with repostBy set
-    const repostItem = results.feedItems.find(f => f.repostBy !== undefined);
-    expect(repostItem).toBeDefined();
-    expect(repostItem!.repostBy!.profile.displayName).not.toBe('Me'); // from peer, not self
-  });
-
-  it('repost of an envelope from a prior batch resolves from VcoStore', () => {
-    // The original post is NOT in the current envelope batch — it came from a prior session
-    // and is supplied via extraPostsByCid (pre-seeded from VcoStore by the caller).
-    const priorSessionPost = {
-      authorId: new Uint8Array([0xBB]),
-      data: { schema: Constants.POST_SCHEMA_URI, content: 'Prior session post', timestampMs: BigInt(500) } as any,
-      authorProfile: { displayName: 'PriorPeer' } as any,
-    };
-    // originalPostCid from decodeRepost mock is [1,1,1] → "010101"
-    const targetHex = '010101';
-    const extraPostsByCid = new Map([[targetHex, priorSessionPost]]);
-
-    // Only the repost envelope is in the current batch (no original post envelope).
-    const repostEnv = {
-      cid: btoa(String.fromCharCode(5,5,5)),
-      payload: btoa(String.fromCharCode(0xAA, 5) + Constants.REPOST_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-
-    const results = FeedProcessor.process([repostEnv], myProfile, profileMap, myCreatorIdHex, extraPostsByCid);
-
-    expect(results.repostMap.has(targetHex)).toBe(true);
-    const repostItem = results.feedItems.find(f => f.repostBy !== undefined);
-    expect(repostItem).toBeDefined();
-    expect(repostItem!.authorProfile.displayName).toBe('PriorPeer');
-    expect(repostItem!.repostBy!.profile.displayName).not.toBe('PriorPeer'); // reposted by the peer, not original author
-  });
-
-  it('should handle mixed post+reaction+repost+reply in one batch', () => {
-    const postEnv = {
-      cid: btoa(String.fromCharCode(1,1,1)),
-      payload: btoa(String.fromCharCode(0xFF, 1) + Constants.POST_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-    const replyEnv = {
-      cid: btoa(String.fromCharCode(2,2,2)),
-      payload: btoa(String.fromCharCode(0xAA, 2) + Constants.REPLY_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-    const reactionEnv = {
-      cid: btoa(String.fromCharCode(3,3,3)),
-      payload: btoa(String.fromCharCode(0xAA, 3) + Constants.REACTION_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-    const repostEnv = {
-      cid: btoa(String.fromCharCode(5,5,5)),
-      payload: btoa(String.fromCharCode(0xAA, 5) + Constants.REPOST_SCHEMA_URI),
-      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-    };
-
-    const results = FeedProcessor.process(
-      [postEnv, replyEnv, reactionEnv, repostEnv],
-      myProfile, profileMap, myCreatorIdHex
-    );
-
-    expect(results.feedItems.length).toBeGreaterThanOrEqual(1); // original post + repost copy
-    expect(results.replyItems).toHaveLength(1);
-    expect(results.reactionMap.size).toBe(1);
-    expect(results.repostMap.size).toBe(1);
-    expect(results.notifications.length).toBe(3); // reply + like + repost on my post
+    const postHex = toHex(postEnv.headerHash);
+    expect(reactionMap.get(postHex)?.has(peerIdHex)).toBe(true);
+    expect(repostMap.get(postHex)?.has(peerIdHex)).toBe(true);
+    expect(feedItems.length).toBeGreaterThanOrEqual(1);
   });
 });

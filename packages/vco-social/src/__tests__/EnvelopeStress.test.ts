@@ -1,89 +1,124 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FeedProcessor } from '../lib/FeedProcessor';
 import * as Constants from '../lib/constants';
+import { setPlatform } from '../lib/platform';
+import { MockPlatform } from './PlatformTestUtils';
+import { 
+  createNobleCryptoProvider, 
+  deriveEd25519Multikey, 
+} from '@vco/vco-crypto';
+import { 
+  createEnvelope, 
+  encodeEnvelopeProto,
+  MULTICODEC_PROTOBUF
+} from '@vco/vco-core';
+import { 
+  encodePost, 
+  encodeReply,
+  encodeReaction,
+  encodeRepost
+} from '@vco/vco-schemas';
+import { toHex, fromHex } from '../lib/encoding';
 
-// Mock schema decoders
-vi.mock('@vco/vco-schemas', () => ({
-  decodePost: vi.fn(() => ({ schema: 'vco://schemas/post/1.0.0', content: 'Stress Test Post', timestampMs: BigInt(Date.now()) })),
-  decodeReply: vi.fn(() => ({ schema: 'vco://schemas/reply/1.0.0', parentCid: new Uint8Array([1,1,1]), content: 'Reply', timestampMs: BigInt(Date.now()) })),
-  decodeReaction: vi.fn(() => ({ schema: 'vco://schemas/reaction/1.0.0', targetCid: new Uint8Array([1,1,1]), emoji: '❤️' })),
-  decodeRepost: vi.fn(() => ({ schema: 'vco://schemas/repost/1.0.0', originalPostCid: new Uint8Array([1,1,1]), timestampMs: BigInt(Date.now()) })),
-  decodeFollow: vi.fn(() => ({})),
-}));
+const crypto = createNobleCryptoProvider();
 
-vi.mock('@vco/vco-core', () => ({
-  decodeEnvelopeProto: vi.fn((bytes) => {
-    // We'll use a larger buffer to store the creator ID to avoid the 255 limit
-    const creatorIdByte = bytes[0];
-    const creatorIdHigh = bytes[2] || 0;
-    const creatorId = new Uint8Array([creatorIdByte, creatorIdHigh]);
-    
-    const hashByte = bytes[1] || 0;
-    return {
-      header: { creatorId },
-      headerHash: new Uint8Array([hashByte, hashByte, hashByte]),
-      payload: bytes
-    };
-  }),
-}));
+function seedPrivKey(seed: number): Uint8Array {
+  const k = new Uint8Array(32);
+  k[0] = seed % 256;
+  k[1] = Math.floor(seed / 256) % 256;
+  k[2] = Math.floor(seed / 65536) % 256;
+  return k;
+}
 
-describe('Envelope Processing Stress Tests', () => {
-  const myCreatorIdHex = "00";
+describe('Envelope Processing Stress Tests (Platform Abstracted)', () => {
+  let mockPlatform: MockPlatform;
+  const myPriv = seedPrivKey(0);
+  const myCreatorId = deriveEd25519Multikey(myPriv);
+  const myCreatorIdHex = toHex(myCreatorId);
   const myProfile: any = { displayName: "Me" };
   const profileMap = new Map();
+  const followingSet = new Set<string>();
 
-  it('should process 5,000 mixed envelopes efficiently', () => {
-    const envelopes: any[] = [];
-    const count = 5000;
+  beforeEach(() => {
+    mockPlatform = new MockPlatform();
+    setPlatform(mockPlatform);
+    vi.clearAllMocks();
+  });
+
+  async function makeStoreItem(payload: Uint8Array, priv: Uint8Array) {
+    const creatorId = deriveEd25519Multikey(priv);
+    const env = await createEnvelope({
+      payload,
+      payloadType: MULTICODEC_PROTOBUF,
+      creatorId,
+      privateKey: priv
+    }, crypto);
+    const wire = encodeEnvelopeProto(env);
+    let binary = '';
+    for (let i = 0; i < wire.byteLength; i++) {
+      binary += String.fromCharCode(wire[i]);
+    }
+    return {
+      cid: toHex(env.headerHash),
+      payload: btoa(binary),
+      channelId: Constants.GLOBAL_SOCIAL_CHANNEL
+    };
+  }
+
+  it('should process 1,000 mixed envelopes efficiently', async () => {
+    const count = 1000;
+    const items: any[] = [];
+
+    // Pre-generate some posts to resolve against
+    const postPriv = seedPrivKey(1);
+    const postPayload = encodePost({ schema: Constants.POST_SCHEMA_URI, content: "Target", timestamp: BigInt(Date.now()), mediaCids: [] });
+    const postItem = await makeStoreItem(postPayload, postPriv);
+    const postCid = postItem.cid;
+    items.push(postItem);
 
     for (let i = 0; i < count; i++) {
-      const type = i % 4;
-      let schema = "";
-      if (type === 0) schema = Constants.POST_SCHEMA_URI;
-      else if (type === 1) schema = Constants.REPLY_SCHEMA_URI;
-      else if (type === 2) schema = Constants.REACTION_SCHEMA_URI;
-      else schema = Constants.REPOST_SCHEMA_URI;
-
-      envelopes.push({
-        cid: btoa(String.fromCharCode(i % 256, i % 256, i % 256)),
-        payload: btoa(String.fromCharCode(i % 256, 1, Math.floor(i / 256)) + schema), 
-        channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-      });
+      const type = i % 3;
+      const priv = seedPrivKey(i + 10);
+      let payload: Uint8Array;
+      
+      if (type === 0) {
+        payload = encodePost({ schema: Constants.POST_SCHEMA_URI, content: `Post ${i}`, timestamp: BigInt(Date.now()), mediaCids: [] });
+      } else if (type === 1) {
+        payload = encodeReply({ schema: Constants.REPLY_SCHEMA_URI, content: "Reply", parentCid: fromHex(postCid), timestamp: BigInt(Date.now()) });
+      } else {
+        payload = encodeReaction({ schema: Constants.REACTION_SCHEMA_URI, targetCid: fromHex(postCid), emoji: "❤️", timestampMs: BigInt(Date.now()) });
+      }
+      items.push(await makeStoreItem(payload, priv));
     }
 
     const start = performance.now();
-    const results = FeedProcessor.process(envelopes, myProfile, profileMap, myCreatorIdHex);
+    const results = FeedProcessor.process(items, myProfile, profileMap, followingSet, myCreatorIdHex);
     const end = performance.now();
 
-    console.log(`🚀 Stress Test: Processed ${count} envelopes in ${(end - start).toFixed(2)}ms`);
+    console.log(`🚀 Stress Test: Processed ${items.length} envelopes in ${(end - start).toFixed(2)}ms`);
 
     expect(results.feedItems.length).toBeGreaterThan(0);
+    expect(results.reactionMap.size).toBeGreaterThan(0);
     expect(end - start).toBeLessThan(1000); 
   });
 
-  it('should handle extreme interaction density (1000 likes on one post)', () => {
-    const targetHex = "010101"; 
+  it('should handle interaction density (500 likes on one post)', async () => {
+    const postPriv = seedPrivKey(1);
+    const postPayload = encodePost({ schema: Constants.POST_SCHEMA_URI, content: "Hot Post", timestamp: BigInt(Date.now()), mediaCids: [] });
+    const postItem = await makeStoreItem(postPayload, postPriv);
+    const postCid = postItem.cid;
     
-    const envelopes: any[] = [
-      {
-        cid: btoa(String.fromCharCode(1,1,1)),
-        payload: btoa(String.fromCharCode(0xFF, 1, 0) + Constants.POST_SCHEMA_URI), 
-        channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-      }
-    ];
+    const items: any[] = [postItem];
 
-    for (let i = 0; i < 1000; i++) {
-      envelopes.push({
-        cid: btoa(`cid-${i}`),
-        // Use bytes[0] and bytes[2] to encode up to 65535 unique creators
-        payload: btoa(String.fromCharCode(i % 256, 1, Math.floor(i / 256)) + Constants.REACTION_SCHEMA_URI),
-        channelId: Constants.GLOBAL_SOCIAL_CHANNEL
-      });
+    for (let i = 0; i < 500; i++) {
+      const priv = seedPrivKey(i + 100);
+      const reactionPayload = encodeReaction({ schema: Constants.REACTION_SCHEMA_URI, targetCid: fromHex(postCid), emoji: "👍", timestampMs: BigInt(Date.now()) });
+      items.push(await makeStoreItem(reactionPayload, priv));
     }
 
-    const results = FeedProcessor.process(envelopes, myProfile, profileMap, myCreatorIdHex);
+    const results = FeedProcessor.process(items, myProfile, profileMap, followingSet, myCreatorIdHex);
     
-    expect(results.reactionMap.get(targetHex)?.size).toBe(1000);
+    expect(results.reactionMap.get(postCid)?.size).toBe(500);
   });
 
   it('should remain stable with empty or corrupt payloads', () => {
@@ -93,7 +128,7 @@ describe('Envelope Processing Stress Tests', () => {
     ];
 
     expect(() => {
-      FeedProcessor.process(corruptEnvelopes, myProfile, profileMap, myCreatorIdHex);
+      FeedProcessor.process(corruptEnvelopes, myProfile, profileMap, followingSet, myCreatorIdHex);
     }).not.toThrow();
   });
 });

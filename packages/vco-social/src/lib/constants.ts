@@ -5,8 +5,8 @@ export const GLOBAL_SOCIAL_CHANNEL = "vco://channels/social/global";
 export const MODERATION_REPORTS_CHANNEL = "vco://channels/moderation/reports";
 
 export const PROFILE_SCHEMA_URI = "vco://schemas/identity/profile/v1";
-export const POST_SCHEMA_URI = "vco://schemas/social/post/v3";
-export const REPLY_SCHEMA_URI = "vco://schemas/social/reply/v2";
+export const POST_SCHEMA_URI = "vco://schemas/social/post/v1";
+export const REPLY_SCHEMA_URI = "vco://schemas/social/reply/v1";
 export const FOLLOW_SCHEMA_URI = "vco://schemas/social/follow/v1";
 export const DM_SCHEMA_URI = "vco://schemas/social/direct-message/v1";
 export const TOMBSTONE_SCHEMA_URI = "vco://schemas/social/tombstone/v1";
