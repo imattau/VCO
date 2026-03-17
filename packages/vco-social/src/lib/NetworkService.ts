@@ -43,6 +43,9 @@ export class NetworkService {
     });
 
     const poll = () => {
+      // Skip poll if we're clearly in the middle of a boot sequence
+      if (client.peerId === 'Initializing...') return;
+
       // Only nudge the backend — the response arrives async and fires the
       // eventUnsub listener above, which calls callback(snapshot()) with
       // authoritative data. Calling snapshot() here would race against the

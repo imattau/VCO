@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { Libp2pNode } from '@vco/vco-transport';
 import { vcoStore } from './VcoStore';
 import { getPlatform } from './platform';
 
@@ -63,6 +64,9 @@ export class NodeClient {
   // Per-session frame queues keyed by sessionId
   private sessionQueues: Map<string, AsyncQueue<Uint8Array>> = new Map();
 
+  // Browser-mode libp2p node (null in Tauri mode)
+  private libp2pNode: Libp2pNode | null = null;
+
   private constructor() {}
 
   public static getInstance(): NodeClient {
@@ -81,13 +85,17 @@ export class NodeClient {
     this.connected = true;
 
     if (!getPlatform().isTauri()) {
+      // Prefer build-time env var, fall back to user's saved relay address
+      const relayWsAddr = getPlatform().getEnvVar('VITE_RELAY_WS_ADDR') ?? this.relayAddr ?? null;
       const mockNetworkEnabled = getPlatform().getEnvVar('VITE_MOCK_NETWORK') === 'true';
-      if (mockNetworkEnabled) {
+      if (relayWsAddr) {
+        await this.startBrowserNode(relayWsAddr);
+      } else if (mockNetworkEnabled) {
         console.warn('VCO NodeClient: VITE_MOCK_NETWORK=true — using mock networking (dev only).');
         this.startMockNode();
       } else {
-        console.error('VCO NodeClient: Not running in Tauri and VITE_MOCK_NETWORK is not set. Node unavailable.');
-        this.handleEvent({ type: 'error', message: 'Node requires Tauri runtime. Set VITE_MOCK_NETWORK=true for browser development.' });
+        console.error('VCO NodeClient: Not running in Tauri. Set VITE_RELAY_WS_ADDR or configure a relay address in Settings.');
+        this.handleEvent({ type: 'error', message: 'Configure a relay address in Settings to connect to the VCO network.' });
       }
       return;
     }
@@ -111,15 +119,22 @@ export class NodeClient {
   }
 
   public subscribe(channelId: string) {
-    if (getPlatform().isTauri()) invoke('subscribe', { channelId }).catch(console.error);
+    // Browser mode: envelopes arrive via sync session, no pubsub
+    if (!this.libp2pNode && getPlatform().isTauri()) {
+      invoke('subscribe', { channelId }).catch(console.error);
+    }
   }
 
   public unsubscribe(channelId: string) {
-    if (getPlatform().isTauri()) invoke('unsubscribe', { channelId }).catch(console.error);
+    if (!this.libp2pNode && getPlatform().isTauri()) {
+      invoke('unsubscribe', { channelId }).catch(console.error);
+    }
   }
 
   public publish(channelId: string, envelopeBase64: string) {
-    if (getPlatform().isTauri()) invoke('publish', { channelId, envelopeBase64 }).catch(console.error);
+    if (!this.libp2pNode && getPlatform().isTauri()) {
+      invoke('publish', { channelId, envelopeBase64 }).catch(console.error);
+    }
   }
 
   public resolve(cidHex: string) {
@@ -131,12 +146,29 @@ export class NodeClient {
   }
 
   public dial(addr: string) {
-    if (getPlatform().isTauri()) {
+    if (this.libp2pNode) {
+      this.handleEvent({ type: 'dialing', peerId: addr.split('/').pop() });
+      this.libp2pNode.dial(addr as any).then((conn) => {
+        this.handleEvent({ type: 'dial_success', addr });
+        this._emitBrowserStats();
+      }).catch((e) => {
+        this.handleEvent({ type: 'error', message: `Dial failed: ${e}` });
+      });
+    } else if (getPlatform().isTauri()) {
       invoke('dial', { addr }).catch(console.error);
     } else {
       // Mock dial simulation
       this.handleEvent({ type: 'dialing', peerId: addr.split('/').pop() });
       setTimeout(() => {
+        // Basic multiaddr validation for the mock
+        if (!addr.startsWith('/') || addr.split('/').length < 3) {
+          this.handleEvent({ 
+            type: 'error', 
+            message: `Invalid multiaddress format: "${addr}". Addresses must start with /ip4, /dns, etc.` 
+          });
+          return;
+        }
+
         this.peers = [addr];
         this.connections = [{ remotePeer: addr.split('/').pop() || 'mock-peer', remoteAddr: addr, tags: ['connected'] }];
         this.handleEvent({ type: 'dial_success', addr });
@@ -164,7 +196,9 @@ export class NodeClient {
   }
 
   public getStats() {
-    if (getPlatform().isTauri()) {
+    if (this.libp2pNode) {
+      this._emitBrowserStats();
+    } else if (getPlatform().isTauri()) {
       invoke('get_stats').catch(console.error);
     } else {
       this.handleEvent({
@@ -176,6 +210,24 @@ export class NodeClient {
         networkLoad: 1.0
       });
     }
+  }
+
+  private _emitBrowserStats() {
+    if (!this.libp2pNode) return;
+    const peers = this.libp2pNode.getPeers().map(p => p.toString());
+    const connections = this.libp2pNode.getConnections().map(c => ({
+      remotePeer: c.remotePeer.toString(),
+      remoteAddr: c.remoteAddr.toString(),
+      tags: ['connected'],
+    }));
+    this.handleEvent({
+      type: 'stats',
+      peerId: this.libp2pNode.peerId.toString(),
+      multiaddrs: this.libp2pNode.getMultiaddrs().map(a => a.toString()),
+      peers,
+      connections,
+      networkLoad: 1.0,
+    });
   }
 
   public async shutdown() {
@@ -197,6 +249,19 @@ export class NodeClient {
     this.syncInProgress = true;
 
     const sessionId = getPlatform().randomUUID();
+
+    if (this.libp2pNode) {
+      try {
+        await this._runBrowserSync(sessionId, relayAddr);
+        this.lastSyncAt = new Date();
+      } catch (e) {
+        console.error('VCO NodeClient: Browser sync error', e);
+      } finally {
+        this.syncInProgress = false;
+        this._emitBrowserStats();
+      }
+      return;
+    }
 
     try {
       await invoke('sync_with_relay', { relayAddr, sessionId });
@@ -250,7 +315,41 @@ export class NodeClient {
    * Run the Negentropy bisect loop over the open sync session.
    * Direct port of runClientDeltaSync from the delta-sync test.
    */
-  private async _runBisectLoop(sessionId: string): Promise<void> {
+  private async _runBrowserSync(sessionId: string, relayAddr: string): Promise<void> {
+    const { openSyncSessionChannel } = await import('@vco/vco-transport');
+
+    // Dial if not already connected
+    const node = this.libp2pNode!;
+    const peerId = relayAddr.split('/p2p/')[1];
+    const alreadyConnected = peerId && node.getPeers().some(p => p.toString() === peerId);
+    const conn = alreadyConnected
+      ? node.getConnections().find(c => c.remotePeer.toString() === peerId)!
+      : await node.dial(relayAddr as any);
+
+    const channel = await openSyncSessionChannel(conn as any);
+
+    // Pump incoming frames into the session queue
+    const queue = new AsyncQueue<Uint8Array>();
+    this.sessionQueues.set(sessionId, queue);
+    (async () => {
+      while (true) {
+        try {
+          const frame = await channel.receive();
+          queue.enqueue(frame);
+        } catch {
+          queue.enqueue(new Uint8Array(0));
+          break;
+        }
+      }
+    })();
+
+    this.handleEvent({ type: 'sync_session_ready', sessionId });
+
+    await this._runBisectLoop(sessionId, (payload) => channel.send(payload));
+    this.sessionQueues.delete(sessionId);
+  }
+
+  private async _runBisectLoop(sessionId: string, sendFn?: (payload: Uint8Array) => Promise<void>): Promise<void> {
     // Dynamic imports: @vco/vco-sync uses Node.js APIs (Buffer, libp2p) that are
     // unavailable in Android WebView. Deferring to runtime avoids a bundle-time crash.
     const { SyncRangeProofProtocol, computeRangeFingerprint } = await import('@vco/vco-sync');
@@ -262,17 +361,18 @@ export class NodeClient {
     this.sessionQueues.set(sessionId, queue);
 
     // Build the channel adapter for SyncRangeProofProtocol
+    const defaultSendFn = async (payload: Uint8Array): Promise<void> => {
+      let binary = '';
+      for (let i = 0; i < payload.byteLength; i++) {
+        binary += String.fromCharCode(payload[i]);
+      }
+      const frameB64 = getPlatform().btoa(binary);
+      await invoke('sync_respond', { sessionId, frameB64 }).catch((e) => {
+        console.warn('VCO NodeClient: sync_respond error (session may be closing)', e);
+      });
+    };
     const channel = {
-      send: async (payload: Uint8Array): Promise<void> => {
-        let binary = '';
-        for (let i = 0; i < payload.byteLength; i++) {
-          binary += String.fromCharCode(payload[i]);
-        }
-        const frameB64 = getPlatform().btoa(binary);
-        await invoke('sync_respond', { sessionId, frameB64 }).catch((e) => {
-          console.warn('VCO NodeClient: sync_respond error (session may be closing)', e);
-        });
-      },
+      send: sendFn ?? defaultSendFn,
       receive: async (): Promise<Uint8Array> => {
         return queue.dequeue();
       },
@@ -443,6 +543,61 @@ export class NodeClient {
     }
     console.log('VCO NodeClient: Notifying', this.listeners.size, 'listeners');
     this.listeners.forEach(l => l(event));
+  }
+
+  private async startBrowserNode(relayWsAddr: string): Promise<void> {
+    const { createVcoLibp2pNode } = await import('@vco/vco-transport');
+    const { webSockets } = await import('@libp2p/websockets');
+    const { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
+
+    // Persist the libp2p private key so the PeerId is stable across restarts
+    const LIBP2P_KEY_STORAGE = 'vco.libp2p_private_key';
+    const storage = getPlatform().getLocalStorage();
+    let privateKey;
+    const stored = storage.getItem(LIBP2P_KEY_STORAGE);
+    if (stored) {
+      try {
+        const bytes = Uint8Array.from(atob(stored), c => c.charCodeAt(0));
+        privateKey = await privateKeyFromProtobuf(bytes);
+      } catch {
+        storage.removeItem(LIBP2P_KEY_STORAGE);
+      }
+    }
+    if (!privateKey) {
+      privateKey = await generateKeyPair('Ed25519');
+      const bytes = privateKeyToProtobuf(privateKey);
+      storage.setItem(LIBP2P_KEY_STORAGE, btoa(String.fromCharCode(...bytes)));
+    }
+
+    const node = await createVcoLibp2pNode({
+      privateKey,
+      transports: [webSockets()],
+    });
+
+    this.libp2pNode = node;
+    await node.start();
+
+    this.peerId = node.peerId.toString();
+    this.multiaddrs = node.getMultiaddrs().map(a => a.toString());
+
+    // Emit stats when peer connects or disconnects
+    node.addEventListener('peer:connect', () => this._emitBrowserStats());
+    node.addEventListener('peer:disconnect', () => this._emitBrowserStats());
+
+    this.handleEvent({ type: 'ready', peerId: this.peerId, multiaddrs: this.multiaddrs });
+
+    // Connect to relay
+    try {
+      this.handleEvent({ type: 'dialing' });
+      await node.dial(relayWsAddr as any);
+      this.handleEvent({ type: 'dial_success', addr: relayWsAddr });
+      this._emitBrowserStats();
+    } catch (e) {
+      this.handleEvent({ type: 'error', message: `Failed to connect to relay: ${e}` });
+    }
+
+    // Periodic stats
+    setInterval(() => this._emitBrowserStats(), 5000);
   }
 
   private startMockNode() {

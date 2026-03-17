@@ -8,6 +8,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    // VITE_PORT is set by scripts/android-dev.mjs to a free port;
+    // falls back to 5173 for plain `npm run dev`.
+    port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT) : 5173,
+    strictPort: false,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

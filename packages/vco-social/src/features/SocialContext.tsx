@@ -498,7 +498,12 @@ export function SocialProvider({ children }: { children: ReactNode }) {
             toast("Connected to VCO swarm", "success");
             
             client.bootstrap(Constants.BOOTSTRAP_NODES);
-            
+
+            // Re-establish relay connection on every startup/refresh
+            if (client.relayAddr) {
+              client.dial(client.relayAddr);
+            }
+
             if (profileRef.current) {
               const myProfile = profileRef.current;
               const crypto = createNobleCryptoProvider();
