@@ -134,5 +134,25 @@ describe('Swarm & Discovery Unit Tests (Platform Abstracted)', () => {
       expect(errorMessage).toBe('Connection timeout');
       cleanup();
     });
+
+    it('should emit an error for invalid multiaddress format in browser mode', async () => {
+      mockPlatform.isTauri.mockReturnValue(false); // Force browser mode
+      const client = NodeClient.getInstance();
+      
+      let errorMessage = '';
+      const cleanup = client.onEvent((e) => {
+        if (e.type === 'error') {
+          errorMessage = e.message;
+        }
+      });
+
+      client.dial('invalid-address');
+      
+      // Wait for the mock timeout
+      await new Promise(r => setTimeout(r, 1100));
+
+      expect(errorMessage).toContain('Invalid multiaddress format');
+      cleanup();
+    });
   });
 });

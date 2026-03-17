@@ -58,8 +58,8 @@ export function SettingsView() {
         toast(`Dialing: ${event.peerId || 'address'}...`, "info");
       } else if (event.type === 'dial_success') {
         toast(`Successfully connected to: ${event.addr}`, "success");
-      } else if (event.type === 'error' && event.message.includes('dial')) {
-        toast(`Failed to dial: ${event.message}`, "error");
+      } else if (event.type === 'error') {
+        toast(`Error: ${event.message}`, "error");
       } else if (event.type === 'sync_complete') {
         setSyncInProgress(false);
         setLastSyncAt(new Date());

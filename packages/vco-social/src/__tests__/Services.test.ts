@@ -46,7 +46,18 @@ describe('Additional Services Unit Tests', () => {
 
     it('should start polling and call the callback immediately', () => {
       const callback = vi.fn();
+      let capturedHandler: any;
+      vi.spyOn(NodeClient.getInstance(), 'onEvent').mockImplementation((handler: any) => {
+        capturedHandler = handler;
+        return () => {};
+      });
+
       NetworkService.startPolling(callback, 1000);
+      
+      // Trigger the captured handler
+      if (capturedHandler) {
+        capturedHandler({ type: 'stats', peerId: 'test-peer', isReady: true, multiaddrs: [], peers: [], connections: [] });
+      }
       
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({
@@ -57,18 +68,48 @@ describe('Additional Services Unit Tests', () => {
 
     it('should continue polling at the specified interval', () => {
       const callback = vi.fn();
+      let capturedHandler: any;
+      vi.spyOn(NodeClient.getInstance(), 'onEvent').mockImplementation((handler: any) => {
+        capturedHandler = handler;
+        return () => {};
+      });
+
       NetworkService.startPolling(callback, 1000);
       
+      if (capturedHandler) {
+        capturedHandler({ type: 'stats', peerId: 'test-peer', isReady: true });
+      }
+      expect(callback).toHaveBeenCalledTimes(1);
+      
       vi.advanceTimersByTime(1000);
+      if (capturedHandler) {
+        capturedHandler({ type: 'stats', peerId: 'test-peer', isReady: true });
+      }
       expect(callback).toHaveBeenCalledTimes(2);
       
       vi.advanceTimersByTime(2000);
+      if (capturedHandler) {
+        capturedHandler({ type: 'stats', peerId: 'test-peer', isReady: true });
+        capturedHandler({ type: 'stats', peerId: 'test-peer', isReady: true });
+      }
       expect(callback).toHaveBeenCalledTimes(4);
     });
 
     it('should stop polling correctly', () => {
       const callback = vi.fn();
+      let capturedHandler: any;
+      vi.spyOn(NodeClient.getInstance(), 'onEvent').mockImplementation((handler: any) => {
+        capturedHandler = handler;
+        return () => {};
+      });
+
       NetworkService.startPolling(callback, 1000);
+      
+      if (capturedHandler) {
+        capturedHandler({ type: 'stats', peerId: 'test-peer', isReady: true });
+      }
+      expect(callback).toHaveBeenCalledTimes(1);
+      
       NetworkService.stopPolling();
       
       vi.advanceTimersByTime(2000);
