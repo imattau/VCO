@@ -6,6 +6,7 @@ import StudioView from '@/features/studio/StudioView';
 import MiniPlayer from '@/features/player/MiniPlayer';
 import { Headphones, Loader2, Library, Settings, Mic2 } from 'lucide-react';
 import { MediaManifestData } from '@vco/vco-schemas';
+import { NavItem } from '@vco/vco-ui';
 
 export type AppTab = 'search' | 'studio';
 
@@ -45,26 +46,20 @@ function MainApp() {
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-4 px-2 mt-4">Consumer</div>
           
-          <button 
+          <NavItem 
             onClick={() => { setActiveTab('search'); setSelectedEpisode(null); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all group ${
-              activeTab === 'search' ? 'bg-zinc-800 text-white shadow-lg shadow-zinc-800/20' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
-            }`}
-          >
-            <Library size={18} className={activeTab === 'search' ? 'text-blue-500' : 'text-zinc-500 group-hover:text-zinc-300'} />
-            Subscriptions
-          </button>
+            active={activeTab === 'search'}
+            label="Subscriptions"
+            icon={<Library size={18} />}
+          />
           
           <div className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-4 px-2 mt-8">Creator</div>
-          <button 
+          <NavItem 
             onClick={() => { setActiveTab('studio'); setSelectedEpisode(null); }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all group ${
-              activeTab === 'studio' ? 'bg-zinc-800 text-white shadow-lg shadow-zinc-800/20' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
-            }`}
-          >
-            <Mic2 size={18} className={activeTab === 'studio' ? 'text-blue-500' : 'text-zinc-500 group-hover:text-zinc-300'} />
-            Creator Studio
-          </button>
+            active={activeTab === 'studio'}
+            label="Creator Studio"
+            icon={<Mic2 size={18} />}
+          />
         </nav>
         
         <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">

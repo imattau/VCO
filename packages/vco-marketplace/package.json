@@ -9,13 +9,16 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "clean": "rm -rf dist .tsbuildinfo"
+    "clean": "rm -rf dist .tsbuildinfo",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@vco/vco-core": "0.1.0",
     "@vco/vco-crypto": "0.1.0",
     "@vco/vco-schemas": "*",
+    "@vco/vco-ui": "*",
+    "@vco/vco-testing": "*",
     "clsx": "^2.1.1",
     "lucide-react": "^0.575.0",
     "react": "^19.1.0",

@@ -36,6 +36,7 @@ export const vco = $root.vco = (() => {
              * @property {Uint8Array|null} [avatarCid] Profile avatarCid
              * @property {Uint8Array|null} [previousManifest] Profile previousManifest
              * @property {string|null} [bio] Profile bio
+             * @property {Uint8Array|null} [encryptionPubkey] Profile encryptionPubkey
              */
 
             /**
@@ -94,6 +95,14 @@ export const vco = $root.vco = (() => {
             Profile.prototype.bio = "";
 
             /**
+             * Profile encryptionPubkey.
+             * @member {Uint8Array} encryptionPubkey
+             * @memberof vco.schemas.Profile
+             * @instance
+             */
+            Profile.prototype.encryptionPubkey = $util.newBuffer([]);
+
+            /**
              * Creates a new Profile instance using the specified properties.
              * @function create
              * @memberof vco.schemas.Profile
@@ -127,6 +136,8 @@ export const vco = $root.vco = (() => {
                     writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.previousManifest);
                 if (message.bio != null && Object.hasOwnProperty.call(message, "bio"))
                     writer.uint32(/* id 5, wireType 2 =*/42).string(message.bio);
+                if (message.encryptionPubkey != null && Object.hasOwnProperty.call(message, "encryptionPubkey"))
+                    writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.encryptionPubkey);
                 return writer;
             };
 
@@ -183,6 +194,10 @@ export const vco = $root.vco = (() => {
                             message.bio = reader.string();
                             break;
                         }
+                    case 6: {
+                            message.encryptionPubkey = reader.bytes();
+                            break;
+                        }
                     default:
                         reader.skipType(tag & 7);
                         break;
@@ -233,6 +248,9 @@ export const vco = $root.vco = (() => {
                 if (message.bio != null && message.hasOwnProperty("bio"))
                     if (!$util.isString(message.bio))
                         return "bio: string expected";
+                if (message.encryptionPubkey != null && message.hasOwnProperty("encryptionPubkey"))
+                    if (!(message.encryptionPubkey && typeof message.encryptionPubkey.length === "number" || $util.isString(message.encryptionPubkey)))
+                        return "encryptionPubkey: buffer expected";
                 return null;
             };
 
@@ -264,6 +282,11 @@ export const vco = $root.vco = (() => {
                         message.previousManifest = object.previousManifest;
                 if (object.bio != null)
                     message.bio = String(object.bio);
+                if (object.encryptionPubkey != null)
+                    if (typeof object.encryptionPubkey === "string")
+                        $util.base64.decode(object.encryptionPubkey, message.encryptionPubkey = $util.newBuffer($util.base64.length(object.encryptionPubkey)), 0);
+                    else if (object.encryptionPubkey.length >= 0)
+                        message.encryptionPubkey = object.encryptionPubkey;
                 return message;
             };
 
@@ -298,6 +321,13 @@ export const vco = $root.vco = (() => {
                             object.previousManifest = $util.newBuffer(object.previousManifest);
                     }
                     object.bio = "";
+                    if (options.bytes === String)
+                        object.encryptionPubkey = "";
+                    else {
+                        object.encryptionPubkey = [];
+                        if (options.bytes !== Array)
+                            object.encryptionPubkey = $util.newBuffer(object.encryptionPubkey);
+                    }
                 }
                 if (message.schema != null && message.hasOwnProperty("schema"))
                     object.schema = message.schema;
@@ -309,6 +339,8 @@ export const vco = $root.vco = (() => {
                     object.previousManifest = options.bytes === String ? $util.base64.encode(message.previousManifest, 0, message.previousManifest.length) : options.bytes === Array ? Array.prototype.slice.call(message.previousManifest) : message.previousManifest;
                 if (message.bio != null && message.hasOwnProperty("bio"))
                     object.bio = message.bio;
+                if (message.encryptionPubkey != null && message.hasOwnProperty("encryptionPubkey"))
+                    object.encryptionPubkey = options.bytes === String ? $util.base64.encode(message.encryptionPubkey, 0, message.encryptionPubkey.length) : options.bytes === Array ? Array.prototype.slice.call(message.encryptionPubkey) : message.encryptionPubkey;
                 return object;
             };
 

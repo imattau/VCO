@@ -1,4 +1,5 @@
 import {
+  blake3,
   createNobleCryptoProvider,
   deriveEd25519Multikey,
 } from "../../vco-crypto/src/index.ts";
@@ -97,7 +98,7 @@ describe("fragmentEnvelopePayload", () => {
 
     const fragmentSet = fragmentPayload(payload, {
       parentHeaderHash: new Uint8Array(32).fill(9),
-      payloadHash: encodeBlake3Multihash(new Uint8Array(32).fill(8)),
+      payloadHash: encodeBlake3Multihash(blake3(payload)),
     });
 
     expect(fragmentSet.fragments).toHaveLength(2);

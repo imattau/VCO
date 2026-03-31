@@ -1,0 +1,209 @@
+mod vco_node;
+
+use std::panic;
+use tauri::{Emitter, Manager, State};
+use vco_node::{NodeCommand, VcoNodeState};
+use base64::{Engine as _, engine::general_purpose};
+#[tauri::command]
+async fn subscribe(channel_id: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::Subscribe(channel_id)).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn unsubscribe(channel_id: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::Unsubscribe(channel_id)).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn publish(channel_id: String, envelope_base64: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let data = general_purpose::STANDARD.decode(envelope_base64).map_err(|e| e.to_string())?;
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::Publish(channel_id, data)).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_stats(app_handle: tauri::AppHandle, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::GetStats).map_err(|e| e.to_string())
+    } else {
+        // Explicitly notify UI that node is not ready yet
+        let _ = app_handle.emit("vco-node-event", serde_json::json!({
+            "type": "stats",
+            "peerId": "Initializing...",
+            "multiaddrs": [],
+            "peers": [],
+            "connections": [],
+            "networkLoad": 1.0
+        }));
+        Ok(())
+    }
+}
+
+#[tauri::command]
+async fn dial(addr: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::Dial(addr)).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn resolve(cid: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::Resolve(cid)).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn put_record(cid: String, payload_base64: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let data = general_purpose::STANDARD.decode(payload_base64).map_err(|e| e.to_string())?;
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::PutRecord(cid, data)).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn bootstrap(addrs: Vec<String>, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::Bootstrap(addrs)).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn shutdown(state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::Shutdown).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn get_vco_profile() -> String {
+    std::env::var("VCO_PROFILE").unwrap_or_else(|_| "default".to_string())
+}
+
+#[tauri::command]
+async fn sync_with_relay(relay_addr: String, session_id: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let tx_lock = state.swarm_tx.lock().await;
+    if let Some(tx) = &*tx_lock {
+        tx.send(NodeCommand::SyncWithRelay { relay_addr, session_id }).map_err(|e| e.to_string())
+    } else {
+        Err("Node not initialized".to_string())
+    }
+}
+
+#[tauri::command]
+async fn sync_respond(session_id: String, frame_b64: String, state: State<'_, VcoNodeState>) -> Result<(), String> {
+    let bytes = general_purpose::STANDARD.decode(frame_b64).map_err(|e| e.to_string())?;
+    let sessions = state.sync_sessions.lock().await;
+    if let Some(tx) = sessions.get(&session_id) {
+        tx.send(bytes).map_err(|e| e.to_string())
+    } else {
+        Err("session not found".to_string())
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    // Redirect panics to logcat/stdout
+    panic::set_hook(Box::new(|info| {
+        let location = info.location().map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())).unwrap_or_else(|| "unknown".to_string());
+        let payload = info.payload().downcast_ref::<&str>().cloned()
+            .or_else(|| info.payload().downcast_ref::<String>().map(|s| s.as_str()))
+            .unwrap_or("unknown panic payload");
+        log::error!("VCO PANIC at {}: {}", location, payload);
+        eprintln!("VCO PANIC at {}: {}", location, payload);
+    }));
+
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(mobile)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_biometric::init())
+            .plugin(tauri_plugin_barcode_scanner::init());
+    }
+
+    builder
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_log::Builder::default()
+            .level(log::LevelFilter::Info)
+            .build())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            log::info!("VCO: App setup starting...");
+
+            // Initialize state with None
+            app.manage(VcoNodeState {
+                swarm_tx: tokio::sync::Mutex::new(None),
+                sync_sessions: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            });
+
+            // Start libp2p node in a dedicated async task
+            tauri::async_runtime::spawn(async move {
+                log::info!("VCO: Starting libp2p node...");
+                match vco_node::start_node(handle.clone()).await {
+                    Ok(tx) => {
+                        log::info!("VCO: Node initialized successfully.");
+                        let state = handle.state::<VcoNodeState>();
+                        let mut tx_lock = state.swarm_tx.lock().await;
+                        *tx_lock = Some(tx);
+                    }
+                    Err(e) => {
+                        log::error!("VCO CRITICAL: Failed to start libp2p node: {:?}", e);
+                        eprintln!("VCO CRITICAL: Failed to start libp2p node: {:?}", e);
+                        let _ = handle.emit("vco-node-event", serde_json::json!({
+                            "type": "error",
+                            "message": format!("Node failed to start: {}", e)
+                        }));
+                    }
+                }
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            subscribe,
+            unsubscribe,
+            publish,
+            get_stats,
+            dial,
+            resolve,
+            put_record,
+            bootstrap,
+            shutdown,
+            get_vco_profile,
+            sync_with_relay,
+            sync_respond
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

@@ -10,6 +10,8 @@ import { TradeHistory } from "./features/listings/TradeHistory.js";
 import type { ListingWithMetadata, OfferWithMetadata } from "./features/listings/MarketplaceContext.js";
 import { uint8ArrayToHex, buildListing, buildOffer, buildReceipt, decodeOfferEnvelope, decodeReceiptEnvelope, buildVcoFile } from "./lib/vco.js";
 import { publish } from "./lib/transport.js";
+import { NavItem } from "@vco/vco-ui";
+import { LayoutGrid, ShoppingBag, Receipt } from "lucide-react";
 
 function Layout() {
   const { identity } = useIdentity();
@@ -116,28 +118,29 @@ function Layout() {
       <main className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <aside className="w-64 border-r border-zinc-800 p-4 space-y-1 bg-zinc-900/20">
-          <button 
+          <NavItem 
             onClick={() => setTab("browse")}
-            className={`w-full text-left px-3 py-2 rounded font-medium text-sm transition-all ${tab === "browse" ? "bg-indigo-600/10 text-indigo-400 border border-indigo-500/20" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"}`}
-          >
-            Browse Listings
-          </button>
-          <button 
+            active={tab === "browse"}
+            label="Browse Listings"
+            icon={<LayoutGrid size={18} />}
+          />
+          <NavItem 
             onClick={() => setTab("my-listings")}
-            className={`w-full text-left px-3 py-2 rounded font-medium text-sm transition-all ${tab === "my-listings" ? "bg-indigo-600/10 text-indigo-400 border border-indigo-500/20" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"}`}
-          >
-            My Listings
-          </button>
-          <button 
+            active={tab === "my-listings"}
+            label="My Listings"
+            icon={<ShoppingBag size={18} />}
+          />
+          <NavItem 
             onClick={() => setTab("offers")}
-            className={`w-full text-left px-3 py-2 rounded font-medium text-sm transition-all ${tab === "offers" ? "bg-indigo-600/10 text-indigo-400 border border-indigo-500/20" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"}`}
-          >
-            Offers
-          </button>
+            active={tab === "offers"}
+            label="Offers"
+            icon={<Receipt size={18} />}
+            badge={incomingOffers.length || undefined}
+          />
           <div className="pt-4 mt-4 border-t border-zinc-800/50">
              <button 
                onClick={() => setShowCreate(true)}
-               className="w-full bg-zinc-100 hover:bg-white text-zinc-900 font-bold py-2 px-4 rounded text-sm transition-all shadow-sm active:scale-95"
+               className="w-full bg-zinc-100 hover:bg-white text-zinc-900 font-bold py-2.5 px-4 rounded-xl text-xs uppercase tracking-widest transition-all shadow-sm active:translate-y-0.5"
              >
                Create Listing
              </button>

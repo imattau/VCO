@@ -1,0 +1,17 @@
+syntax = "proto3";
+package vco.schemas;
+
+// Repost — payload type MULTICODEC_PROTOBUF (0x50)
+// Envelope schema URI: vco://schemas/social/repost/v1
+message Repost {
+  // URI identifying the schema version
+  string schema = 1;
+  // CID of the original Post manifest being reposted.
+  bytes original_post_cid = 2;
+  // CID of the creator of the original post.
+  bytes original_author_cid = 3;
+  // Optional commentary or quote added to the repost.
+  string commentary = 4;
+  // Unix timestamp in milliseconds.
+  int64 timestamp_ms = 5;
+}

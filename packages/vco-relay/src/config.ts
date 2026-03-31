@@ -30,16 +30,27 @@ export interface RelayConfig {
   pow: RelayPowConfig;
   /** Maximum size of the object store in MB. 0 means unlimited. */
   maxStoreSizeMb: number;
+  /**
+   * Idle timeout in milliseconds for a sync session. If no frame is received
+   * within this window the session is closed. Matches the protocol constant
+   * IDLE_TIMEOUT=300s from the VCO spec.
+   */
+  idleTimeoutMs: number;
 }
 
 const DEFAULTS: RelayConfig = {
-  listenAddrs: ["/ip4/0.0.0.0/udp/4001/quic-v1"],
+  listenAddrs: [
+    "/ip4/0.0.0.0/udp/4001/quic-v1",
+    "/ip4/0.0.0.0/tcp/4001",
+    "/ip4/0.0.0.0/tcp/4002/ws",
+  ],
   httpHost: "127.0.0.1",
   httpPort: 4000,
   dataDir: "./relay-data",
   maxConnections: 256,
   pow: { defaultDifficulty: 0, maxDifficulty: 20, windowSeconds: 3600 },
   maxStoreSizeMb: 0,
+  idleTimeoutMs: 300_000,
 };
 
 function assertPositiveInt(value: number, name: string): void {
@@ -67,6 +78,11 @@ function parseEnvOverrides(env: Record<string, string | undefined>, config: Rela
   }
   if (env.VCO_MAX_STORE_SIZE_MB) {
     out.maxStoreSizeMb = Number(env.VCO_MAX_STORE_SIZE_MB);
+  }
+  if (env.VCO_IDLE_TIMEOUT_MS) {
+    const v = Number(env.VCO_IDLE_TIMEOUT_MS);
+    assertPositiveInt(v, "VCO_IDLE_TIMEOUT_MS");
+    out.idleTimeoutMs = v;
   }
   return out;
 }

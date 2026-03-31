@@ -22,6 +22,9 @@ export namespace vco {
 
             /** Profile bio */
             bio?: (string|null);
+
+            /** Profile encryptionPubkey */
+            encryptionPubkey?: (Uint8Array|null);
         }
 
         /** Represents a Profile. */
@@ -47,6 +50,9 @@ export namespace vco {
 
             /** Profile bio. */
             public bio: string;
+
+            /** Profile encryptionPubkey. */
+            public encryptionPubkey: Uint8Array;
 
             /**
              * Creates a new Profile instance using the specified properties.

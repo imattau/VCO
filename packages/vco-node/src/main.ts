@@ -3,50 +3,22 @@ import { identify } from "@libp2p/identify";
 import { kadDHT } from "@libp2p/kad-dht";
 import { decodeEnvelopeProto } from "@vco/vco-core";
 import { createInterface } from "node:readline";
-
-// channel subscriptions: channelId → set of listeners (in-process only — one process = one "peer")
-const subscriptions = new Set<string>();
-
-// channel → inbound envelope listeners
-const inboundListeners = new Map<string, Array<(encoded: Uint8Array) => void>>();
-
-// in-memory store: channel → ordered list of envelopes for replay on re-subscribe
-const channelStore = new Map<string, Uint8Array[]>();
-
-function storeEnvelope(channelId: string, encoded: Uint8Array): void {
-  if (!channelStore.has(channelId)) channelStore.set(channelId, []);
-  channelStore.get(channelId)!.push(encoded);
-}
-
-function replayChannel(channelId: string): void {
-  const stored = channelStore.get(channelId);
-  if (!stored) return;
-  for (const encoded of stored) {
-    emit({ type: "envelope", channelId, envelope: uint8ArrayToBase64(encoded) });
-  }
-}
+import {
+  createIpcState,
+  storeEnvelope,
+  registerChannelListener,
+  handleMessage,
+} from "./ipc-handler.js";
 
 function emit(obj: Record<string, unknown>): void {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
 
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64");
-}
-
-function base64ToUint8Array(b64: string): Uint8Array {
-  return Uint8Array.from(Buffer.from(b64, "base64"));
-}
-
-function registerChannelListener(channelId: string): void {
-  if (inboundListeners.has(channelId)) return; // idempotent — only one emitter per channel
-  inboundListeners.set(channelId, [(encoded) => {
-    emit({ type: "envelope", channelId, envelope: uint8ArrayToBase64(encoded) });
-  }]);
-}
-
 async function main() {
   const relayAddr = process.env.VCO_RELAY_ADDR ?? "";
+  if (!relayAddr) {
+    process.stderr.write("[vco-node] VCO_RELAY_ADDR not set — running without relay connection\n");
+  }
 
   const node = await createVcoLibp2pNode({
     addresses: { listen: ["/ip4/0.0.0.0/udp/0/quic-v1"] },
@@ -57,6 +29,8 @@ async function main() {
   });
 
   await node.start();
+
+  const state = createIpcState();
 
   emit({
     type: "ready",
@@ -82,49 +56,25 @@ async function main() {
         const encoded = await channel.receive();
         decodeEnvelopeProto(encoded); // validate
         // Broadcast to all subscribed channels and persist for replay
-        for (const [channelId, listeners] of inboundListeners) {
-          if (subscriptions.has(channelId)) {
-            storeEnvelope(channelId, encoded);
+        for (const [channelId, listeners] of state.inboundListeners) {
+          if (state.subscriptions.has(channelId)) {
+            storeEnvelope(state, channelId, encoded);
             for (const fn of listeners) fn(encoded);
           }
         }
       }
-    } catch {
-      // session ended
+    } catch (err: any) {
+      const isCleanClose = err?.code === 'ERR_STREAM_RESET' || err?.message?.includes('closed') || err?.message?.includes('reset') || err?.message?.includes('aborted');
+      if (!isCleanClose) {
+        process.stderr.write(`[vco-node] sync session error: ${err}\n`);
+      }
     }
   });
 
   // Read commands from stdin
   const rl = createInterface({ input: process.stdin });
-
-  rl.on("line", (line) => {
-    let msg: Record<string, unknown>;
-    try {
-      msg = JSON.parse(line) as Record<string, unknown>;
-    } catch {
-      emit({ type: "error", message: "invalid JSON on stdin" });
-      return;
-    }
-
-    if (msg.type === "subscribe") {
-      const channelId = msg.channelId as string;
-      subscriptions.add(channelId);
-      registerChannelListener(channelId);
-      replayChannel(channelId); // send stored envelopes to renderer
-    } else if (msg.type === "unsubscribe") {
-      subscriptions.delete(msg.channelId as string);
-    } else if (msg.type === "publish") {
-      const channelId = msg.channelId as string;
-      const encoded = base64ToUint8Array(msg.envelope as string);
-      storeEnvelope(channelId, encoded);
-      const listeners = inboundListeners.get(channelId);
-      if (listeners) {
-        for (const fn of listeners) fn(encoded);
-      }
-    } else if (msg.type === "shutdown") {
-      void Promise.resolve(node.stop()).then(() => process.exit(0)).catch(() => process.exit(1));
-    }
-  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rl.on("line", (line) => { void handleMessage(line, state, node as any, emit); });
 
   process.on("SIGINT", async () => { await node.stop(); process.exit(0); });
   process.on("SIGTERM", async () => { await node.stop(); process.exit(0); });

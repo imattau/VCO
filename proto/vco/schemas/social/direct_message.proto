@@ -1,0 +1,29 @@
+syntax = "proto3";
+package vco.schemas;
+
+// DirectMessage — payload type MULTICODEC_PROTOBUF (0x50)
+// Envelope schema URI: vco://schemas/social/direct-message/v1
+message DirectMessage {
+  // URI identifying the schema version
+  string schema = 1;
+  // CID of recipient's Profile manifest.
+  bytes recipient_cid = 2;
+  // CID of sender's Profile manifest.
+  bytes sender_cid = 3;
+  // Ephemeral X25519 public key for Diffie-Hellman key exchange.
+  bytes ephemeral_pubkey = 4;
+  // Nonce (IV) for symmetric encryption (e.g., 12 bytes for AES-GCM).
+  bytes nonce = 5;
+  // Encrypted DirectMessagePayload bytes.
+  bytes encrypted_payload = 6;
+  // Unix timestamp in milliseconds.
+  int64 timestamp_ms = 7;
+}
+
+// Inner payload before encryption
+message DirectMessagePayload {
+  // Plaintext message content.
+  string content = 1;
+  // Optional attachments (audio, video, images).
+  repeated bytes media_cids = 2;
+}

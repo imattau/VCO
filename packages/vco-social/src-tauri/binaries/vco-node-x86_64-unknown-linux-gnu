@@ -1,0 +1,13 @@
+#!/bin/bash
+# Wrapper for vco-node sidecar
+# This script is called by Tauri and should behave like a binary.
+
+# Get the directory where this script is located
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Path to the actual Node.js script (built dist)
+# In a bundled app, we would include the dist folder in the resources
+NODE_SCRIPT="$DIR/../../../../vco-node/dist/main.js"
+
+# Execute node on the script, passing all arguments
+exec node "$NODE_SCRIPT" "$@"

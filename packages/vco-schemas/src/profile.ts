@@ -8,6 +8,7 @@ export interface ProfileData {
   avatarCid: Uint8Array;
   previousManifest: Uint8Array;
   bio: string;
+  encryptionPubkey?: Uint8Array;
 }
 
 export function encodeProfile(data: ProfileData): Uint8Array {
@@ -17,6 +18,7 @@ export function encodeProfile(data: ProfileData): Uint8Array {
     avatarCid: data.avatarCid,
     previousManifest: data.previousManifest,
     bio: data.bio,
+    encryptionPubkey: data.encryptionPubkey,
   });
   return Profile.encode(msg).finish();
 }
@@ -29,5 +31,6 @@ export function decodeProfile(bytes: Uint8Array): ProfileData {
     avatarCid: new Uint8Array(msg.avatarCid),
     previousManifest: new Uint8Array(msg.previousManifest),
     bio: msg.bio,
+    encryptionPubkey: msg.encryptionPubkey ? new Uint8Array(msg.encryptionPubkey) : undefined,
   };
 }

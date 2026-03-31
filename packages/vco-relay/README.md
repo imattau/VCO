@@ -38,7 +38,7 @@ The relay can be configured via environment variables or a JSON configuration fi
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `VCO_LISTEN_ADDRS` | `/ip4/0.0.0.0/udp/4001/quic-v1` | Comma-separated list of libp2p multiaddrs to listen on. |
+| `VCO_LISTEN_ADDRS` | `/ip4/0.0.0.0/udp/4001/quic-v1`,`/ip4/0.0.0.0/tcp/4001`,`/ip4/0.0.0.0/tcp/4002/ws` | Comma-separated list of libp2p multiaddrs to listen on (QUIC, TCP, and WebSocket). |
 | `VCO_HTTP_HOST` | `127.0.0.1` | Host address for the HTTP monitoring API. |
 | `VCO_HTTP_PORT` | `4000` | Port for the HTTP monitoring API. |
 | `VCO_DATA_DIR` | `./relay-data` | Path to the directory for LevelDB storage. |

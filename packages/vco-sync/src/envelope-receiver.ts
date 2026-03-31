@@ -4,6 +4,12 @@ import { admitInboundEnvelope, type EnvelopeAdmissionOptions } from "./envelope-
 
 export interface EnvelopeReceiverOptions extends EnvelopeAdmissionOptions {
   onEnvelope: (envelope: VcoEnvelope) => Promise<void> | void;
+  /**
+   * If true, the stream handler will throw and terminate if an inbound
+   * envelope fails admission (e.g. PoW violation, signature failure).
+   * Defaults to false (skips invalid envelopes).
+   */
+  failOnAdmissionError?: boolean;
 }
 
 const STREAM_CLOSED_MESSAGE = "Stream ended before receiving a transport payload.";
@@ -17,7 +23,7 @@ export async function handleEnvelopeStream(
     throw new Error("onEnvelope callback is required.");
   }
 
-  const { onEnvelope, ...admission } = options;
+  const { onEnvelope, failOnAdmissionError, ...admission } = options;
 
   while (true) {
     let encoded: Uint8Array;
@@ -30,7 +36,21 @@ export async function handleEnvelopeStream(
       throw error;
     }
 
-    const envelope = await admitInboundEnvelope(encoded, core, admission);
-    await onEnvelope(envelope);
+    let envelope: VcoEnvelope;
+    try {
+      envelope = await admitInboundEnvelope(encoded, core, admission);
+    } catch (admitError) {
+      if (failOnAdmissionError) {
+        throw admitError;
+      }
+      console.error("[envelope-receiver] admitInboundEnvelope failed, skipping envelope:", admitError);
+      continue;
+    }
+
+    try {
+      await onEnvelope(envelope);
+    } catch (handlerError) {
+      console.error("[envelope-receiver] onEnvelope handler threw, continuing stream:", handlerError);
+    }
   }
 }
